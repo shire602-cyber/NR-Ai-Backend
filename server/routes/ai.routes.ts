@@ -17,10 +17,13 @@ const log = createLogger('ai');
 // AI client initialisation
 // =============================================
 
-function createOpenAIClient() {
-  return new OpenAI({
-    apiKey: getEnv().OPENAI_API_KEY,
-  });
+function createOpenAIClient(): OpenAI | null {
+  const apiKey = getEnv().OPENAI_API_KEY;
+  if (!apiKey) {
+    log.warn('OPENAI_API_KEY not set — AI features will be disabled');
+    return null;
+  }
+  return new OpenAI({ apiKey });
 }
 
 function getAIModel(): string {
@@ -34,6 +37,11 @@ function getAIModel(): string {
 export function registerAIRoutes(app: Express) {
   const openai = createOpenAIClient();
   const AI_MODEL = getAIModel();
+
+  // If OpenAI is not configured, register routes that return graceful errors
+  if (!openai) {
+    log.warn('AI routes registered without OpenAI — AI endpoints will return 503');
+  }
 
   // =====================================
   // AI Categorization Route

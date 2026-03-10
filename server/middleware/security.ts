@@ -118,7 +118,9 @@ export function applySecurityMiddleware(app: Express): void {
   // ─── HTTPS Enforcement (production only) ──────────────────
   if (isProduction()) {
     app.use((req: Request, res: Response, next: NextFunction) => {
-      if (req.headers['x-forwarded-proto'] !== 'https') {
+      const proto = req.headers['x-forwarded-proto'];
+      // Only redirect if header is present AND not https, skip health checks
+      if (proto && proto !== 'https' && req.path !== '/health') {
         return res.redirect(301, `https://${req.hostname}${req.url}`);
       }
       next();
