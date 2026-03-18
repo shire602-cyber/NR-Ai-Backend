@@ -17,7 +17,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
 
-# Stage 3: Production image — single layer copy to avoid stale cache
+# Stage 3: Production image
 FROM node:20-alpine
 WORKDIR /app
 
@@ -26,8 +26,11 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 muhasib
 
-# Copy everything in one layer to prevent partial caching
 COPY --from=deps /app/node_modules ./node_modules
+
+# Force cache invalidation — date changes every build so nothing below can be cached
+RUN echo "build-timestamp: $(date -u +%Y%m%d%H%M%S)" > /app/.build-info
+
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/shared ./shared
