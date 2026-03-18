@@ -47,6 +47,7 @@ import Analytics from '@/pages/Analytics';
 import Admin from '@/pages/Admin';
 import BankReconciliation from '@/pages/BankReconciliation';
 import VATFiling from '@/pages/VATFiling';
+import CorporateTax from '@/pages/CorporateTax';
 import TeamManagement from '@/pages/TeamManagement';
 import AdvancedReports from '@/pages/AdvancedReports';
 import DocumentVault from '@/pages/DocumentVault';
@@ -65,6 +66,10 @@ import ClientTasks from '@/pages/ClientTasks';
 import ClientDetails from '@/pages/ClientDetails';
 import History from '@/pages/History';
 import BackupRestore from '@/pages/BackupRestore';
+import PublicInvoiceView from '@/pages/PublicInvoiceView';
+import CustomerPortal from '@/pages/CustomerPortal';
+import RecurringInvoices from '@/pages/RecurringInvoices';
+import Inventory from '@/pages/Inventory';
 
 // Components
 import { OnboardingWizard } from '@/components/Onboarding';
@@ -159,7 +164,7 @@ function Router() {
   }
   
   // Public routes (no sidebar)
-  if (location === '/login' || location === '/register' || location === '/services') {
+  if (location === '/login' || location === '/register' || location === '/services' || location.startsWith('/view/invoice/') || location.startsWith('/portal/')) {
     return (
       <AnimatePresence mode="wait">
         <motion.div
@@ -173,6 +178,8 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
         <Route path="/services" component={Services} />
+        <Route path="/view/invoice/:token" component={PublicInvoiceView} />
+        <Route path="/portal/:token" component={CustomerPortal} />
       </Switch>
         </motion.div>
       </AnimatePresence>
@@ -190,11 +197,13 @@ function Router() {
           <Route path="/chart-of-accounts" component={ChartOfAccounts} />
           <Route path="/accounts/:id/ledger" component={AccountLedger} />
           <Route path="/invoices" component={Invoices} />
+          <Route path="/recurring-invoices" component={RecurringInvoices} />
           <Route path="/journal" component={Journal} />
           <Route path="/journal/:id" component={JournalEntryDetail} />
           <Route path="/reports" component={Reports} />
           <Route path="/receipts" component={Receipts} />
           <Route path="/contacts" component={CustomerContacts} />
+          <Route path="/inventory" component={Inventory} />
           <Route path="/ai-cfo" component={AICFO} />
           <Route path="/ai-features" component={AIFeatures} />
           <Route path="/smart-assistant" component={SmartAssistant} />
@@ -211,6 +220,7 @@ function Router() {
           <Route path="/admin" component={Admin} />
           <Route path="/bank-reconciliation" component={BankReconciliation} />
           <Route path="/vat-filing" component={VATFiling} />
+          <Route path="/corporate-tax" component={CorporateTax} />
           <Route path="/team" component={TeamManagement} />
           <Route path="/history" component={History} />
           <Route path="/backup-restore" component={BackupRestore} />

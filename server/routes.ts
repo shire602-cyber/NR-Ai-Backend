@@ -34,9 +34,13 @@ import { registerBackupRoutes } from './routes/backups.routes';
 import { registerReferralRoutes } from './routes/referrals.routes';
 import { registerFeedbackRoutes } from './routes/feedback.routes';
 import { registerVATRoutes } from './routes/vat.routes';
+import { registerCorporateTaxRoutes } from './routes/corporate-tax.routes';
 import { registerTeamRoutes } from './routes/team.routes';
 import { registerPortalRoutes } from './routes/portal.routes';
+import { registerPortalPublicRoutes } from './routes/portal.public.routes';
 import { registerAdminRoutes } from './routes/admin.routes';
+import { registerRecurringInvoiceRoutes } from './routes/recurring-invoices.routes';
+import { registerInventoryRoutes } from './routes/inventory.routes';
 
 const log = createLogger('routes');
 
@@ -48,9 +52,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerCompanyRoutes(app);
   registerAccountRoutes(app);
   registerInvoiceRoutes(app);
+  registerRecurringInvoiceRoutes(app);
   registerReceiptRoutes(app);
   registerContactRoutes(app);
   registerJournalRoutes(app);
+  registerInventoryRoutes(app);
 
   // ─── AI & Intelligence ──────────────────────────────────
   registerAIRoutes(app);
@@ -75,10 +81,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── UAE Compliance ─────────────────────────────────────
   registerVATRoutes(app);
+  registerCorporateTaxRoutes(app);
 
   // ─── Team & Client Portal ──────────────────────────────
   registerTeamRoutes(app);
   registerPortalRoutes(app);
+  registerPortalPublicRoutes(app);
 
   // ─── Admin Panel ────────────────────────────────────────
   registerAdminRoutes(app);

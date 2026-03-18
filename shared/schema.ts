@@ -229,6 +229,12 @@ export const invoices = pgTable("invoices", {
   vatAmount: real("vat_amount").notNull().default(0),
   total: real("total").notNull().default(0),
   status: text("status").notNull().default("draft"), // draft | sent | paid | void
+  shareToken: text("share_token").unique(),
+  shareTokenExpiresAt: timestamp("share_token_expires_at"),
+  einvoiceUuid: text("einvoice_uuid"),
+  einvoiceXml: text("einvoice_xml"),
+  einvoiceHash: text("einvoice_hash"),
+  einvoiceStatus: text("einvoice_status"), // null | generated | submitted | accepted | rejected
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -261,6 +267,34 @@ export type InsertInvoiceLine = z.infer<typeof insertInvoiceLineSchema>;
 export type InvoiceLine = typeof invoiceLines.$inferSelect;
 
 // ===========================
+// Recurring Invoices
+// ===========================
+export const recurringInvoices = pgTable("recurring_invoices", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  customerName: text("customer_name").notNull(),
+  customerTrn: text("customer_trn"),
+  currency: text("currency").notNull().default("AED"),
+  frequency: text("frequency").notNull().default("monthly"), // weekly | monthly | quarterly | yearly
+  startDate: timestamp("start_date").notNull(),
+  nextRunDate: timestamp("next_run_date").notNull(),
+  endDate: timestamp("end_date"), // null = indefinite
+  linesJson: text("lines_json").notNull(), // JSON string of invoice line items
+  isActive: boolean("is_active").notNull().default(true),
+  lastGeneratedInvoiceId: uuid("last_generated_invoice_id"),
+  totalGenerated: integer("total_generated").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertRecurringInvoiceSchema = createInsertSchema(recurringInvoices).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertRecurringInvoice = z.infer<typeof insertRecurringInvoiceSchema>;
+export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
+
+// ===========================
 // Receipts/Documents
 // ===========================
 export const receipts = pgTable("receipts", {
@@ -291,6 +325,57 @@ export type InsertReceipt = z.infer<typeof insertReceiptSchema>;
 export type Receipt = typeof receipts.$inferSelect;
 
 // ===========================
+// Products / Inventory
+// ===========================
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  nameAr: text("name_ar"),
+  sku: text("sku"),
+  description: text("description"),
+  unitPrice: real("unit_price").notNull().default(0),
+  costPrice: real("cost_price").default(0),
+  vatRate: real("vat_rate").notNull().default(0.05),
+  unit: text("unit").notNull().default("pcs"), // pcs, kg, m, hr, etc.
+  currentStock: integer("current_stock").notNull().default(0),
+  lowStockThreshold: integer("low_stock_threshold").default(10),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertProductSchema = createInsertSchema(products).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Product = typeof products.$inferSelect;
+
+// ===========================
+// Inventory Movements
+// ===========================
+export const inventoryMovements = pgTable("inventory_movements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // purchase | sale | adjustment | return
+  quantity: integer("quantity").notNull(),
+  unitCost: real("unit_cost"),
+  reference: text("reference"), // e.g., "Invoice INV-001" or "Manual adjustment"
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertInventoryMovementSchema = createInsertSchema(inventoryMovements).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertInventoryMovement = z.infer<typeof insertInventoryMovementSchema>;
+export type InventoryMovement = typeof inventoryMovements.$inferSelect;
+
+// ===========================
 // Customer Contacts (for invoicing)
 // ===========================
 export const customerContacts = pgTable("customer_contacts", {
@@ -308,12 +393,16 @@ export const customerContacts = pgTable("customer_contacts", {
   paymentTerms: integer("payment_terms").default(30),
   notes: text("notes"),
   isActive: boolean("is_active").default(true).notNull(),
+  portalAccessToken: text("portal_access_token").unique(),
+  portalAccessExpiresAt: timestamp("portal_access_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 });
 
 export const insertCustomerContactSchema = createInsertSchema(customerContacts).omit({
   id: true,
+  portalAccessToken: true,
+  portalAccessExpiresAt: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -1261,6 +1350,35 @@ export const insertVatReturnSchema = createInsertSchema(vatReturns).omit({
 
 export type InsertVatReturn = z.infer<typeof insertVatReturnSchema>;
 export type VatReturn = typeof vatReturns.$inferSelect;
+
+// ===========================
+// Corporate Tax Returns (9% UAE CT)
+// ===========================
+export const corporateTaxReturns = pgTable("corporate_tax_returns", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  taxPeriodStart: timestamp("tax_period_start").notNull(),
+  taxPeriodEnd: timestamp("tax_period_end").notNull(),
+  totalRevenue: real("total_revenue").notNull().default(0),
+  totalExpenses: real("total_expenses").notNull().default(0),
+  totalDeductions: real("total_deductions").notNull().default(0),
+  taxableIncome: real("taxable_income").notNull().default(0),
+  exemptionThreshold: real("exemption_threshold").notNull().default(375000),
+  taxRate: real("tax_rate").notNull().default(0.09),
+  taxPayable: real("tax_payable").notNull().default(0),
+  status: text("status").notNull().default("draft"), // draft | filed | paid
+  filedAt: timestamp("filed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCorporateTaxReturnSchema = createInsertSchema(corporateTaxReturns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCorporateTaxReturn = z.infer<typeof insertCorporateTaxReturnSchema>;
+export type CorporateTaxReturn = typeof corporateTaxReturns.$inferSelect;
 
 // ===========================
 // System Audit Logs
