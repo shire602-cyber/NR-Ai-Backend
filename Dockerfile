@@ -3,48 +3,37 @@
 # Multi-stage build for optimal size
 # ===================================
 
-# Stage 1: Install production dependencies
+# Stage 1: Install ALL dependencies and build
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci || npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: Install production dependencies only
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
 
-# Stage 2: Build the application
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci || npm install
-# Cache bust: forces rebuild when code changes
-ARG CACHEBUST=1
-COPY . .
-RUN npm run build
-
-# Stage 3: Production image
-FROM node:20-alpine AS runner
+# Stage 3: Production image — single layer copy to avoid stale cache
+FROM node:20-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 muhasib
 
-# Copy production dependencies
+# Copy everything in one layer to prevent partial caching
 COPY --from=deps /app/node_modules ./node_modules
-
-# Cache bust runner stage to always copy fresh dist
-ARG CACHEBUST=1
-
-# Copy built application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
-
-# Copy shared schema (needed at runtime by drizzle)
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/migrations ./migrations
 
-# Create uploads directory
 RUN mkdir -p uploads && chown -R muhasib:nodejs uploads
 
 USER muhasib
