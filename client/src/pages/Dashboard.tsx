@@ -7,20 +7,46 @@ import { Badge } from '@/components/ui/badge';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { 
-  TrendingUp, TrendingDown, DollarSign, AlertCircle, FileText, 
+import { getToken } from '@/lib/auth';
+import {
+  TrendingUp, TrendingDown, DollarSign, AlertCircle, FileText,
   Plus, Receipt, BookOpen, Sparkles, ArrowRight, Clock, CheckCircle2,
   Zap, BarChart3
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, 
+import {
+  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, Tooltip, Legend, AreaChart, Area, BarChart, Bar
 } from 'recharts';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
 import { ScrollReveal, StaggerContainer, StaggerItem, hoverScale, hoverLift } from '@/lib/animations';
+import ClientDashboard from './ClientDashboard';
+
+// Check userType from token (outside component to avoid hook ordering issues)
+function getUserTypeFromToken(): string {
+  try {
+    const token = getToken();
+    if (!token) return 'customer';
+    const parts = token.split('.');
+    if (parts.length !== 3) return 'customer';
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.userType || 'customer';
+  } catch { return 'customer'; }
+}
 
 export default function Dashboard() {
+  const userType = getUserTypeFromToken();
+
+  // If client user, show the simplified client dashboard
+  if (userType === 'client') {
+    return <ClientDashboard />;
+  }
+
+  // Render the full SaaS customer dashboard
+  return <CustomerDashboard />;
+}
+
+function CustomerDashboard() {
   const { t, locale } = useTranslation();
   const { companyId: selectedCompanyId } = useDefaultCompany();
   const [mounted, setMounted] = useState(false);

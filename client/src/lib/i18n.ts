@@ -261,6 +261,9 @@ export const t = {
     cashFlowForecast: 'Cash Flow Forecast',
     anomalyDetection: 'Anomaly Detection',
     autoReconcile: 'Smart Reconcile',
+    aiInbox: 'AI Inbox',
+    monthEndClose: 'Month-End Close',
+    pricing: 'Pricing',
   },
   ar: {
     // Navigation
@@ -496,6 +499,9 @@ export const t = {
     cashFlowForecast: 'توقعات التدفق النقدي',
     anomalyDetection: 'كشف الحالات الشاذة',
     autoReconcile: 'التسوية الذكية',
+    aiInbox: 'صندوق الذكاء الاصطناعي',
+    monthEndClose: 'إقفال نهاية الشهر',
+    pricing: 'الأسعار',
   },
 };
 

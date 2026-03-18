@@ -78,9 +78,13 @@ import ExpenseClaims from '@/pages/ExpenseClaims';
 import CashFlowForecast from '@/pages/CashFlowForecast';
 import AnomalyDetection from '@/pages/AnomalyDetection';
 import AutoReconcile from '@/pages/AutoReconcile';
+import AIInbox from '@/pages/AIInbox';
+import MonthEndClose from '@/pages/MonthEndClose';
+import Pricing from '@/pages/Pricing';
 
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { MobileNav } from '@/components/MobileNav';
+import { RouteGuard } from '@/components/layout/RouteGuard';
 import '@/styles/rtl.css';
 import '@/styles/mobile.css';
 
@@ -124,6 +128,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </motion.header>
           <main className="flex-1 overflow-auto p-8">
+            <RouteGuard>
             <AnimatePresence mode="wait">
               <motion.div
                 key={location}
@@ -135,6 +140,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
             {children}
               </motion.div>
             </AnimatePresence>
+            </RouteGuard>
           </main>
         </div>
       </div>
@@ -177,7 +183,7 @@ function Router() {
   }
   
   // Public routes (no sidebar)
-  if (location === '/login' || location === '/register' || location === '/services' || location.startsWith('/view/invoice/') || location.startsWith('/portal/')) {
+  if (location === '/login' || location === '/register' || location === '/services' || location === '/pricing' || location.startsWith('/view/invoice/') || location.startsWith('/portal/')) {
     return (
       <AnimatePresence mode="wait">
         <motion.div
@@ -193,6 +199,7 @@ function Router() {
         <Route path="/services" component={Services} />
         <Route path="/view/invoice/:token" component={PublicInvoiceView} />
         <Route path="/portal/:token" component={CustomerPortal} />
+        <Route path="/pricing" component={Pricing} />
       </Switch>
         </motion.div>
       </AnimatePresence>
@@ -225,6 +232,8 @@ function Router() {
           <Route path="/cashflow-forecast" component={CashFlowForecast} />
           <Route path="/anomaly-detection" component={AnomalyDetection} />
           <Route path="/auto-reconcile" component={AutoReconcile} />
+          <Route path="/ai-inbox" component={AIInbox} />
+          <Route path="/month-end" component={MonthEndClose} />
           <Route path="/ai-cfo" component={AICFO} />
           <Route path="/ai-features" component={AIFeatures} />
           <Route path="/smart-assistant" component={SmartAssistant} />

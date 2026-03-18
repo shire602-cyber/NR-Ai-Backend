@@ -49,6 +49,9 @@ import { registerExpenseClaimRoutes } from './routes/expense-claims.routes';
 import { registerCashFlowRoutes } from './routes/cashflow.routes';
 import { registerAnomalyRoutes } from './routes/anomaly.routes';
 import { registerAutoReconcileRoutes } from './routes/auto-reconcile.routes';
+import { registerAIGLRoutes } from './routes/ai-gl.routes';
+import { registerMonthEndRoutes } from './routes/month-end.routes';
+import { registerAdminHealthRoutes } from './routes/admin-health.routes';
 
 const log = createLogger('routes');
 
@@ -83,6 +86,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerCashFlowRoutes(app);
   registerAnomalyRoutes(app);
   registerAutoReconcileRoutes(app);
+  registerAIGLRoutes(app);
+
+  // ─── Month-End & Close ────────────────────────────────
+  registerMonthEndRoutes(app);
 
   // ─── Reporting & Analytics ──────────────────────────────
   registerDashboardRoutes(app);
@@ -111,6 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPortalPublicRoutes(app);
 
   // ─── Admin Panel ────────────────────────────────────────
+  registerAdminHealthRoutes(app);
   registerAdminRoutes(app);
 
   log.info('All route modules registered');

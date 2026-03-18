@@ -36,7 +36,9 @@ import {
   ClipboardList,
   TrendingUp,
   ShieldAlert,
-  Zap
+  Zap,
+  Brain,
+  CalendarCheck
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -78,11 +80,13 @@ const hrItems = [
 const reportsItems = [
   { title: 'reports', icon: BarChart3, url: '/reports' },
   { title: 'budgeting', icon: PieChart, url: '/budgets' },
+  { title: 'monthEndClose', icon: CalendarCheck, url: '/month-end' },
   { title: 'vatFiling', icon: FileCheck, url: '/vat-filing' },
   { title: 'corporateTax', icon: FileCheck, url: '/corporate-tax' },
 ];
 
 const aiItems = [
+  { title: 'aiInbox', icon: Brain, url: '/ai-inbox' },
   { title: 'aiCfo', icon: Bot, url: '/ai-cfo' },
   { title: 'aiFeatures', icon: Sparkles, url: '/ai-features' },
   { title: 'aiChat', icon: MessageSquare, url: '/ai-chat' },

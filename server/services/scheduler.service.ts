@@ -11,7 +11,132 @@ const log = createLogger('scheduler');
  * and creates in-app notifications prompting the user to send WhatsApp
  * messages. No messages are sent automatically -- all WhatsApp sends
  * remain manual via wa.me links.
+ *
+ * 5-Level Escalation Engine:
+ *   Level 1 (Day -3): Gentle reminder — normal priority
+ *   Level 2 (Day  0): Due today alert — high priority
+ *   Level 3 (Day +7): First follow-up — high priority
+ *   Level 4 (Day +14): Second follow-up — urgent priority
+ *   Level 5 (Day +30): Final notice — urgent priority
+ *
+ * UAE weekend skipping: If a trigger date falls on Friday or Saturday,
+ * the reminder fires on the preceding Thursday instead.
  */
+
+// ---------------------------------------------------------------------------
+// Escalation level definitions
+// ---------------------------------------------------------------------------
+
+interface EscalationLevel {
+  ruleType: string;
+  /** Positive = days before due, negative = days after due */
+  diffDays: number;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  titleFn: (inv: InvoiceInfo, overdueDays: number) => string;
+  messageFn: (inv: InvoiceInfo, dueDate: Date) => string;
+}
+
+interface InvoiceInfo {
+  id: string;
+  number: string;
+  total: number;
+  customerName: string;
+}
+
+const ESCALATION_LEVELS: EscalationLevel[] = [
+  {
+    ruleType: 'due_in_3_days',
+    diffDays: 3, // due date is 3 days away
+    priority: 'normal',
+    titleFn: (inv) => `Payment reminder: Invoice #${inv.number} due in 3 days`,
+    messageFn: (inv, dueDate) =>
+      `Friendly reminder: Invoice #${inv.number} for AED ${inv.total.toFixed(2)} is due on ${formatDate(dueDate)}.`,
+  },
+  {
+    ruleType: 'due_today',
+    diffDays: 0,
+    priority: 'high',
+    titleFn: (inv) => `Payment due today: Invoice #${inv.number}`,
+    messageFn: (inv, _dueDate) =>
+      `Invoice #${inv.number} for AED ${inv.total.toFixed(2)} is due today. Please arrange payment.`,
+  },
+  {
+    ruleType: 'overdue_7_days',
+    diffDays: -7,
+    priority: 'high',
+    titleFn: (inv) => `Overdue: Invoice #${inv.number} (7 days)`,
+    messageFn: (inv, _dueDate) =>
+      `Follow-up: Invoice #${inv.number} (AED ${inv.total.toFixed(2)}) is now 7 days overdue. Please process payment at your earliest convenience.`,
+  },
+  {
+    ruleType: 'overdue_14_days',
+    diffDays: -14,
+    priority: 'urgent',
+    titleFn: (inv) => `Overdue: Invoice #${inv.number} (14 days)`,
+    messageFn: (inv, _dueDate) =>
+      `Second notice: Invoice #${inv.number} (AED ${inv.total.toFixed(2)}) is 14 days overdue. Immediate attention required.`,
+  },
+  {
+    ruleType: 'overdue_30_days',
+    diffDays: -30,
+    priority: 'urgent',
+    titleFn: (inv) => `Final notice: Invoice #${inv.number} (30 days overdue)`,
+    messageFn: (inv, _dueDate) =>
+      `Final notice: Invoice #${inv.number} (AED ${inv.total.toFixed(2)}) is 30 days overdue. Please contact us immediately to resolve this outstanding balance.`,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * If the given date falls on a UAE weekend (Friday = 5, Saturday = 6),
+ * shift it back to the preceding Thursday (day 4).
+ */
+function skipUAEWeekend(date: Date): Date {
+  const adjusted = new Date(date);
+  const day = adjusted.getDay();
+  if (day === 5) {
+    // Friday → shift back 1 day to Thursday
+    adjusted.setDate(adjusted.getDate() - 1);
+  } else if (day === 6) {
+    // Saturday → shift back 2 days to Thursday
+    adjusted.setDate(adjusted.getDate() - 2);
+  }
+  return adjusted;
+}
+
+/**
+ * Format a date for display in notification messages (en-AE locale).
+ */
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('en-AE');
+}
+
+/**
+ * Normalize a phone number for wa.me links — strip everything except digits
+ * and the leading '+'. Ensures no leading zeros after country code.
+ */
+function normalizePhone(phone: string): string {
+  return phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
+}
+
+/**
+ * Build a pre-filled wa.me link for the given phone and message text.
+ * Returns null if phone is not available.
+ */
+function buildWhatsAppLink(phone: string | undefined | null, message: string): string | null {
+  if (!phone || phone.trim() === '') return null;
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
+  return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Scheduler entry point
+// ---------------------------------------------------------------------------
+
 export function initScheduler() {
   log.info('Initializing background scheduler...');
 
@@ -26,8 +151,29 @@ export function initScheduler() {
     }
   });
 
-  log.info('Scheduler initialized — running payment scans every hour');
+  // Run every 30 minutes: autonomous GL classification scan
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      log.info('Running autonomous GL classification scan...');
+      const { scanAndClassifyAllCompanies } = await import('../services/autonomous-gl.service');
+      await scanAndClassifyAllCompanies();
+      log.info('Autonomous GL classification scan complete');
+    } catch (err: any) {
+      // If the module doesn't exist yet, log and skip gracefully
+      if (err?.code === 'MODULE_NOT_FOUND' || err?.code === 'ERR_MODULE_NOT_FOUND') {
+        log.info('autonomous-gl.service not available yet — skipping GL scan');
+      } else {
+        log.error({ err }, 'Scheduler error during autonomous GL scan');
+      }
+    }
+  });
+
+  log.info('Scheduler initialized — running payment scans every hour, GL scans every 30 minutes');
 }
+
+// ---------------------------------------------------------------------------
+// Invoice date computation
+// ---------------------------------------------------------------------------
 
 /**
  * Computes the due date for an invoice based on its issue date and
@@ -47,6 +193,10 @@ function reminderKey(invoiceId: string, rule: string): string {
   return `${rule}::${invoiceId}`;
 }
 
+// ---------------------------------------------------------------------------
+// Payment reminder scanning
+// ---------------------------------------------------------------------------
+
 /**
  * Scans all companies for invoices that match engagement rules and
  * creates notifications for the company owner(s).
@@ -64,8 +214,12 @@ async function scanPaymentReminders() {
 }
 
 /**
- * For a single company, check all unpaid invoices against reminder rules
- * and create notifications where appropriate.
+ * For a single company, check all unpaid invoices against the 5-level
+ * escalation engine and create notifications where appropriate.
+ *
+ * UAE weekend skipping is applied: if the trigger date for a given
+ * escalation level falls on Friday or Saturday, the reminder fires
+ * on the preceding Thursday instead.
  */
 async function scanCompanyPaymentReminders(companyId: string) {
   const invoices = await storage.getInvoicesByCompanyId(companyId);
@@ -100,53 +254,63 @@ async function scanCompanyPaymentReminders(companyId: string) {
     const paymentTerms = customer?.paymentTerms ?? 30;
     const dueDate = computeDueDate(new Date(inv.date), paymentTerms);
     const dueDateStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-    const diffDays = Math.round(
-      (dueDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)
-    );
 
-    // Rule: Due in 3 days
-    if (diffDays === 3) {
+    // Evaluate each escalation level
+    for (const level of ESCALATION_LEVELS) {
+      // Compute the target trigger date for this level.
+      // For due_in_3_days (diffDays = 3): trigger when today is 3 days before due.
+      // For overdue_7_days (diffDays = -7): trigger when today is 7 days after due.
+      const triggerDate = new Date(dueDateStart);
+      triggerDate.setDate(triggerDate.getDate() - level.diffDays);
+
+      // Apply UAE weekend skipping — if the trigger falls on Fri/Sat, shift to Thu
+      const adjustedTrigger = skipUAEWeekend(triggerDate);
+      const adjustedTriggerStart = new Date(
+        adjustedTrigger.getFullYear(),
+        adjustedTrigger.getMonth(),
+        adjustedTrigger.getDate()
+      );
+
+      // Check if today matches the adjusted trigger date
+      if (todayStart.getTime() !== adjustedTriggerStart.getTime()) {
+        continue;
+      }
+
+      const invoiceInfo: InvoiceInfo = {
+        id: inv.id,
+        number: inv.number,
+        total: inv.total,
+        customerName: inv.customerName,
+      };
+
+      const overdueDays = Math.abs(level.diffDays);
+      const title = level.titleFn(invoiceInfo, overdueDays);
+      const baseMessage = level.messageFn(invoiceInfo, dueDateStart);
+
+      // Build the WhatsApp wa.me link if the customer has a phone number
+      const customerPhone = customer?.phone;
+      const waLink = buildWhatsAppLink(customerPhone, baseMessage);
+      const message = waLink
+        ? `${baseMessage}\n\nSend reminder: ${waLink}`
+        : baseMessage;
+
       await maybeCreateReminder({
         companyId,
         companyUsers,
-        invoice: inv,
-        ruleType: 'due_in_3_days',
+        invoice: invoiceInfo,
+        ruleType: level.ruleType,
         sentKeys,
-        title: `Payment reminder: Invoice #${inv.number} due in 3 days`,
-        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${inv.total.toFixed(2)}) is due on ${dueDateStart.toLocaleDateString('en-AE')}. Consider sending a WhatsApp reminder.`,
-        priority: 'normal',
-      });
-    }
-
-    // Rule: Due today
-    if (diffDays === 0) {
-      await maybeCreateReminder({
-        companyId,
-        companyUsers,
-        invoice: inv,
-        ruleType: 'due_today',
-        sentKeys,
-        title: `Payment due today: Invoice #${inv.number}`,
-        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${inv.total.toFixed(2)}) is due today. Send a WhatsApp reminder to follow up.`,
-        priority: 'high',
-      });
-    }
-
-    // Rule: Overdue by 7+ days
-    if (diffDays <= -7) {
-      await maybeCreateReminder({
-        companyId,
-        companyUsers,
-        invoice: inv,
-        ruleType: 'overdue_7_days',
-        sentKeys,
-        title: `Overdue: Invoice #${inv.number} (${Math.abs(diffDays)} days)`,
-        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${inv.total.toFixed(2)}) is ${Math.abs(diffDays)} days overdue. Send a WhatsApp follow-up to collect payment.`,
-        priority: 'urgent',
+        title,
+        message,
+        priority: level.priority,
       });
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reminder creation with dedup
+// ---------------------------------------------------------------------------
 
 interface ReminderParams {
   companyId: string;
