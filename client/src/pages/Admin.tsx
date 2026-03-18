@@ -55,11 +55,6 @@ export default function Admin() {
   const [editSettingDialog, setEditSettingDialog] = useState<AdminSetting | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState('');
-  const [whatsappAccessToken, setWhatsappAccessToken] = useState('');
-  const [whatsappBusinessAccountId, setWhatsappBusinessAccountId] = useState('');
-  const [whatsappWebhookVerifyToken, setWhatsappWebhookVerifyToken] = useState('');
-  const [phoneNumberEdited, setPhoneNumberEdited] = useState(false);
   
   // System settings state
   const [systemSettings, setSystemSettings] = useState({
@@ -149,30 +144,6 @@ export default function Admin() {
     aiCreditsUsed: number;
   }>({
     queryKey: ['/api/admin/stats'],
-  });
-
-  // Fetch WhatsApp configuration
-  const { data: whatsappConfig, isLoading: whatsappConfigLoading } = useQuery<{
-    configured: boolean;
-    isActive: boolean;
-    phoneNumberId?: string;
-    businessAccountId?: string;
-    hasAccessToken: boolean;
-    companyId: string;
-    configId?: string;
-  }>({
-    queryKey: ['/api/integrations/whatsapp/config'],
-    onSuccess: (data) => {
-      // Only populate phone number if user hasn't manually edited it
-      if (data.configured && data.phoneNumberId && !phoneNumberEdited) {
-        setWhatsappPhoneNumberId(data.phoneNumberId);
-      }
-      // Populate business account ID if available
-      if (data.configured && data.businessAccountId) {
-        setWhatsappBusinessAccountId(data.businessAccountId);
-      }
-      // Don't set access token from response (it's not returned for security)
-    },
   });
 
   // Mutations
@@ -265,32 +236,6 @@ export default function Admin() {
     },
     onError: () => {
       toast({ variant: 'destructive', title: 'Failed to delete plan' });
-    },
-  });
-
-  // WhatsApp configuration mutation
-  const saveWhatsappConfigMutation = useMutation({
-    mutationFn: async (config: { 
-      phoneNumberId: string; 
-      accessToken?: string; 
-      businessAccountId?: string; 
-      webhookVerifyToken?: string; 
-    }) => {
-      return apiRequest('POST', '/api/integrations/whatsapp/config', config);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/integrations/whatsapp/config'] });
-      toast({ title: 'WhatsApp configuration saved successfully' });
-      // Clear sensitive fields after saving (for security)
-      setWhatsappAccessToken('');
-      setWhatsappWebhookVerifyToken('');
-    },
-    onError: (error: any) => {
-      toast({ 
-        variant: 'destructive', 
-        title: 'Failed to save WhatsApp configuration',
-        description: error?.message || 'Please check your credentials and try again'
-      });
     },
   });
 
@@ -1210,115 +1155,25 @@ export default function Admin() {
                   <div className="w-8 h-8 bg-[#25D366] rounded flex items-center justify-center">
                     <Bell className="w-4 h-4 text-white" />
                   </div>
-                  WhatsApp Business
+                  WhatsApp
                 </CardTitle>
-                <CardDescription>Receipt ingestion via WhatsApp messages</CardDescription>
+                <CardDescription>Send messages via your personal WhatsApp</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Status</span>
-                  {whatsappConfigLoading ? (
-                    <Badge variant="outline">Loading...</Badge>
-                  ) : whatsappConfig?.configured && whatsappConfig?.isActive ? (
-                    <Badge variant="outline" className="bg-green-50 text-green-700">Active</Badge>
-                  ) : whatsappConfig?.configured ? (
-                    <Badge variant="outline" className="bg-amber-50 text-amber-700">Inactive</Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-amber-50 text-amber-700">Not Configured</Badge>
-                  )}
+                  <Badge variant="outline" className="bg-green-50 text-green-700">Active</Badge>
                 </div>
-                <div className="space-y-2">
-                  <Label>Phone Number ID</Label>
-                  <Input 
-                    placeholder="Enter Phone Number ID" 
-                    value={whatsappPhoneNumberId}
-                    onChange={(e) => {
-                      setWhatsappPhoneNumberId(e.target.value);
-                      setPhoneNumberEdited(true);
-                    }}
-                    data-testid="input-whatsapp-phone" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Access Token</Label>
-                  <Input 
-                    type="password" 
-                    placeholder={whatsappConfig?.hasAccessToken ? "Enter new token to update" : "Enter Access Token"}
-                    value={whatsappAccessToken}
-                    onChange={(e) => setWhatsappAccessToken(e.target.value)}
-                    data-testid="input-whatsapp-token" 
-                  />
-                  {whatsappConfig?.hasAccessToken && (
-                    <p className="text-xs text-muted-foreground">
-                      Token is already configured. Enter a new token to update it.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Business Account ID (Optional)</Label>
-                  <Input 
-                    placeholder="Enter Business Account ID from Meta Business Manager"
-                    value={whatsappBusinessAccountId}
-                    onChange={(e) => setWhatsappBusinessAccountId(e.target.value)}
-                    data-testid="input-whatsapp-business-id" 
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Found in Meta Business Manager → WhatsApp → Configuration
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Webhook Verify Token (Optional)</Label>
-                  <Input 
-                    type="password"
-                    placeholder="Enter webhook verify token (or leave empty)"
-                    value={whatsappWebhookVerifyToken}
-                    onChange={(e) => setWhatsappWebhookVerifyToken(e.target.value)}
-                    data-testid="input-whatsapp-webhook-token" 
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Used to verify webhook requests from Meta. Can be any value you choose.
-                  </p>
-                </div>
-                <Button 
-                  className="w-full" 
-                  data-testid="button-save-whatsapp"
-                  onClick={() => {
-                    if (!whatsappPhoneNumberId.trim()) {
-                      toast({ 
-                        variant: 'destructive', 
-                        title: 'Validation Error',
-                        description: 'Phone Number ID is required'
-                      });
-                      return;
-                    }
-                    if (!whatsappAccessToken.trim() && !whatsappConfig?.hasAccessToken) {
-                      toast({ 
-                        variant: 'destructive', 
-                        title: 'Validation Error',
-                        description: 'Access Token is required'
-                      });
-                      return;
-                    }
-                    saveWhatsappConfigMutation.mutate({
-                      phoneNumberId: whatsappPhoneNumberId.trim(),
-                      accessToken: whatsappAccessToken.trim() || undefined,
-                      businessAccountId: whatsappBusinessAccountId.trim() || undefined,
-                      webhookVerifyToken: whatsappWebhookVerifyToken.trim() || undefined,
-                    });
-                  }}
-                  disabled={saveWhatsappConfigMutation.isPending}
+                <p className="text-sm text-muted-foreground">
+                  WhatsApp messaging works through your personal WhatsApp — no API setup needed.
+                  Go to the WhatsApp page to send messages and invoice reminders directly.
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.location.href = '/whatsapp'}
                 >
-                  {saveWhatsappConfigMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Configuration
-                    </>
-                  )}
+                  Go to WhatsApp
                 </Button>
               </CardContent>
             </Card>
