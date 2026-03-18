@@ -32,6 +32,9 @@ RUN addgroup --system --gid 1001 nodejs && \
 # Copy production dependencies
 COPY --from=deps /app/node_modules ./node_modules
 
+# Cache bust runner stage to always copy fresh dist
+ARG CACHEBUST=1
+
 # Copy built application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
