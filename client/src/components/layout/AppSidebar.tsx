@@ -53,14 +53,17 @@ const coreItems = [
   { title: 'chartOfAccounts', icon: List, url: '/chart-of-accounts' },
   { title: 'journal', icon: BookMarked, url: '/journal' },
   { title: 'invoices', icon: FileText, url: '/invoices' },
+  { title: 'recurringInvoices', icon: CalendarDays, url: '/recurring-invoices' },
   { title: 'receipts', icon: Receipt, url: '/receipts' },
   { title: 'contacts', icon: Users, url: '/contacts' },
+  { title: 'inventory', icon: ShoppingCart, url: '/inventory' },
   { title: 'bankReconciliation', icon: Building2, url: '/bank-reconciliation' },
 ];
 
 const reportsItems = [
   { title: 'reports', icon: BarChart3, url: '/reports' },
   { title: 'vatFiling', icon: FileCheck, url: '/vat-filing' },
+  { title: 'corporateTax', icon: FileCheck, url: '/corporate-tax' },
 ];
 
 const aiItems = [

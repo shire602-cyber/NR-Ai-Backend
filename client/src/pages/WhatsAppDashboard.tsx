@@ -30,6 +30,8 @@ import {
   ChevronRight,
   Plus,
   Trash2,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { SiWhatsapp } from 'react-icons/si';
 import {
@@ -53,160 +55,34 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import type { WhatsappMessage, Invoice, CustomerContact } from '@shared/schema';
-
-// ─── Helpers ──────────────────────────────────────────────
-
-function formatPhoneForWhatsApp(phone: string): string {
-  let cleaned = phone.replace(/[^\d]/g, '');
-  if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
-  return cleaned;
-}
-
-function openWhatsApp(phone: string, message: string) {
-  const formatted = formatPhoneForWhatsApp(phone);
-  const encoded = encodeURIComponent(message);
-  window.open(`https://wa.me/${formatted}?text=${encoded}`, '_blank');
-}
-
-// ─── Message Templates ────────────────────────────────────
-
-interface MessageTemplate {
-  id: string;
-  name: string;
-  nameAr: string;
-  icon: typeof Receipt;
-  category: 'invoice' | 'payment' | 'reminder' | 'news';
-  template: string;
-  templateAr: string;
-}
-
-const MESSAGE_TEMPLATES: MessageTemplate[] = [
-  {
-    id: 'invoice_new',
-    name: 'New Invoice',
-    nameAr: 'فاتورة جديدة',
-    icon: FileText,
-    category: 'invoice',
-    template: `Hello {{customer_name}},
-
-Your invoice {{invoice_number}} for AED {{amount}} has been issued.
-
-Due Date: {{due_date}}
-
-Thank you for your business!
-- {{company_name}}`,
-    templateAr: `مرحباً {{customer_name}},
-
-تم إصدار فاتورتك {{invoice_number}} بمبلغ {{amount}} درهم.
-
-تاريخ الاستحقاق: {{due_date}}
-
-شكراً لتعاملك معنا!
-- {{company_name}}`,
-  },
-  {
-    id: 'payment_reminder',
-    name: 'Payment Reminder',
-    nameAr: 'تذكير بالدفع',
-    icon: CreditCard,
-    category: 'payment',
-    template: `Hello {{customer_name}},
-
-This is a friendly reminder that invoice {{invoice_number}} for AED {{amount}} is due on {{due_date}}.
-
-Please make payment at your earliest convenience.
-
-Thank you!
-- {{company_name}}`,
-    templateAr: `مرحباً {{customer_name}},
-
-هذا تذكير ودي بأن الفاتورة {{invoice_number}} بمبلغ {{amount}} درهم مستحقة في {{due_date}}.
-
-يرجى السداد في أقرب وقت ممكن.
-
-شكراً لك!
-- {{company_name}}`,
-  },
-  {
-    id: 'payment_overdue',
-    name: 'Overdue Payment',
-    nameAr: 'دفعة متأخرة',
-    icon: CalendarClock,
-    category: 'payment',
-    template: `Hello {{customer_name}},
-
-Invoice {{invoice_number}} for AED {{amount}} was due on {{due_date}} and is now overdue.
-
-Please arrange payment as soon as possible to avoid any disruption.
-
-Thank you for your attention.
-- {{company_name}}`,
-    templateAr: `مرحباً {{customer_name}},
-
-الفاتورة {{invoice_number}} بمبلغ {{amount}} درهم كانت مستحقة في {{due_date}} وهي الآن متأخرة.
-
-يرجى ترتيب الدفع في أقرب وقت ممكن.
-
-شكراً لاهتمامك.
-- {{company_name}}`,
-  },
-  {
-    id: 'general_reminder',
-    name: 'General Reminder',
-    nameAr: 'تذكير عام',
-    icon: Bell,
-    category: 'reminder',
-    template: `Hello {{customer_name}},
-
-{{message}}
-
-Best regards,
-- {{company_name}}`,
-    templateAr: `مرحباً {{customer_name}},
-
-{{message}}
-
-مع أطيب التحيات,
-- {{company_name}}`,
-  },
-  {
-    id: 'news_update',
-    name: 'News & Announcement',
-    nameAr: 'أخبار وإعلان',
-    icon: Megaphone,
-    category: 'news',
-    template: `Hello {{customer_name}},
-
-{{message}}
-
-Best regards,
-- {{company_name}}`,
-    templateAr: `مرحباً {{customer_name}},
-
-{{message}}
-
-مع أطيب التحيات,
-- {{company_name}}`,
-  },
-];
+import type { WhatsappMessage, Invoice, CustomerContact, Notification } from '@shared/schema';
+import {
+  MESSAGE_TEMPLATES,
+  fillTemplate,
+  formatPhoneForWhatsApp,
+  openWhatsApp,
+  type MessageTemplate,
+} from '@/lib/whatsapp-templates';
 
 // ─── Rules ────────────────────────────────────────────────
 
 interface WhatsAppRule {
   id: string;
   name: string;
-  type: 'before_due' | 'on_due' | 'after_due' | 'on_invoice';
+  type: 'before_due' | 'on_due' | 'after_due' | 'on_invoice' | 'on_event';
   daysOffset: number; // negative = before, 0 = on, positive = after
   templateId: string;
   enabled: boolean;
 }
 
 const DEFAULT_RULES: WhatsAppRule[] = [
-  { id: 'rule_1', name: 'Invoice Created', type: 'on_invoice', daysOffset: 0, templateId: 'invoice_new', enabled: true },
+  { id: 'rule_1', name: 'Invoice Created', type: 'on_invoice', daysOffset: 0, templateId: 'invoice_with_link', enabled: true },
   { id: 'rule_2', name: '3 days before due', type: 'before_due', daysOffset: -3, templateId: 'payment_reminder', enabled: true },
   { id: 'rule_3', name: 'On due date', type: 'on_due', daysOffset: 0, templateId: 'payment_reminder', enabled: true },
-  { id: 'rule_4', name: '7 days overdue', type: 'after_due', daysOffset: 7, templateId: 'payment_overdue', enabled: false },
+  { id: 'rule_4', name: '7 days overdue', type: 'after_due', daysOffset: 7, templateId: 'payment_overdue', enabled: true },
+  { id: 'rule_5', name: '14 days overdue', type: 'after_due', daysOffset: 14, templateId: 'payment_overdue', enabled: false },
+  { id: 'rule_6', name: 'New client welcome', type: 'on_invoice', daysOffset: 0, templateId: 'welcome_client', enabled: false },
+  { id: 'rule_7', name: 'VAT deadline (7 days)', type: 'before_due', daysOffset: -7, templateId: 'vat_deadline_reminder', enabled: true },
 ];
 
 // ─── Component ────────────────────────────────────────────
@@ -248,6 +124,14 @@ export default function WhatsAppDashboard() {
     enabled: !!currentCompany?.id,
   });
 
+  // Notifications for pending actions
+  const { data: notificationsData } = useQuery<{ notifications: Notification[]; unreadCount: number }>({
+    queryKey: ['/api/notifications'],
+  });
+  const pendingActions = (notificationsData?.notifications || []).filter(
+    (n) => n.type === 'payment_due' && !n.isDismissed && !n.isRead
+  );
+
   // Filter messages
   const filteredMessages = messages.filter(msg => {
     if (!searchQuery) return true;
@@ -269,14 +153,6 @@ export default function WhatsAppDashboard() {
     return new Date(dateStr).toLocaleString(en ? 'en-AE' : 'ar-AE', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
-  };
-
-  const fillTemplate = (templateStr: string, data: Record<string, string>) => {
-    let result = templateStr;
-    for (const [key, value] of Object.entries(data)) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
-    }
-    return result;
   };
 
   const logAndOpen = (phone: string, message: string) => {
@@ -375,6 +251,45 @@ export default function WhatsAppDashboard() {
     apiRequest('POST', '/api/integrations/whatsapp/save-rules', {
       rules: rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r),
     }).catch(() => {});
+  };
+
+  const handleActionNotification = (notification: Notification) => {
+    // Find the related invoice to get customer details
+    const inv = notification.relatedEntityId
+      ? invoices.find((i) => i.id === notification.relatedEntityId)
+      : null;
+
+    if (inv) {
+      const cust = customers.find((c) => c.name === inv.customerName);
+      if (cust?.phone) {
+        const tpl = MESSAGE_TEMPLATES.find((t) => t.id === 'payment_reminder');
+        const invoiceDate = new Date(inv.date);
+        const dueDate = new Date(invoiceDate);
+        dueDate.setDate(dueDate.getDate() + (cust.paymentTerms || 30));
+
+        const templateStr = en ? (tpl?.template || '') : (tpl?.templateAr || '');
+        const message = fillTemplate(templateStr, {
+          customer_name: inv.customerName || 'Customer',
+          invoice_number: inv.number,
+          amount: `AED ${inv.total.toFixed(2)}`,
+          due_date: dueDate.toLocaleDateString(en ? 'en-AE' : 'ar-AE'),
+          company_name: currentCompany?.name || 'Our Company',
+        });
+
+        logAndOpen(cust.phone, message);
+      } else {
+        toast({ title: en ? 'No phone number for this customer' : 'لا يوجد رقم هاتف لهذا العميل', variant: 'destructive' });
+      }
+    }
+
+    // Mark notification as read
+    apiRequest('PATCH', `/api/notifications/${notification.id}/read`, {}).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+  };
+
+  const dismissNotification = (notificationId: string) => {
+    apiRequest('PATCH', `/api/notifications/${notificationId}/dismiss`, {}).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
   };
 
   const applyTemplate = (templateId: string) => {
@@ -747,6 +662,90 @@ export default function WhatsAppDashboard() {
 
         {/* ─── Rules Tab ────────────────────────────────── */}
         <TabsContent value="rules" className="space-y-4">
+          {/* Pending Actions */}
+          {pendingActions.length > 0 && (
+            <Card className="border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/20">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-orange-500" />
+                  <CardTitle className="text-lg">
+                    {en ? `Pending Actions (${pendingActions.length})` : `إجراءات معلقة (${pendingActions.length})`}
+                  </CardTitle>
+                </div>
+                <CardDescription>
+                  {en
+                    ? 'These notifications were created by the scheduler. Click "Send via WhatsApp" to open a pre-filled message.'
+                    : 'تم إنشاء هذه الإشعارات بواسطة المجدول. انقر "إرسال عبر واتساب" لفتح رسالة جاهزة.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {pendingActions.slice(0, 10).map((notification) => {
+                  const relatedInv = notification.relatedEntityId
+                    ? invoices.find((i) => i.id === notification.relatedEntityId)
+                    : null;
+                  const cust = relatedInv ? customers.find((c) => c.name === relatedInv.customerName) : null;
+
+                  return (
+                    <div
+                      key={notification.id}
+                      className="flex items-center justify-between p-3 border rounded-lg bg-background hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          notification.priority === 'urgent' ? 'bg-red-500/10' :
+                          notification.priority === 'high' ? 'bg-orange-500/10' : 'bg-yellow-500/10'
+                        }`}>
+                          <CreditCard className={`w-4 h-4 ${
+                            notification.priority === 'urgent' ? 'text-red-600' :
+                            notification.priority === 'high' ? 'text-orange-600' : 'text-yellow-600'
+                          }`} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{notification.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{notification.message}</p>
+                          {relatedInv && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {relatedInv.customerName} {cust?.phone ? `(${cust.phone})` : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {cust?.phone && (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-xs h-8"
+                            onClick={() => handleActionNotification(notification)}
+                          >
+                            <SiWhatsapp className="w-3.5 h-3.5 mr-1" />
+                            {en ? 'Send' : 'إرسال'}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground h-8 w-8 p-0"
+                          onClick={() => dismissNotification(notification.id)}
+                          title={en ? 'Dismiss' : 'تجاهل'}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {pendingActions.length > 10 && (
+                  <p className="text-xs text-muted-foreground text-center pt-1">
+                    {en
+                      ? `+ ${pendingActions.length - 10} more pending actions`
+                      : `+ ${pendingActions.length - 10} إجراء معلق آخر`}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Reminder Rules */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">{en ? 'Reminder Rules' : 'قواعد التذكيرات'}</CardTitle>
@@ -774,6 +773,7 @@ export default function WhatsAppDashboard() {
                           {rule.type === 'on_due' && ` • ${en ? 'On due date' : 'في تاريخ الاستحقاق'}`}
                           {rule.type === 'after_due' && ` • ${rule.daysOffset} ${en ? 'days after due' : 'أيام بعد الاستحقاق'}`}
                           {rule.type === 'on_invoice' && ` • ${en ? 'When invoice is created' : 'عند إنشاء الفاتورة'}`}
+                          {rule.type === 'on_event' && ` • ${en ? 'When event occurs' : 'عند حدوث الحدث'}`}
                         </p>
                       </div>
                     </div>
@@ -814,8 +814,11 @@ export default function WhatsAppDashboard() {
                         <Badge variant="outline" className="text-xs mt-1">
                           {tpl.category === 'invoice' ? (en ? 'Invoice' : 'فاتورة') :
                            tpl.category === 'payment' ? (en ? 'Payment' : 'دفع') :
-                           tpl.category === 'reminder' ? (en ? 'Reminder' : 'تذكير') :
-                           (en ? 'News' : 'أخبار')}
+                           tpl.category === 'onboarding' ? (en ? 'Onboarding' : 'تسجيل') :
+                           tpl.category === 'service' ? (en ? 'Service' : 'خدمة') :
+                           tpl.category === 'alert' ? (en ? 'Alert' : 'تنبيه') :
+                           tpl.category === 'engagement' ? (en ? 'Engagement' : 'تواصل') :
+                           (en ? 'Other' : 'أخرى')}
                         </Badge>
                       </div>
                     </div>

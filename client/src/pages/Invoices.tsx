@@ -27,9 +27,10 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { exportToExcel, exportToGoogleSheets, prepareInvoicesForExport } from '@/lib/export';
-import { Plus, FileText, CalendarIcon, Trash2, Download, Edit, Palette, Save, Info, XCircle, AlertCircle, FileSpreadsheet } from 'lucide-react';
-import { SiGooglesheets } from 'react-icons/si';
-import type { Invoice, Company } from '@shared/schema';
+import { Plus, FileText, FileCode, CalendarIcon, Trash2, Download, Edit, Palette, Save, Info, XCircle, AlertCircle, FileSpreadsheet, Send } from 'lucide-react';
+import { SiGooglesheets, SiWhatsapp } from 'react-icons/si';
+import type { Invoice, Company, CustomerContact } from '@shared/schema';
+import { MESSAGE_TEMPLATES, fillTemplate, openWhatsApp } from '@/lib/whatsapp-templates';
 import { cn } from '@/lib/utils';
 import { downloadInvoicePDF } from '@/lib/pdf-invoice';
 
@@ -86,6 +87,12 @@ export default function Invoices() {
 
   const { data: accounts = [] } = useQuery<any[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'accounts'],
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: customers = [] } = useQuery<CustomerContact[]>({
+    queryKey: ['/api/companies', selectedCompanyId, 'customer-contacts'],
+    queryFn: () => apiRequest('GET', `/api/companies/${selectedCompanyId}/customer-contacts`),
     enabled: !!selectedCompanyId,
   });
 
@@ -844,6 +851,11 @@ export default function Invoices() {
                             </SelectItem>
                           </SelectContent>
                         </Select>
+                        {(invoice as any).einvoiceStatus && (
+                          <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                            E
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -912,6 +924,89 @@ export default function Invoices() {
                           >
                             <Download className="w-4 h-4 mr-2" />
                             PDF
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-green-600 hover:text-green-700"
+                            onClick={async () => {
+                              try {
+                                // Find customer phone
+                                const customer = customers.find(c => c.name === invoice.customerName);
+                                if (!customer?.phone) {
+                                  toast({
+                                    title: 'No phone number',
+                                    description: `No phone number found for ${invoice.customerName}. Add one in Customer Contacts.`,
+                                    variant: 'destructive',
+                                  });
+                                  return;
+                                }
+
+                                // Generate share link
+                                const shareResult = await apiRequest('POST', `/api/invoices/${invoice.id}/share`);
+                                const shareUrl = `${window.location.origin}${shareResult.shareUrl}`;
+
+                                // Calculate due date
+                                const invoiceDate = new Date(invoice.date);
+                                const paymentTerms = customer.paymentTerms || 30;
+                                const dueDate = new Date(invoiceDate);
+                                dueDate.setDate(dueDate.getDate() + paymentTerms);
+
+                                // Fill template
+                                const tpl = MESSAGE_TEMPLATES.find(t => t.id === 'invoice_with_link');
+                                const templateStr = locale === 'en' ? (tpl?.template || '') : (tpl?.templateAr || '');
+                                const message = fillTemplate(templateStr, {
+                                  customer_name: invoice.customerName,
+                                  invoice_number: invoice.number,
+                                  amount: `${invoice.currency} ${invoice.total.toFixed(2)}`,
+                                  due_date: dueDate.toLocaleDateString(locale === 'en' ? 'en-AE' : 'ar-AE'),
+                                  link: shareUrl,
+                                  company_name: company?.name || '',
+                                });
+
+                                // Log and open WhatsApp
+                                apiRequest('POST', '/api/integrations/whatsapp/log-message', {
+                                  to: customer.phone,
+                                  message,
+                                }).catch(() => {});
+
+                                openWhatsApp(customer.phone, message);
+
+                                // Update invoice status to sent
+                                if (invoice.status === 'draft') {
+                                  await apiRequest('PATCH', `/api/invoices/${invoice.id}/status`, { status: 'sent' });
+                                  queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+                                }
+
+                                toast({ title: 'Opening WhatsApp...' });
+                              } catch (error: any) {
+                                toast({
+                                  title: 'Error',
+                                  description: error.message || 'Failed to send via WhatsApp',
+                                  variant: 'destructive',
+                                });
+                              }
+                            }}
+                            data-testid={`button-whatsapp-invoice-${invoice.id}`}
+                          >
+                            <SiWhatsapp className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const result = await apiRequest('POST', `/api/invoices/${invoice.id}/generate-einvoice`);
+                                toast({ title: 'E-Invoice generated', description: `UUID: ${result.uuid}` });
+                                queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+                              } catch (error: any) {
+                                toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                              }
+                            }}
+                            title="Generate E-Invoice"
+                            data-testid={`button-einvoice-${invoice.id}`}
+                          >
+                            <FileCode className="w-4 h-4 text-blue-500" />
                           </Button>
                           <Button
                             variant="ghost"

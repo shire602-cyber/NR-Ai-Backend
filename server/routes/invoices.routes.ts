@@ -1,9 +1,12 @@
 import { Router, type Express, type Request, type Response } from 'express';
+import crypto from 'crypto';
 import { storage } from '../storage';
 import { z } from 'zod';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { insertInvoiceSchema } from '../../shared/schema';
+import { generateInvoicePDF } from '../services/pdf-invoice.service';
+import { generateEInvoiceXML } from '../services/einvoice.service';
 
 export function registerInvoiceRoutes(app: Express) {
   // =====================================
@@ -427,5 +430,218 @@ export function registerInvoiceRoutes(app: Express) {
 
     console.log('[Invoices] Invoice status updated:', id, status);
     res.json(updatedInvoice);
+  }));
+
+  // =====================================
+  // E-Invoicing (PINT AE / UBL 2.1)
+  // =====================================
+
+  // Customer-only: Generate e-invoice XML for an invoice
+  app.post("/api/invoices/:id/generate-einvoice", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const userId = (req as any).user.id;
+
+    const invoice = await storage.getInvoice(id);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, invoice.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const lines = await storage.getInvoiceLinesByInvoiceId(id);
+    const company = await storage.getCompany(invoice.companyId);
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+
+    const customer = invoice.customerName
+      ? { name: invoice.customerName, trn: invoice.customerTrn || undefined }
+      : undefined;
+
+    const { xml, uuid, hash } = generateEInvoiceXML(invoice, lines, company, customer);
+
+    // Save e-invoice data to the invoice record
+    await storage.updateInvoice(id, {
+      einvoiceUuid: uuid,
+      einvoiceXml: xml,
+      einvoiceHash: hash,
+      einvoiceStatus: 'generated',
+    });
+
+    console.log('[E-Invoice] Generated e-invoice for invoice:', id, 'UUID:', uuid);
+
+    res.json({ uuid, hash, status: 'generated' });
+  }));
+
+  // Customer-only: Get e-invoice XML for an invoice
+  app.get("/api/invoices/:id/einvoice-xml", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const userId = (req as any).user.id;
+
+    const invoice = await storage.getInvoice(id);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, invoice.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!invoice.einvoiceXml) {
+      return res.status(404).json({ message: 'E-invoice has not been generated for this invoice' });
+    }
+
+    res.set('Content-Type', 'application/xml');
+    res.set('Content-Disposition', `attachment; filename="einvoice-${invoice.number}.xml"`);
+    res.send(invoice.einvoiceXml);
+  }));
+
+  // =====================================
+  // Invoice Sharing & PDF
+  // =====================================
+
+  // Customer-only: Generate share link for invoice
+  app.post("/api/invoices/:id/share", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const userId = (req as any).user.id;
+
+    const invoice = await storage.getInvoice(id);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, invoice.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Generate a random token
+    const token = crypto.randomBytes(16).toString('hex');
+    // 90-day expiry
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 90);
+
+    await storage.setInvoiceShareToken(id, token, expiresAt);
+
+    res.json({
+      shareUrl: `/view/invoice/${token}`,
+      token,
+    });
+  }));
+
+  // Customer-only: Download invoice as PDF
+  app.get("/api/invoices/:id/pdf", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const userId = (req as any).user.id;
+
+    const invoice = await storage.getInvoice(id);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, invoice.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const lines = await storage.getInvoiceLinesByInvoiceId(id);
+    const company = await storage.getCompany(invoice.companyId);
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+
+    const pdfBuffer = await generateInvoicePDF(invoice, lines, company);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="invoice-${invoice.number}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+    res.send(pdfBuffer);
+  }));
+
+  // Public: View invoice by share token (NO auth required)
+  app.get("/api/public/invoices/:token", asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.params;
+
+    const invoice = await storage.getInvoiceByShareToken(token);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found or link is invalid' });
+    }
+
+    // Check expiry
+    if (invoice.shareTokenExpiresAt && new Date(invoice.shareTokenExpiresAt) < new Date()) {
+      return res.status(410).json({ message: 'This invoice link has expired' });
+    }
+
+    const lines = await storage.getInvoiceLinesByInvoiceId(invoice.id);
+    const company = await storage.getCompany(invoice.companyId);
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+
+    // Return sanitized data (no internal IDs exposed except what's needed)
+    res.json({
+      invoice: {
+        number: invoice.number,
+        customerName: invoice.customerName,
+        customerTrn: invoice.customerTrn,
+        date: invoice.date,
+        currency: invoice.currency,
+        subtotal: invoice.subtotal,
+        vatAmount: invoice.vatAmount,
+        total: invoice.total,
+        status: invoice.status,
+      },
+      lines: lines.map(l => ({
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        vatRate: l.vatRate,
+        vatSupplyType: l.vatSupplyType,
+      })),
+      company: {
+        name: company.name,
+        trnVatNumber: company.trnVatNumber,
+        businessAddress: company.businessAddress,
+        contactPhone: company.contactPhone,
+        contactEmail: company.contactEmail,
+        websiteUrl: company.websiteUrl,
+        logoUrl: company.logoUrl,
+      },
+    });
+  }));
+
+  // Public: Download PDF by share token (NO auth required)
+  app.get("/api/public/invoices/:token/pdf", asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.params;
+
+    const invoice = await storage.getInvoiceByShareToken(token);
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found or link is invalid' });
+    }
+
+    if (invoice.shareTokenExpiresAt && new Date(invoice.shareTokenExpiresAt) < new Date()) {
+      return res.status(410).json({ message: 'This invoice link has expired' });
+    }
+
+    const lines = await storage.getInvoiceLinesByInvoiceId(invoice.id);
+    const company = await storage.getCompany(invoice.companyId);
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+
+    const pdfBuffer = await generateInvoicePDF(invoice, lines, company);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="invoice-${invoice.number}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+    res.send(pdfBuffer);
   }));
 }

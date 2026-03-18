@@ -35,13 +35,15 @@ export const t = {
     accounts: 'Manage Accounts',
     invoices: 'Invoices',
     receipts: 'Expenses',
+    recurringInvoices: 'Recurring Invoices',
     journal: 'Journal Entries',
     reports: 'Financial Reports',
     aiTools: 'AI Tools',
     settings: 'Settings',
     logout: 'Logout',
     contacts: 'Customer Contacts',
-    
+    inventory: 'Inventory',
+
     // Sidebar sections
     smartAccounting: 'Smart Accounting',
     overview: 'Overview',
@@ -150,6 +152,7 @@ export const t = {
     whatsappInbox: 'WhatsApp Inbox',
     bankReconciliation: 'Bank Reconciliation',
     vatFiling: 'VAT Filing',
+    corporateTax: 'Corporate Tax',
     teamManagement: 'Team Management',
     advancedReports: 'Advanced Reports',
     
@@ -256,13 +259,15 @@ export const t = {
     accounts: 'إدارة الحسابات',
     invoices: 'الفواتير',
     receipts: 'المصروفات',
+    recurringInvoices: 'الفواتير المتكررة',
     journal: 'القيود',
     reports: 'التقارير المالية',
     aiTools: 'أدوات الذكاء الاصطناعي',
     settings: 'الإعدادات',
     logout: 'تسجيل الخروج',
     contacts: 'جهات الاتصال',
-    
+    inventory: 'المخزون',
+
     // Sidebar sections
     smartAccounting: 'المحاسبة الذكية',
     overview: 'نظرة عامة',
@@ -371,6 +376,7 @@ export const t = {
     whatsappInbox: 'صندوق الواتساب',
     bankReconciliation: 'التسوية البنكية',
     vatFiling: 'إقرارات الضريبة',
+    corporateTax: 'ضريبة الشركات',
     teamManagement: 'إدارة الفريق',
     advancedReports: 'التقارير المتقدمة',
     

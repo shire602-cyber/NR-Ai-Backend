@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { 
-  Upload, 
-  FileSpreadsheet, 
-  Download, 
+import {
+  Upload,
+  FileSpreadsheet,
+  Download,
   Plus,
   Search,
   Loader2,
@@ -15,7 +15,11 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Link2,
+  Copy,
+  ExternalLink,
+  MessageCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +56,7 @@ export default function CustomerContacts() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [editContact, setEditContact] = useState<CustomerContact | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [portalLinkDialog, setPortalLinkDialog] = useState<{ open: boolean; url: string; contactName: string }>({ open: false, url: '', contactName: '' });
 
   const { data: contacts = [], isLoading } = useQuery<CustomerContact[]>({
     queryKey: ['/api/companies', companyId, 'customer-contacts'],
@@ -119,6 +124,20 @@ export default function CustomerContacts() {
     },
     onError: (error: any) => {
       toast({ variant: 'destructive', title: 'Failed to delete contact', description: error.message });
+    },
+  });
+
+  const portalLinkMutation = useMutation({
+    mutationFn: async ({ contactId, contactName }: { contactId: string; contactName: string }) => {
+      const result = await apiRequest('POST', '/api/portal/generate-access', { contactId });
+      return { ...result, contactName };
+    },
+    onSuccess: (result: any) => {
+      const fullUrl = `${window.location.origin}${result.portalUrl}`;
+      setPortalLinkDialog({ open: true, url: fullUrl, contactName: result.contactName });
+    },
+    onError: (error: any) => {
+      toast({ variant: 'destructive', title: 'Failed to generate portal link', description: error.message });
     },
   });
 
@@ -408,7 +427,7 @@ export default function CustomerContacts() {
                         <TableHead>Phone</TableHead>
                         <TableHead>TRN</TableHead>
                         <TableHead>Location</TableHead>
-                        <TableHead className="w-[100px]">Actions</TableHead>
+                        <TableHead className="w-[140px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -451,16 +470,26 @@ export default function CustomerContacts() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <Button 
-                                size="icon" 
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Generate Portal Link"
+                                onClick={() => portalLinkMutation.mutate({ contactId: contact.id, contactName: contact.name })}
+                                disabled={portalLinkMutation.isPending}
+                                data-testid={`button-portal-link-${contact.id}`}
+                              >
+                                <Link2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
                                 variant="ghost"
                                 onClick={() => setEditContact(contact)}
                                 data-testid={`button-edit-contact-${contact.id}`}
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
-                              <Button 
-                                size="icon" 
+                              <Button
+                                size="icon"
                                 variant="ghost"
                                 onClick={() => {
                                   if (confirm('Are you sure you want to delete this contact?')) {
@@ -670,12 +699,74 @@ export default function CustomerContacts() {
             <DialogDescription>Update customer contact information</DialogDescription>
           </DialogHeader>
           {editContact && (
-            <ContactForm 
+            <ContactForm
               contact={editContact}
               onSubmit={(data) => updateMutation.mutate({ id: editContact.id, data })}
               onCancel={() => setEditContact(null)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Portal Link Dialog */}
+      <Dialog open={portalLinkDialog.open} onOpenChange={(open) => !open && setPortalLinkDialog({ open: false, url: '', contactName: '' })}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5" />
+              Client Portal Link
+            </DialogTitle>
+            <DialogDescription>
+              Share this link with {portalLinkDialog.contactName} to give them access to view their invoices and download PDFs.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={portalLinkDialog.url}
+                className="font-mono text-sm"
+                data-testid="input-portal-link"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  navigator.clipboard.writeText(portalLinkDialog.url);
+                  toast({ title: 'Link copied to clipboard' });
+                }}
+                data-testid="button-copy-portal-link"
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => window.open(portalLinkDialog.url, '_blank')}
+                data-testid="button-open-portal"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open Portal
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  const message = encodeURIComponent(`Here is your client portal link to view invoices and statements:\n${portalLinkDialog.url}`);
+                  window.open(`https://wa.me/?text=${message}`, '_blank');
+                }}
+                data-testid="button-send-whatsapp"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Send via WhatsApp
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This link is valid for 1 year. The client can view invoices and download PDFs without needing to log in.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

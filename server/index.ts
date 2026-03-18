@@ -17,6 +17,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { registerRoutes } from './routes';
 import { setupVite, serveStatic } from './vite';
+import { initScheduler } from './services/scheduler.service';
 
 // ─── Validate environment on startup ─────────────────────────
 const env = validateEnv();
@@ -92,6 +93,9 @@ async function bootstrap() {
 
   // Register all API routes
   const server = await registerRoutes(app);
+
+  // ─── Background scheduler (engagement automation) ─────
+  initScheduler();
 
   // ─── API 404 handler (before static/SPA fallback) ───────
   app.use('/api/*', notFoundHandler);

@@ -51,7 +51,11 @@ import type {
   FtaEmail, InsertFtaEmail,
   Subscription, InsertSubscription,
   Backup, InsertBackup,
-  AiConversation, InsertAiConversation
+  AiConversation, InsertAiConversation,
+  RecurringInvoice, InsertRecurringInvoice,
+  CorporateTaxReturn, InsertCorporateTaxReturn,
+  Product, InsertProduct,
+  InventoryMovement, InsertInventoryMovement
 } from "@shared/schema";
 import {
   users,
@@ -106,10 +110,14 @@ import {
   ftaEmails,
   subscriptions,
   backups,
-  aiConversations
+  aiConversations,
+  recurringInvoices,
+  corporateTaxReturns,
+  products,
+  inventoryMovements
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -209,6 +217,10 @@ export interface IStorage {
   updateInvoiceStatus(id: string, status: string): Promise<Invoice>;
   deleteInvoice(id: string): Promise<void>;
   
+  // Invoice Share Token
+  getInvoiceByShareToken(token: string): Promise<Invoice | undefined>;
+  setInvoiceShareToken(id: string, token: string, expiresAt: Date): Promise<void>;
+
   // Invoice Lines
   createInvoiceLine(line: InsertInvoiceLine): Promise<InvoiceLine>;
   getInvoiceLinesByInvoiceId(invoiceId: string): Promise<InvoiceLine[]>;
@@ -230,7 +242,9 @@ export interface IStorage {
   createBulkCustomerContacts(contacts: InsertCustomerContact[]): Promise<CustomerContact[]>;
   updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact>;
   deleteCustomerContact(id: string): Promise<void>;
-  
+  getCustomerContactByPortalToken(token: string): Promise<CustomerContact | undefined>;
+  setPortalAccessToken(contactId: string, token: string, expiresAt: Date): Promise<CustomerContact>;
+
   // Waitlist
   createWaitlistEntry(entry: InsertWaitlist): Promise<Waitlist>;
   getWaitlistByEmail(email: string): Promise<Waitlist | undefined>;
@@ -389,6 +403,12 @@ export interface IStorage {
   updateVatReturn(id: string, data: Partial<InsertVatReturn>): Promise<VatReturn>;
   deleteVatReturn(id: string): Promise<void>;
 
+  // Corporate Tax Returns
+  getCorporateTaxReturnsByCompanyId(companyId: string): Promise<CorporateTaxReturn[]>;
+  getCorporateTaxReturn(id: string): Promise<CorporateTaxReturn | undefined>;
+  createCorporateTaxReturn(data: InsertCorporateTaxReturn): Promise<CorporateTaxReturn>;
+  updateCorporateTaxReturn(id: string, data: Partial<CorporateTaxReturn>): Promise<CorporateTaxReturn>;
+
   // Team Management
   updateCompanyUser(id: string, data: Partial<InsertCompanyUser>): Promise<CompanyUser>;
   deleteCompanyUser(id: string): Promise<void>;
@@ -504,6 +524,26 @@ export interface IStorage {
   getAiConversationsByCompanyId(companyId: string, limit?: number): Promise<AiConversation[]>;
   getAiConversation(id: string): Promise<AiConversation | undefined>;
   deleteAiConversation(id: string): Promise<void>;
+
+  // Recurring Invoices
+  getRecurringInvoicesByCompanyId(companyId: string): Promise<RecurringInvoice[]>;
+  getRecurringInvoice(id: string): Promise<RecurringInvoice | undefined>;
+  getDueRecurringInvoices(): Promise<RecurringInvoice[]>;
+  createRecurringInvoice(data: InsertRecurringInvoice): Promise<RecurringInvoice>;
+  updateRecurringInvoice(id: string, data: Partial<RecurringInvoice>): Promise<RecurringInvoice>;
+  deleteRecurringInvoice(id: string): Promise<void>;
+
+  // Products / Inventory
+  getProductsByCompanyId(companyId: string): Promise<Product[]>;
+  getProduct(id: string): Promise<Product | undefined>;
+  createProduct(data: InsertProduct): Promise<Product>;
+  updateProduct(id: string, data: Partial<Product>): Promise<Product>;
+  deleteProduct(id: string): Promise<void>;
+
+  // Inventory Movements
+  getInventoryMovementsByProductId(productId: string): Promise<InventoryMovement[]>;
+  getInventoryMovementsByCompanyId(companyId: string): Promise<InventoryMovement[]>;
+  createInventoryMovement(data: InsertInventoryMovement): Promise<InventoryMovement>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -985,6 +1025,18 @@ export class DatabaseStorage implements IStorage {
     await db.delete(invoices).where(eq(invoices.id, id));
   }
 
+  async getInvoiceByShareToken(token: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.shareToken, token));
+    return invoice || undefined;
+  }
+
+  async setInvoiceShareToken(id: string, token: string, expiresAt: Date): Promise<void> {
+    await db
+      .update(invoices)
+      .set({ shareToken: token, shareTokenExpiresAt: expiresAt })
+      .where(eq(invoices.id, id));
+  }
+
   // Invoice Lines
   async createInvoiceLine(insertLine: InsertInvoiceLine): Promise<InvoiceLine> {
     const [line] = await db
@@ -1086,6 +1138,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCustomerContact(id: string): Promise<void> {
     await db.delete(customerContacts).where(eq(customerContacts.id, id));
+  }
+
+  async getCustomerContactByPortalToken(token: string): Promise<CustomerContact | undefined> {
+    const [contact] = await db.select().from(customerContacts)
+      .where(eq(customerContacts.portalAccessToken, token));
+    return contact || undefined;
+  }
+
+  async setPortalAccessToken(contactId: string, token: string, expiresAt: Date): Promise<CustomerContact> {
+    const [contact] = await db.update(customerContacts)
+      .set({ portalAccessToken: token, portalAccessExpiresAt: expiresAt, updatedAt: new Date() })
+      .where(eq(customerContacts.id, contactId))
+      .returning();
+    if (!contact) throw new Error('Customer contact not found');
+    return contact;
   }
 
   // Waitlist
@@ -1986,6 +2053,37 @@ export class DatabaseStorage implements IStorage {
     await db.delete(vatReturns).where(eq(vatReturns.id, id));
   }
 
+  // Corporate Tax Returns
+  async getCorporateTaxReturnsByCompanyId(companyId: string): Promise<CorporateTaxReturn[]> {
+    return await db
+      .select()
+      .from(corporateTaxReturns)
+      .where(eq(corporateTaxReturns.companyId, companyId))
+      .orderBy(desc(corporateTaxReturns.taxPeriodEnd));
+  }
+
+  async getCorporateTaxReturn(id: string): Promise<CorporateTaxReturn | undefined> {
+    const [taxReturn] = await db.select().from(corporateTaxReturns).where(eq(corporateTaxReturns.id, id));
+    return taxReturn || undefined;
+  }
+
+  async createCorporateTaxReturn(data: InsertCorporateTaxReturn): Promise<CorporateTaxReturn> {
+    const [taxReturn] = await db
+      .insert(corporateTaxReturns)
+      .values(data)
+      .returning();
+    return taxReturn;
+  }
+
+  async updateCorporateTaxReturn(id: string, data: Partial<CorporateTaxReturn>): Promise<CorporateTaxReturn> {
+    const [taxReturn] = await db
+      .update(corporateTaxReturns)
+      .set(data)
+      .where(eq(corporateTaxReturns.id, id))
+      .returning();
+    return taxReturn;
+  }
+
   // Team Management
   async updateCompanyUser(id: string, data: Partial<InsertCompanyUser>): Promise<CompanyUser> {
     const [companyUser] = await db
@@ -2557,6 +2655,119 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAiConversation(id: string): Promise<void> {
     await db.delete(aiConversations).where(eq(aiConversations.id, id));
+  }
+
+  // Recurring Invoices
+  async getRecurringInvoicesByCompanyId(companyId: string): Promise<RecurringInvoice[]> {
+    return await db
+      .select()
+      .from(recurringInvoices)
+      .where(eq(recurringInvoices.companyId, companyId))
+      .orderBy(desc(recurringInvoices.createdAt));
+  }
+
+  async getRecurringInvoice(id: string): Promise<RecurringInvoice | undefined> {
+    const [item] = await db.select().from(recurringInvoices).where(eq(recurringInvoices.id, id));
+    return item || undefined;
+  }
+
+  async getDueRecurringInvoices(): Promise<RecurringInvoice[]> {
+    return await db
+      .select()
+      .from(recurringInvoices)
+      .where(
+        and(
+          eq(recurringInvoices.isActive, true),
+          lte(recurringInvoices.nextRunDate, new Date())
+        )
+      );
+  }
+
+  async createRecurringInvoice(data: InsertRecurringInvoice): Promise<RecurringInvoice> {
+    const [item] = await db
+      .insert(recurringInvoices)
+      .values(data)
+      .returning();
+    return item;
+  }
+
+  async updateRecurringInvoice(id: string, data: Partial<RecurringInvoice>): Promise<RecurringInvoice> {
+    const [item] = await db
+      .update(recurringInvoices)
+      .set(data)
+      .where(eq(recurringInvoices.id, id))
+      .returning();
+    if (!item) {
+      throw new Error('Recurring invoice not found');
+    }
+    return item;
+  }
+
+  async deleteRecurringInvoice(id: string): Promise<void> {
+    await db.delete(recurringInvoices).where(eq(recurringInvoices.id, id));
+  }
+
+  // Products / Inventory
+  async getProductsByCompanyId(companyId: string): Promise<Product[]> {
+    return await db
+      .select()
+      .from(products)
+      .where(eq(products.companyId, companyId))
+      .orderBy(desc(products.createdAt));
+  }
+
+  async getProduct(id: string): Promise<Product | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.id, id));
+    return product || undefined;
+  }
+
+  async createProduct(data: InsertProduct): Promise<Product> {
+    const [product] = await db
+      .insert(products)
+      .values(data)
+      .returning();
+    return product;
+  }
+
+  async updateProduct(id: string, data: Partial<Product>): Promise<Product> {
+    const [product] = await db
+      .update(products)
+      .set(data)
+      .where(eq(products.id, id))
+      .returning();
+    if (!product) {
+      throw new Error('Product not found');
+    }
+    return product;
+  }
+
+  async deleteProduct(id: string): Promise<void> {
+    await db.delete(products).where(eq(products.id, id));
+  }
+
+  // Inventory Movements
+  async getInventoryMovementsByProductId(productId: string): Promise<InventoryMovement[]> {
+    return await db
+      .select()
+      .from(inventoryMovements)
+      .where(eq(inventoryMovements.productId, productId))
+      .orderBy(desc(inventoryMovements.createdAt));
+  }
+
+  async getInventoryMovementsByCompanyId(companyId: string): Promise<InventoryMovement[]> {
+    return await db
+      .select()
+      .from(inventoryMovements)
+      .where(eq(inventoryMovements.companyId, companyId))
+      .orderBy(desc(inventoryMovements.createdAt));
+  }
+
+  async createInventoryMovement(data: InsertInventoryMovement): Promise<InventoryMovement> {
+    const [movement] = await db
+      .insert(inventoryMovements)
+      .values(data)
+      .returning();
+    return movement;
   }
 }
 
