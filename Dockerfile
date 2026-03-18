@@ -14,6 +14,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci || npm install
+# Cache bust: forces rebuild when code changes
+ARG CACHEBUST=1
 COPY . .
 RUN npm run build
 
