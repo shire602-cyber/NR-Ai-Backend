@@ -55,14 +55,14 @@ export function registerAnalyticsRoutes(app: Express) {
     invoices.forEach(inv => {
       const month = new Date(inv.date).toISOString().slice(0, 7);
       if (!monthlyData[month]) monthlyData[month] = { inflow: 0, outflow: 0 };
-      monthlyData[month].inflow += inv.total || 0;
+      monthlyData[month].inflow += Number(inv.total) || 0;
     });
 
     receipts.forEach(rec => {
       if (rec.date) {
         const month = rec.date.slice(0, 7);
         if (!monthlyData[month]) monthlyData[month] = { inflow: 0, outflow: 0 };
-        monthlyData[month].outflow += (rec.amount || 0) + (rec.vatAmount || 0);
+        monthlyData[month].outflow += (Number(rec.amount) || 0) + (Number(rec.vatAmount) || 0);
       }
     });
 
@@ -88,9 +88,9 @@ export function registerAnalyticsRoutes(app: Express) {
         companyId,
         forecastDate,
         forecastType: 'monthly',
-        predictedInflow: avgInflow * (1 + Math.random() * 0.1 - 0.05), // +/- 5% variation
-        predictedOutflow: avgOutflow * (1 + Math.random() * 0.1 - 0.05),
-        predictedBalance: runningBalance,
+        predictedInflow: String(avgInflow * (1 + Math.random() * 0.1 - 0.05)), // +/- 5% variation
+        predictedOutflow: String(avgOutflow * (1 + Math.random() * 0.1 - 0.05)),
+        predictedBalance: String(runningBalance),
         confidenceLevel: 0.85 - (i * 0.02), // Confidence decreases over time
       });
 
@@ -129,14 +129,14 @@ export function registerAnalyticsRoutes(app: Express) {
     const actualsByAccount: { [key: string]: number } = {};
     journalLines.forEach(line => {
       if (!actualsByAccount[line.accountId]) actualsByAccount[line.accountId] = 0;
-      actualsByAccount[line.accountId] += (line.debit || 0) - (line.credit || 0);
+      actualsByAccount[line.accountId] += (Number(line.debit) || 0) - (Number(line.credit) || 0);
     });
 
     // Combine budget and actual data
     const result = accounts.map(account => {
       const budget = budgets.find(b => b.accountId === account.id);
       const actual = actualsByAccount[account.id] || 0;
-      const budgeted = budget?.budgetAmount || 0;
+      const budgeted = Number(budget?.budgetAmount) || 0;
 
       return {
         accountId: account.id,
@@ -179,9 +179,9 @@ export function registerAnalyticsRoutes(app: Express) {
     const invoices = await storage.getInvoicesByCompanyId(companyId as string);
     const receipts = await storage.getReceiptsByCompanyId(companyId as string);
 
-    const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalExpenses = receipts.reduce((sum, rec) => sum + ((rec.amount || 0) + (rec.vatAmount || 0)), 0);
-    const outstanding = invoices.filter(inv => inv.status !== 'paid').reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalRevenue = invoices.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
+    const totalExpenses = receipts.reduce((sum, rec) => sum + ((Number(rec.amount) || 0) + (Number(rec.vatAmount) || 0)), 0);
+    const outstanding = invoices.filter(inv => inv.status !== 'paid').reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
 
     const insights = [];
 

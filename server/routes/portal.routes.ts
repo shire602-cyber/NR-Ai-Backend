@@ -94,7 +94,7 @@ export function registerPortalRoutes(app: Express) {
       periodEnd: new Date(req.body.periodEnd),
       filingDate: new Date(req.body.filingDate),
       ftaReferenceNumber: req.body.ftaReferenceNumber || null,
-      taxAmount: parseFloat(req.body.taxAmount) || 0,
+      taxAmount: String(parseFloat(req.body.taxAmount) || 0),
       paymentStatus: req.body.paymentStatus || 'paid',
       fileUrl: req.body.fileUrl || null,
       fileName: req.body.fileName || null,

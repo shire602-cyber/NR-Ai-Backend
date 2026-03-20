@@ -111,10 +111,10 @@ export function registerCorporateTaxRoutes(app: Express) {
 
         if (account.type === 'income') {
           // Revenue accounts: credit side increases revenue
-          totalRevenue += (line.credit || 0) - (line.debit || 0);
+          totalRevenue += (Number(line.credit) || 0) - (Number(line.debit) || 0);
         } else if (account.type === 'expense') {
           // Expense accounts: debit side increases expenses
-          totalExpenses += (line.debit || 0) - (line.credit || 0);
+          totalExpenses += (Number(line.debit) || 0) - (Number(line.credit) || 0);
         }
       }
     }

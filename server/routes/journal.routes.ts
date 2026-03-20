@@ -4,7 +4,9 @@ import * as XLSX from 'xlsx';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
-import { insertJournalEntrySchema } from '../../shared/schema';
+import { db } from '../db';
+import { insertJournalEntrySchema, journalEntries, journalLines } from '../../shared/schema';
+import { eq } from 'drizzle-orm';
 
 export function registerJournalRoutes(app: Express) {
   // =====================================
@@ -79,41 +81,46 @@ export function registerJournalRoutes(app: Express) {
     // Convert date string to Date object if it's a string
     const entryDate = typeof date === 'string' ? new Date(date) : date;
 
-    // Generate entry number atomically via storage helper
-    const entryNumber = await storage.generateEntryNumber(companyId, entryDate);
-
     // Determine if posting immediately
     const isPosting = status === 'posted';
 
-    // Create journal entry
-    const entry = await storage.createJournalEntry({
-      ...entryData,
-      date: entryDate,
-      companyId,
-      createdBy: userId,
-      entryNumber,
-      status: isPosting ? 'posted' : 'draft',
-      source: entryData.source || 'manual',
-      sourceId: entryData.sourceId || null,
-      postedBy: isPosting ? userId : null,
-      postedAt: isPosting ? new Date() : null,
+    // Wrap entry + lines creation in a transaction for atomicity
+    const result = await (db as any).transaction(async (tx: any) => {
+      // Generate entry number inside transaction (uses FOR UPDATE lock)
+      const entryNumber = await storage.generateEntryNumber(companyId, entryDate, tx);
+
+      // Create journal entry
+      const [entry] = await tx.insert(journalEntries).values({
+        ...entryData,
+        date: entryDate,
+        companyId,
+        createdBy: userId,
+        entryNumber,
+        status: isPosting ? 'posted' : 'draft',
+        source: entryData.source || 'manual',
+        sourceId: entryData.sourceId || null,
+        postedBy: isPosting ? userId : null,
+        postedAt: isPosting ? new Date() : null,
+      }).returning();
+
+      // Create journal lines
+      for (const line of lines) {
+        await tx.insert(journalLines).values({
+          entryId: entry.id,
+          accountId: line.accountId,
+          debit: String(Number(line.debit) || 0),
+          credit: String(Number(line.credit) || 0),
+          description: line.description || null,
+        });
+      }
+
+      return entry;
     });
 
-    // Create journal lines
-    for (const line of lines) {
-      await storage.createJournalLine({
-        entryId: entry.id,
-        accountId: line.accountId,
-        debit: Number(line.debit) || 0,
-        credit: Number(line.credit) || 0,
-        description: line.description || null,
-      });
-    }
-
     res.json({
-      id: entry.id,
-      entryNumber: entry.entryNumber,
-      status: entry.status,
+      id: result.id,
+      entryNumber: result.entryNumber,
+      status: result.status,
       message: isPosting ? 'Journal entry posted successfully' : 'Journal entry saved as draft'
     });
   }));
@@ -204,25 +211,33 @@ export function registerJournalRoutes(app: Express) {
     // Convert date string to Date object if it's a string
     const entryDate = typeof date === 'string' ? new Date(date) : date;
 
-    // Update journal entry with audit trail
-    const updatedEntry = await storage.updateJournalEntry(id, {
-      ...entryData,
-      date: entryDate,
-      updatedBy: userId,
-      updatedAt: new Date(),
-    });
+    // Wrap update + line recreation in a transaction for atomicity
+    const updatedEntry = await (db as any).transaction(async (tx: any) => {
+      // Update journal entry with audit trail
+      const [updated] = await tx.update(journalEntries)
+        .set({
+          ...entryData,
+          date: entryDate,
+          updatedBy: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(journalEntries.id, id))
+        .returning();
 
-    // Delete existing lines and create new ones
-    await storage.deleteJournalLinesByEntryId(id);
-    for (const line of lines) {
-      await storage.createJournalLine({
-        entryId: id,
-        accountId: line.accountId,
-        debit: Number(line.debit) || 0,
-        credit: Number(line.credit) || 0,
-        description: line.description || null,
-      });
-    }
+      // Delete existing lines and create new ones
+      await tx.delete(journalLines).where(eq(journalLines.entryId, id));
+      for (const line of lines) {
+        await tx.insert(journalLines).values({
+          entryId: id,
+          accountId: line.accountId,
+          debit: String(Number(line.debit) || 0),
+          credit: String(Number(line.credit) || 0),
+          description: line.description || null,
+        });
+      }
+
+      return updated;
+    });
 
     console.log('[Journal] Draft journal entry updated successfully:', id);
     res.json({ id: updatedEntry.id, status: updatedEntry.status, message: 'Draft entry updated successfully' });
@@ -297,42 +312,48 @@ export function registerJournalRoutes(app: Express) {
     // Get original lines
     const originalLines = await storage.getJournalLinesByEntryId(id);
 
-    // Generate reversal entry number atomically via storage helper
-    const now = new Date();
-    const reversalNumber = await storage.generateEntryNumber(entry.companyId, now);
+    // Wrap reversal + void in a single transaction
+    const reversalEntry = await (db as any).transaction(async (tx: any) => {
+      const now = new Date();
+      const reversalNumber = await storage.generateEntryNumber(entry.companyId, now, tx);
 
-    // Create reversing entry with swapped debits/credits
-    const reversalEntry = await storage.createJournalEntry({
-      companyId: entry.companyId,
-      date: now,
-      memo: `Reversal of ${entry.entryNumber}: ${reason || 'No reason provided'}`,
-      entryNumber: reversalNumber,
-      status: 'posted',
-      source: 'reversal',
-      sourceId: id,
-      reversedEntryId: id,
-      reversalReason: reason || null,
-      createdBy: userId,
-      postedBy: userId,
-      postedAt: new Date(),
-    });
+      // Create reversing entry with swapped debits/credits
+      const [revEntry] = await tx.insert(journalEntries).values({
+        companyId: entry.companyId,
+        date: now,
+        memo: `Reversal of ${entry.entryNumber}: ${reason || 'No reason provided'}`,
+        entryNumber: reversalNumber,
+        status: 'posted',
+        source: 'reversal',
+        sourceId: id,
+        reversedEntryId: id,
+        reversalReason: reason || null,
+        createdBy: userId,
+        postedBy: userId,
+        postedAt: new Date(),
+      }).returning();
 
-    // Create reversed lines (swap debits and credits)
-    for (const line of originalLines) {
-      await storage.createJournalLine({
-        entryId: reversalEntry.id,
-        accountId: line.accountId,
-        debit: line.credit, // Swap
-        credit: line.debit, // Swap
-        description: `Reversal: ${line.description || ''}`,
-      });
-    }
+      // Create reversed lines (swap debits and credits)
+      for (const line of originalLines) {
+        await tx.insert(journalLines).values({
+          entryId: revEntry.id,
+          accountId: line.accountId,
+          debit: line.credit, // Swap
+          credit: line.debit, // Swap
+          description: `Reversal: ${line.description || ''}`,
+        });
+      }
 
-    // Mark original entry as void
-    await storage.updateJournalEntry(id, {
-      status: 'void',
-      updatedBy: userId,
-      updatedAt: new Date(),
+      // Mark original entry as void
+      await tx.update(journalEntries)
+        .set({
+          status: 'void',
+          updatedBy: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(journalEntries.id, id));
+
+      return revEntry;
     });
 
     console.log('[Journal] Entry reversed:', id, '-> new entry:', reversalEntry.id);

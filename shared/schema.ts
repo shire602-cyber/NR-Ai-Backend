@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, integer, real, boolean, timestamp, uuid, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, numeric, boolean, timestamp, uuid, unique, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -79,7 +79,10 @@ export const companies = pgTable("companies", {
   invoiceShowWebsite: boolean("invoice_show_website").notNull().default(false),
   invoiceCustomTitle: text("invoice_custom_title"), // Custom invoice title, defaults to "Tax Invoice" for VAT registered
   invoiceFooterNote: text("invoice_footer_note"),
-  
+
+  // Inventory costing method
+  costMethod: text("cost_method").default("weighted_average"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -177,12 +180,14 @@ export const journalEntries = pgTable("journal_entries", {
   postedAt: timestamp("posted_at"),
   updatedBy: uuid("updated_by").references(() => users.id),
   updatedAt: timestamp("updated_at"),
+  // Multi-currency support
+  currency: text("currency").default("AED"),
+  exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).default("1"),
 });
 
 export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({
   id: true,
   createdAt: true,
-  postedAt: true,
   updatedAt: true,
 });
 
@@ -196,14 +201,17 @@ export const journalLines = pgTable("journal_lines", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   entryId: uuid("entry_id").notNull().references(() => journalEntries.id, { onDelete: "cascade" }),
   accountId: uuid("account_id").notNull().references(() => accounts.id),
-  debit: real("debit").notNull().default(0),
-  credit: real("credit").notNull().default(0),
+  debit: numeric("debit", { precision: 15, scale: 2 }).notNull().default("0"),
+  credit: numeric("credit", { precision: 15, scale: 2 }).notNull().default("0"),
   description: text("description"), // Line-level description
   // Reconciliation support
   isReconciled: boolean("is_reconciled").notNull().default(false),
   reconciledAt: timestamp("reconciled_at"),
   reconciledBy: uuid("reconciled_by").references(() => users.id),
   bankTransactionId: uuid("bank_transaction_id"), // Reference to matched bank transaction
+  // Multi-currency support
+  originalAmount: numeric("original_amount", { precision: 15, scale: 2 }),
+  originalCurrency: text("original_currency"),
 });
 
 export const insertJournalLineSchema = createInsertSchema(journalLines).omit({
@@ -225,9 +233,9 @@ export const invoices = pgTable("invoices", {
   customerTrn: text("customer_trn"),
   date: timestamp("date").notNull(),
   currency: text("currency").notNull().default("AED"),
-  subtotal: real("subtotal").notNull().default(0),
-  vatAmount: real("vat_amount").notNull().default(0),
-  total: real("total").notNull().default(0),
+  subtotal: numeric("subtotal", { precision: 15, scale: 2 }).notNull().default("0"),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  total: numeric("total", { precision: 15, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("draft"), // draft | sent | paid | void
   shareToken: text("share_token").unique(),
   shareTokenExpiresAt: timestamp("share_token_expires_at"),
@@ -252,9 +260,10 @@ export type Invoice = typeof invoices.$inferSelect;
 export const invoiceLines = pgTable("invoice_lines", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   description: text("description").notNull(),
   quantity: real("quantity").notNull(),
-  unitPrice: real("unit_price").notNull(),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
   vatRate: real("vat_rate").notNull().default(0.05), // UAE standard 5%
   vatSupplyType: text("vat_supply_type").default("standard_rated"), // standard_rated | zero_rated | exempt | out_of_scope
 });
@@ -302,8 +311,8 @@ export const receipts = pgTable("receipts", {
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   merchant: text("merchant"),
   date: text("date"),
-  amount: real("amount"),
-  vatAmount: real("vat_amount"),
+  amount: numeric("amount", { precision: 15, scale: 2 }),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }),
   currency: text("currency").default("AED"),
   category: text("category"),
   accountId: uuid("account_id").references(() => accounts.id), // Expense account to debit
@@ -334,8 +343,8 @@ export const products = pgTable("products", {
   nameAr: text("name_ar"),
   sku: text("sku"),
   description: text("description"),
-  unitPrice: real("unit_price").notNull().default(0),
-  costPrice: real("cost_price").default(0),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull().default("0"),
+  costPrice: numeric("cost_price", { precision: 15, scale: 2 }).default("0"),
   vatRate: real("vat_rate").notNull().default(0.05),
   unit: text("unit").notNull().default("pcs"), // pcs, kg, m, hr, etc.
   currentStock: integer("current_stock").notNull().default(0),
@@ -361,9 +370,10 @@ export const inventoryMovements = pgTable("inventory_movements", {
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // purchase | sale | adjustment | return
   quantity: integer("quantity").notNull(),
-  unitCost: real("unit_cost"),
+  unitCost: numeric("unit_cost", { precision: 15, scale: 2 }),
   reference: text("reference"), // e.g., "Invoice INV-001" or "Manual adjustment"
   notes: text("notes"),
+  totalCost: numeric("total_cost", { precision: 15, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -600,7 +610,7 @@ export const bankTransactions = pgTable("bank_transactions", {
   bankAccountId: uuid("bank_account_id").references(() => accounts.id), // Links to bank account in COA
   transactionDate: timestamp("transaction_date").notNull(),
   description: text("description").notNull(),
-  amount: real("amount").notNull(), // Positive for credits, negative for debits
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(), // Positive for credits, negative for debits
   reference: text("reference"), // Bank reference number
   category: text("category"), // AI-suggested category
   isReconciled: boolean("is_reconciled").notNull().default(false),
@@ -628,9 +638,9 @@ export const cashFlowForecasts = pgTable("cash_flow_forecasts", {
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   forecastDate: timestamp("forecast_date").notNull(),
   forecastType: text("forecast_type").notNull(), // daily | weekly | monthly
-  predictedInflow: real("predicted_inflow").notNull().default(0),
-  predictedOutflow: real("predicted_outflow").notNull().default(0),
-  predictedBalance: real("predicted_balance").notNull().default(0),
+  predictedInflow: numeric("predicted_inflow", { precision: 15, scale: 2 }).notNull().default("0"),
+  predictedOutflow: numeric("predicted_outflow", { precision: 15, scale: 2 }).notNull().default("0"),
+  predictedBalance: numeric("predicted_balance", { precision: 15, scale: 2 }).notNull().default("0"),
   confidenceLevel: real("confidence_level"), // 0-1
   factors: text("factors"), // JSON string of contributing factors
   generatedAt: timestamp("generated_at").defaultNow().notNull(),
@@ -652,7 +662,7 @@ export const transactionClassifications = pgTable("transaction_classifications",
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   merchant: text("merchant"),
-  amount: real("amount"),
+  amount: numeric("amount", { precision: 15, scale: 2 }),
   suggestedAccountId: uuid("suggested_account_id").references(() => accounts.id),
   suggestedCategory: text("suggested_category"),
   aiConfidence: real("ai_confidence"), // 0-1
@@ -679,7 +689,7 @@ export const budgets = pgTable("budgets", {
   accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
   year: integer("year").notNull(),
   month: integer("month").notNull(), // 1-12
-  budgetAmount: real("budget_amount").notNull().default(0),
+  budgetAmount: numeric("budget_amount", { precision: 15, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -736,14 +746,14 @@ export const ecommerceTransactions = pgTable("ecommerce_transactions", {
   platform: text("platform").notNull(), // stripe | shopify | salesforce
   externalId: text("external_id").notNull(), // Platform's transaction ID
   transactionType: text("transaction_type").notNull(), // payment | refund | order | invoice
-  amount: real("amount").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("AED"),
   customerName: text("customer_name"),
   customerEmail: text("customer_email"),
   description: text("description"),
   status: text("status").notNull(), // succeeded | pending | failed | refunded
-  platformFees: real("platform_fees"), // Stripe/Shopify fees
-  netAmount: real("net_amount"), // Amount after fees
+  platformFees: numeric("platform_fees", { precision: 15, scale: 2 }), // Stripe/Shopify fees
+  netAmount: numeric("net_amount", { precision: 15, scale: 2 }), // Amount after fees
   transactionDate: timestamp("transaction_date").notNull(),
   metadata: text("metadata"), // JSON with platform-specific data
   isReconciled: boolean("is_reconciled").notNull().default(false),
@@ -770,11 +780,11 @@ export const financialKpis = pgTable("financial_kpis", {
   period: text("period").notNull(), // daily | weekly | monthly | quarterly
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
-  value: real("value").notNull(),
-  previousValue: real("previous_value"),
+  value: numeric("value", { precision: 15, scale: 2 }).notNull(),
+  previousValue: numeric("previous_value", { precision: 15, scale: 2 }),
   changePercent: real("change_percent"),
   trend: text("trend"), // up | down | stable
-  benchmark: real("benchmark"), // Industry benchmark
+  benchmark: numeric("benchmark", { precision: 15, scale: 2 }), // Industry benchmark
   calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
 });
 
@@ -986,13 +996,13 @@ export const referralCodes = pgTable("referral_codes", {
   isActive: boolean("is_active").notNull().default(true),
   // Reward configuration
   referrerRewardType: text("referrer_reward_type").default("credit"), // credit | discount | subscription_days
-  referrerRewardValue: real("referrer_reward_value").default(0),
+  referrerRewardValue: numeric("referrer_reward_value", { precision: 15, scale: 2 }).default("0"),
   refereeRewardType: text("referee_reward_type").default("discount"), // credit | discount | trial_extension
-  refereeRewardValue: real("referee_reward_value").default(0),
+  refereeRewardValue: numeric("referee_reward_value", { precision: 15, scale: 2 }).default("0"),
   // Tracking
   totalReferrals: integer("total_referrals").notNull().default(0),
   successfulReferrals: integer("successful_referrals").notNull().default(0),
-  totalRewardsEarned: real("total_rewards_earned").notNull().default(0),
+  totalRewardsEarned: numeric("total_rewards_earned", { precision: 15, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at"),
 });
@@ -1018,8 +1028,8 @@ export const referrals = pgTable("referrals", {
   // Reward tracking
   referrerRewardStatus: text("referrer_reward_status").default("pending"), // pending | credited | used
   refereeRewardStatus: text("referee_reward_status").default("pending"),
-  referrerRewardAmount: real("referrer_reward_amount"),
-  refereeRewardAmount: real("referee_reward_amount"),
+  referrerRewardAmount: numeric("referrer_reward_amount", { precision: 15, scale: 2 }),
+  refereeRewardAmount: numeric("referee_reward_amount", { precision: 15, scale: 2 }),
   // Qualification criteria
   qualificationCriteria: text("qualification_criteria"), // JSON with criteria met
   qualifiedAt: timestamp("qualified_at"),
@@ -1163,8 +1173,8 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   nameAr: text("name_ar"),
   description: text("description"),
   descriptionAr: text("description_ar"),
-  priceMonthly: real("price_monthly").notNull(),
-  priceYearly: real("price_yearly"),
+  priceMonthly: numeric("price_monthly", { precision: 15, scale: 2 }).notNull(),
+  priceYearly: numeric("price_yearly", { precision: 15, scale: 2 }),
   currency: text("currency").notNull().default("AED"),
   features: text("features"), // JSON array of features
   maxCompanies: integer("max_companies").default(1),
@@ -1230,97 +1240,97 @@ export const vatReturns = pgTable("vat_returns", {
   
   // ===== VAT ON SALES AND ALL OTHER OUTPUTS =====
   // Box 1a-1g: Standard Rated Supplies by Emirate (Amount, VAT, Adjustment)
-  box1aAbuDhabiAmount: real("box1a_abu_dhabi_amount").notNull().default(0),
-  box1aAbuDhabiVat: real("box1a_abu_dhabi_vat").notNull().default(0),
-  box1aAbuDhabiAdj: real("box1a_abu_dhabi_adj").notNull().default(0),
-  
-  box1bDubaiAmount: real("box1b_dubai_amount").notNull().default(0),
-  box1bDubaiVat: real("box1b_dubai_vat").notNull().default(0),
-  box1bDubaiAdj: real("box1b_dubai_adj").notNull().default(0),
-  
-  box1cSharjahAmount: real("box1c_sharjah_amount").notNull().default(0),
-  box1cSharjahVat: real("box1c_sharjah_vat").notNull().default(0),
-  box1cSharjahAdj: real("box1c_sharjah_adj").notNull().default(0),
-  
-  box1dAjmanAmount: real("box1d_ajman_amount").notNull().default(0),
-  box1dAjmanVat: real("box1d_ajman_vat").notNull().default(0),
-  box1dAjmanAdj: real("box1d_ajman_adj").notNull().default(0),
-  
-  box1eUmmAlQuwainAmount: real("box1e_umm_al_quwain_amount").notNull().default(0),
-  box1eUmmAlQuwainVat: real("box1e_umm_al_quwain_vat").notNull().default(0),
-  box1eUmmAlQuwainAdj: real("box1e_umm_al_quwain_adj").notNull().default(0),
-  
-  box1fRasAlKhaimahAmount: real("box1f_ras_al_khaimah_amount").notNull().default(0),
-  box1fRasAlKhaimahVat: real("box1f_ras_al_khaimah_vat").notNull().default(0),
-  box1fRasAlKhaimahAdj: real("box1f_ras_al_khaimah_adj").notNull().default(0),
-  
-  box1gFujairahAmount: real("box1g_fujairah_amount").notNull().default(0),
-  box1gFujairahVat: real("box1g_fujairah_vat").notNull().default(0),
-  box1gFujairahAdj: real("box1g_fujairah_adj").notNull().default(0),
+  box1aAbuDhabiAmount: numeric("box1a_abu_dhabi_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1aAbuDhabiVat: numeric("box1a_abu_dhabi_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1aAbuDhabiAdj: numeric("box1a_abu_dhabi_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
+  box1bDubaiAmount: numeric("box1b_dubai_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1bDubaiVat: numeric("box1b_dubai_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1bDubaiAdj: numeric("box1b_dubai_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
+  box1cSharjahAmount: numeric("box1c_sharjah_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1cSharjahVat: numeric("box1c_sharjah_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1cSharjahAdj: numeric("box1c_sharjah_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
+  box1dAjmanAmount: numeric("box1d_ajman_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1dAjmanVat: numeric("box1d_ajman_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1dAjmanAdj: numeric("box1d_ajman_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
+  box1eUmmAlQuwainAmount: numeric("box1e_umm_al_quwain_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1eUmmAlQuwainVat: numeric("box1e_umm_al_quwain_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1eUmmAlQuwainAdj: numeric("box1e_umm_al_quwain_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
+  box1fRasAlKhaimahAmount: numeric("box1f_ras_al_khaimah_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1fRasAlKhaimahVat: numeric("box1f_ras_al_khaimah_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1fRasAlKhaimahAdj: numeric("box1f_ras_al_khaimah_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
+  box1gFujairahAmount: numeric("box1g_fujairah_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1gFujairahVat: numeric("box1g_fujairah_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box1gFujairahAdj: numeric("box1g_fujairah_adj", { precision: 15, scale: 2 }).notNull().default("0"),
   
   // Box 2: Tax Refunds to Tourists
-  box2TouristRefundAmount: real("box2_tourist_refund_amount").notNull().default(0),
-  box2TouristRefundVat: real("box2_tourist_refund_vat").notNull().default(0),
-  
+  box2TouristRefundAmount: numeric("box2_tourist_refund_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box2TouristRefundVat: numeric("box2_tourist_refund_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 3: Supplies subject to reverse charge
-  box3ReverseChargeAmount: real("box3_reverse_charge_amount").notNull().default(0),
-  box3ReverseChargeVat: real("box3_reverse_charge_vat").notNull().default(0),
-  
+  box3ReverseChargeAmount: numeric("box3_reverse_charge_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box3ReverseChargeVat: numeric("box3_reverse_charge_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 4: Zero Rated Supplies
-  box4ZeroRatedAmount: real("box4_zero_rated_amount").notNull().default(0),
-  
+  box4ZeroRatedAmount: numeric("box4_zero_rated_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 5: Exempt Supplies
-  box5ExemptAmount: real("box5_exempt_amount").notNull().default(0),
-  
+  box5ExemptAmount: numeric("box5_exempt_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 6: Goods imported into UAE
-  box6ImportsAmount: real("box6_imports_amount").notNull().default(0),
-  box6ImportsVat: real("box6_imports_vat").notNull().default(0),
-  
+  box6ImportsAmount: numeric("box6_imports_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box6ImportsVat: numeric("box6_imports_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 7: Adjustments to goods imported
-  box7ImportsAdjAmount: real("box7_imports_adj_amount").notNull().default(0),
-  box7ImportsAdjVat: real("box7_imports_adj_vat").notNull().default(0),
-  
+  box7ImportsAdjAmount: numeric("box7_imports_adj_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box7ImportsAdjVat: numeric("box7_imports_adj_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 8: Totals for Output VAT
-  box8TotalAmount: real("box8_total_amount").notNull().default(0),
-  box8TotalVat: real("box8_total_vat").notNull().default(0),
-  box8TotalAdj: real("box8_total_adj").notNull().default(0),
+  box8TotalAmount: numeric("box8_total_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box8TotalVat: numeric("box8_total_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box8TotalAdj: numeric("box8_total_adj", { precision: 15, scale: 2 }).notNull().default("0"),
   
   // ===== VAT ON EXPENSES AND ALL OTHER INPUTS =====
   // Box 9: Standard Rated Expenses
-  box9ExpensesAmount: real("box9_expenses_amount").notNull().default(0),
-  box9ExpensesVat: real("box9_expenses_vat").notNull().default(0),
-  box9ExpensesAdj: real("box9_expenses_adj").notNull().default(0),
-  
+  box9ExpensesAmount: numeric("box9_expenses_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box9ExpensesVat: numeric("box9_expenses_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box9ExpensesAdj: numeric("box9_expenses_adj", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 10: Supplies subject to reverse charge (input)
-  box10ReverseChargeAmount: real("box10_reverse_charge_amount").notNull().default(0),
-  box10ReverseChargeVat: real("box10_reverse_charge_vat").notNull().default(0),
-  
+  box10ReverseChargeAmount: numeric("box10_reverse_charge_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box10ReverseChargeVat: numeric("box10_reverse_charge_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 11: Totals for Input VAT
-  box11TotalAmount: real("box11_total_amount").notNull().default(0),
-  box11TotalVat: real("box11_total_vat").notNull().default(0),
-  box11TotalAdj: real("box11_total_adj").notNull().default(0),
+  box11TotalAmount: numeric("box11_total_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  box11TotalVat: numeric("box11_total_vat", { precision: 15, scale: 2 }).notNull().default("0"),
+  box11TotalAdj: numeric("box11_total_adj", { precision: 15, scale: 2 }).notNull().default("0"),
   
   // ===== NET VAT DUE =====
   // Box 12: Total value of due tax for the period
-  box12TotalDueTax: real("box12_total_due_tax").notNull().default(0),
-  
+  box12TotalDueTax: numeric("box12_total_due_tax", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 13: Total value of recoverable tax for the period
-  box13RecoverableTax: real("box13_recoverable_tax").notNull().default(0),
-  
+  box13RecoverableTax: numeric("box13_recoverable_tax", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Box 14: Payable tax for the period (Box 12 - Box 13)
-  box14PayableTax: real("box14_payable_tax").notNull().default(0),
+  box14PayableTax: numeric("box14_payable_tax", { precision: 15, scale: 2 }).notNull().default("0"),
   
   // Legacy fields for backward compatibility
-  box1SalesStandard: real("box1_sales_standard").notNull().default(0),
-  box2SalesOtherEmirates: real("box2_sales_other_emirates").notNull().default(0),
-  box3SalesTaxExempt: real("box3_sales_tax_exempt").notNull().default(0),
-  box4SalesExempt: real("box4_sales_exempt").notNull().default(0),
-  box5TotalOutputTax: real("box5_total_output_tax").notNull().default(0),
-  box6ExpensesStandard: real("box6_expenses_standard").notNull().default(0),
-  box7ExpensesTouristRefund: real("box7_expenses_tourist_refund").notNull().default(0),
-  box8TotalInputTax: real("box8_total_input_tax").notNull().default(0),
-  box9NetTax: real("box9_net_tax").notNull().default(0),
-  adjustmentAmount: real("adjustment_amount").default(0),
+  box1SalesStandard: numeric("box1_sales_standard", { precision: 15, scale: 2 }).notNull().default("0"),
+  box2SalesOtherEmirates: numeric("box2_sales_other_emirates", { precision: 15, scale: 2 }).notNull().default("0"),
+  box3SalesTaxExempt: numeric("box3_sales_tax_exempt", { precision: 15, scale: 2 }).notNull().default("0"),
+  box4SalesExempt: numeric("box4_sales_exempt", { precision: 15, scale: 2 }).notNull().default("0"),
+  box5TotalOutputTax: numeric("box5_total_output_tax", { precision: 15, scale: 2 }).notNull().default("0"),
+  box6ExpensesStandard: numeric("box6_expenses_standard", { precision: 15, scale: 2 }).notNull().default("0"),
+  box7ExpensesTouristRefund: numeric("box7_expenses_tourist_refund", { precision: 15, scale: 2 }).notNull().default("0"),
+  box8TotalInputTax: numeric("box8_total_input_tax", { precision: 15, scale: 2 }).notNull().default("0"),
+  box9NetTax: numeric("box9_net_tax", { precision: 15, scale: 2 }).notNull().default("0"),
+  adjustmentAmount: numeric("adjustment_amount", { precision: 15, scale: 2 }).default("0"),
   adjustmentReason: text("adjustment_reason"),
   
   // Filing info
@@ -1328,7 +1338,7 @@ export const vatReturns = pgTable("vat_returns", {
   submittedAt: timestamp("submitted_at"),
   ftaReferenceNumber: text("fta_reference_number"),
   paymentStatus: text("payment_status").default("unpaid"), // unpaid | paid | partial
-  paymentAmount: real("payment_amount"),
+  paymentAmount: numeric("payment_amount", { precision: 15, scale: 2 }),
   paymentDate: timestamp("payment_date"),
   notes: text("notes"),
   
@@ -1359,13 +1369,13 @@ export const corporateTaxReturns = pgTable("corporate_tax_returns", {
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   taxPeriodStart: timestamp("tax_period_start").notNull(),
   taxPeriodEnd: timestamp("tax_period_end").notNull(),
-  totalRevenue: real("total_revenue").notNull().default(0),
-  totalExpenses: real("total_expenses").notNull().default(0),
-  totalDeductions: real("total_deductions").notNull().default(0),
-  taxableIncome: real("taxable_income").notNull().default(0),
-  exemptionThreshold: real("exemption_threshold").notNull().default(375000),
+  totalRevenue: numeric("total_revenue", { precision: 15, scale: 2 }).notNull().default("0"),
+  totalExpenses: numeric("total_expenses", { precision: 15, scale: 2 }).notNull().default("0"),
+  totalDeductions: numeric("total_deductions", { precision: 15, scale: 2 }).notNull().default("0"),
+  taxableIncome: numeric("taxable_income", { precision: 15, scale: 2 }).notNull().default("0"),
+  exemptionThreshold: numeric("exemption_threshold", { precision: 15, scale: 2 }).notNull().default("375000"),
   taxRate: real("tax_rate").notNull().default(0.09),
-  taxPayable: real("tax_payable").notNull().default(0),
+  taxPayable: numeric("tax_payable", { precision: 15, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("draft"), // draft | filed | paid
   filedAt: timestamp("filed_at"),
   notes: text("notes"),
@@ -1448,7 +1458,7 @@ export const taxReturnArchive = pgTable("tax_return_archive", {
   periodEnd: timestamp("period_end").notNull(),
   filingDate: timestamp("filing_date").notNull(),
   ftaReferenceNumber: text("fta_reference_number"),
-  taxAmount: real("tax_amount").default(0),
+  taxAmount: numeric("tax_amount", { precision: 15, scale: 2 }).default("0"),
   paymentStatus: text("payment_status").default("paid"), // paid | partial | unpaid
   fileUrl: text("file_url"), // PDF of filed return
   fileName: text("file_name"),
@@ -1646,7 +1656,7 @@ export const engagements = pgTable("engagements", {
   endDate: timestamp("end_date"),
   
   // Service Agreement
-  monthlyFee: real("monthly_fee"),
+  monthlyFee: numeric("monthly_fee", { precision: 15, scale: 2 }),
   billingCycle: text("billing_cycle").default("monthly"), // monthly | quarterly | annually
   paymentTerms: integer("payment_terms").default(30), // days
   
@@ -1686,13 +1696,13 @@ export const serviceInvoices = pgTable("service_invoices", {
   dueDate: timestamp("due_date").notNull(),
   
   // Amounts (in AED)
-  subtotal: real("subtotal").notNull().default(0),
-  vatAmount: real("vat_amount").notNull().default(0),
-  total: real("total").notNull().default(0),
-  
+  subtotal: numeric("subtotal", { precision: 15, scale: 2 }).notNull().default("0"),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+  total: numeric("total", { precision: 15, scale: 2 }).notNull().default("0"),
+
   // Payment
   status: text("status").notNull().default("draft"), // draft | sent | paid | overdue | void
-  paidAmount: real("paid_amount").default(0),
+  paidAmount: numeric("paid_amount", { precision: 15, scale: 2 }).default("0"),
   paidAt: timestamp("paid_at"),
   paymentMethod: text("payment_method"), // bank_transfer | card | cash | cheque
   paymentReference: text("payment_reference"),
@@ -1730,9 +1740,9 @@ export const serviceInvoiceLines = pgTable("service_invoice_lines", {
   serviceInvoiceId: uuid("service_invoice_id").notNull().references(() => serviceInvoices.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   quantity: real("quantity").notNull().default(1),
-  unitPrice: real("unit_price").notNull(),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
   vatRate: real("vat_rate").notNull().default(0.05), // UAE 5%
-  amount: real("amount").notNull(), // quantity * unitPrice
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(), // quantity * unitPrice
 });
 
 export const insertServiceInvoiceLineSchema = createInsertSchema(serviceInvoiceLines).omit({
@@ -1899,3 +1909,501 @@ export const insertAiConversationSchema = createInsertSchema(aiConversations).om
 
 export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
 export type AiConversation = typeof aiConversations.$inferSelect;
+
+// ===========================
+// Employees (Payroll / WPS Compliance)
+// ===========================
+export const employees = pgTable("employees", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  employeeNumber: text("employee_number"),
+  fullName: text("full_name").notNull(),
+  fullNameAr: text("full_name_ar"),
+  nationality: text("nationality"),
+  passportNumber: text("passport_number"),
+  visaNumber: text("visa_number"),
+  laborCardNumber: text("labor_card_number"),
+  bankName: text("bank_name"),
+  bankAccountNumber: text("bank_account_number"),
+  iban: text("iban"),
+  routingCode: text("routing_code"),
+  department: text("department"),
+  designation: text("designation"),
+  joinDate: timestamp("join_date"),
+  basicSalary: numeric("basic_salary", { precision: 15, scale: 2 }).notNull().default("0"),
+  housingAllowance: numeric("housing_allowance", { precision: 15, scale: 2 }).notNull().default("0"),
+  transportAllowance: numeric("transport_allowance", { precision: 15, scale: 2 }).notNull().default("0"),
+  otherAllowance: numeric("other_allowance", { precision: 15, scale: 2 }).notNull().default("0"),
+  totalSalary: numeric("total_salary", { precision: 15, scale: 2 }).notNull().default("0"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEmployeeSchema = createInsertSchema(employees).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type Employee = typeof employees.$inferSelect;
+
+// ===========================
+// Payroll Runs
+// ===========================
+export const payrollRuns = pgTable("payroll_runs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  periodMonth: integer("period_month").notNull(),
+  periodYear: integer("period_year").notNull(),
+  runDate: timestamp("run_date").defaultNow(),
+  totalBasic: numeric("total_basic", { precision: 15, scale: 2 }).notNull().default("0"),
+  totalAllowances: numeric("total_allowances", { precision: 15, scale: 2 }).notNull().default("0"),
+  totalDeductions: numeric("total_deductions", { precision: 15, scale: 2 }).notNull().default("0"),
+  totalNet: numeric("total_net", { precision: 15, scale: 2 }).notNull().default("0"),
+  employeeCount: integer("employee_count").notNull().default(0),
+  status: text("status").notNull().default("draft"),
+  sifFileContent: text("sif_file_content"),
+  approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+
+// ===========================
+// Payroll Items
+// ===========================
+export const payrollItems = pgTable("payroll_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  payrollRunId: uuid("payroll_run_id").notNull().references(() => payrollRuns.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  basicSalary: numeric("basic_salary", { precision: 15, scale: 2 }).notNull().default("0"),
+  housingAllowance: numeric("housing_allowance", { precision: 15, scale: 2 }).notNull().default("0"),
+  transportAllowance: numeric("transport_allowance", { precision: 15, scale: 2 }).notNull().default("0"),
+  otherAllowance: numeric("other_allowance", { precision: 15, scale: 2 }).notNull().default("0"),
+  overtime: numeric("overtime", { precision: 15, scale: 2 }).notNull().default("0"),
+  deductions: numeric("deductions", { precision: 15, scale: 2 }).notNull().default("0"),
+  deductionNotes: text("deduction_notes"),
+  netSalary: numeric("net_salary", { precision: 15, scale: 2 }).notNull().default("0"),
+  paymentMode: text("payment_mode").notNull().default("bank_transfer"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPayrollItemSchema = createInsertSchema(payrollItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPayrollItem = z.infer<typeof insertPayrollItemSchema>;
+export type PayrollItem = typeof payrollItems.$inferSelect;
+
+// ===========================
+// Vendor Bills (Bill Pay / Accounts Payable)
+// ===========================
+export const vendorBills = pgTable("vendor_bills", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vendorName: text("vendor_name").notNull(),
+  vendorTrn: text("vendor_trn"),
+  billNumber: text("bill_number"),
+  billDate: timestamp("bill_date").notNull(),
+  dueDate: timestamp("due_date"),
+  currency: text("currency").default("AED"),
+  subtotal: numeric("subtotal", { precision: 15, scale: 2 }).default("0"),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }).default("0"),
+  totalAmount: numeric("total_amount", { precision: 15, scale: 2 }).default("0"),
+  amountPaid: numeric("amount_paid", { precision: 15, scale: 2 }).default("0"),
+  status: text("status").default("pending"),
+  category: text("category"),
+  notes: text("notes"),
+  attachmentUrl: text("attachment_url"),
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertVendorBillSchema = createInsertSchema(vendorBills).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVendorBill = z.infer<typeof insertVendorBillSchema>;
+export type VendorBill = typeof vendorBills.$inferSelect;
+
+// ===========================
+// Bill Line Items
+// ===========================
+export const billLineItems = pgTable("bill_line_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  billId: uuid("bill_id").notNull().references(() => vendorBills.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).default("1"),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
+  vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).default("5"),
+  amount: numeric("amount", { precision: 15, scale: 2 }),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBillLineItemSchema = createInsertSchema(billLineItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBillLineItem = z.infer<typeof insertBillLineItemSchema>;
+export type BillLineItem = typeof billLineItems.$inferSelect;
+
+// ===========================
+// Bill Payments
+// ===========================
+export const billPayments = pgTable("bill_payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  billId: uuid("bill_id").notNull().references(() => vendorBills.id, { onDelete: "cascade" }),
+  paymentDate: timestamp("payment_date").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  paymentMethod: text("payment_method").default("bank_transfer"),
+  reference: text("reference"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBillPaymentSchema = createInsertSchema(billPayments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBillPayment = z.infer<typeof insertBillPaymentSchema>;
+export type BillPayment = typeof billPayments.$inferSelect;
+
+// ===========================
+// Fixed Assets
+// ===========================
+export const fixedAssets = pgTable("fixed_assets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  assetName: text("asset_name").notNull(),
+  assetNameAr: text("asset_name_ar"),
+  assetNumber: text("asset_number"),
+  category: text("category").notNull(),
+  purchaseDate: timestamp("purchase_date").notNull(),
+  purchaseCost: numeric("purchase_cost", { precision: 15, scale: 2 }).notNull(),
+  salvageValue: numeric("salvage_value", { precision: 15, scale: 2 }).default("0"),
+  usefulLifeYears: integer("useful_life_years").notNull(),
+  depreciationMethod: text("depreciation_method").default("straight_line"),
+  accumulatedDepreciation: numeric("accumulated_depreciation", { precision: 15, scale: 2 }).default("0"),
+  netBookValue: numeric("net_book_value", { precision: 15, scale: 2 }),
+  location: text("location"),
+  serialNumber: text("serial_number"),
+  status: text("status").default("active"),
+  disposalDate: timestamp("disposal_date"),
+  disposalAmount: numeric("disposal_amount", { precision: 15, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFixedAssetSchema = createInsertSchema(fixedAssets).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertFixedAsset = z.infer<typeof insertFixedAssetSchema>;
+export type FixedAsset = typeof fixedAssets.$inferSelect;
+
+// ===========================
+// Budget Plans
+// ===========================
+export const budgetPlans = pgTable("budget_plans", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  fiscalYear: integer("fiscal_year").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  status: text("status").default("draft"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBudgetPlanSchema = createInsertSchema(budgetPlans).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBudgetPlan = z.infer<typeof insertBudgetPlanSchema>;
+export type BudgetPlan = typeof budgetPlans.$inferSelect;
+
+// ===========================
+// Budget Lines
+// ===========================
+export const budgetLines = pgTable("budget_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  budgetId: uuid("budget_id").notNull().references(() => budgetPlans.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id"),
+  category: text("category").notNull(),
+  description: text("description"),
+  jan: numeric("jan", { precision: 15, scale: 2 }).default("0"),
+  feb: numeric("feb", { precision: 15, scale: 2 }).default("0"),
+  mar: numeric("mar", { precision: 15, scale: 2 }).default("0"),
+  apr: numeric("apr", { precision: 15, scale: 2 }).default("0"),
+  may: numeric("may", { precision: 15, scale: 2 }).default("0"),
+  jun: numeric("jun", { precision: 15, scale: 2 }).default("0"),
+  jul: numeric("jul", { precision: 15, scale: 2 }).default("0"),
+  aug: numeric("aug", { precision: 15, scale: 2 }).default("0"),
+  sep: numeric("sep", { precision: 15, scale: 2 }).default("0"),
+  oct: numeric("oct", { precision: 15, scale: 2 }).default("0"),
+  nov: numeric("nov", { precision: 15, scale: 2 }).default("0"),
+  dec: numeric("dec", { precision: 15, scale: 2 }).default("0"),
+  annualTotal: numeric("annual_total", { precision: 15, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBudgetLineSchema = createInsertSchema(budgetLines).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBudgetLine = z.infer<typeof insertBudgetLineSchema>;
+export type BudgetLine = typeof budgetLines.$inferSelect;
+
+// ===========================
+// Expense Claims
+// ===========================
+export const expenseClaims = pgTable("expense_claims", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  submittedBy: uuid("submitted_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  claimNumber: text("claim_number"),
+  title: text("title").notNull(),
+  description: text("description"),
+  totalAmount: numeric("total_amount", { precision: 15, scale: 2 }).default("0"),
+  currency: text("currency").default("AED"),
+  status: text("status").default("draft"),
+  submittedAt: timestamp("submitted_at"),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  paidAt: timestamp("paid_at"),
+  paymentReference: text("payment_reference"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertExpenseClaimSchema = createInsertSchema(expenseClaims).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertExpenseClaim = z.infer<typeof insertExpenseClaimSchema>;
+export type ExpenseClaim = typeof expenseClaims.$inferSelect;
+
+// ===========================
+// Expense Claim Items
+// ===========================
+export const expenseClaimItems = pgTable("expense_claim_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  claimId: uuid("claim_id").notNull().references(() => expenseClaims.id, { onDelete: "cascade" }),
+  expenseDate: timestamp("expense_date").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }).default("0"),
+  receiptUrl: text("receipt_url"),
+  merchantName: text("merchant_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertExpenseClaimItemSchema = createInsertSchema(expenseClaimItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertExpenseClaimItem = z.infer<typeof insertExpenseClaimItemSchema>;
+export type ExpenseClaimItem = typeof expenseClaimItems.$inferSelect;
+
+// ===========================
+// AI GL Queue (Autonomous GL Engine)
+// ===========================
+export const aiGlQueue = pgTable("ai_gl_queue", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  bankTransactionId: uuid("bank_transaction_id"),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  transactionDate: timestamp("transaction_date").notNull(),
+  suggestedAccountId: uuid("suggested_account_id"),
+  suggestedCategory: text("suggested_category"),
+  aiConfidence: numeric("ai_confidence", { precision: 3, scale: 2 }).default("0"),
+  aiReason: text("ai_reason"),
+  fewShotExamplesUsed: integer("few_shot_examples_used").default(0),
+  status: text("status").default("pending_review"),
+  journalEntryId: uuid("journal_entry_id"),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  userSelectedAccountId: uuid("user_selected_account_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAiGlQueueSchema = createInsertSchema(aiGlQueue).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAiGlQueue = z.infer<typeof insertAiGlQueueSchema>;
+export type AiGlQueue = typeof aiGlQueue.$inferSelect;
+
+// ===========================
+// AI Company Rules (Autonomous GL Engine)
+// ===========================
+export const aiCompanyRules = pgTable("ai_company_rules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  merchantPattern: text("merchant_pattern"),
+  descriptionPattern: text("description_pattern"),
+  accountId: uuid("account_id").notNull(),
+  timesApplied: integer("times_applied").default(0),
+  timesAccepted: integer("times_accepted").default(0),
+  timesRejected: integer("times_rejected").default(0),
+  confidence: numeric("confidence", { precision: 3, scale: 2 }).default("0.5"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAiCompanyRuleSchema = createInsertSchema(aiCompanyRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAiCompanyRule = z.infer<typeof insertAiCompanyRuleSchema>;
+export type AiCompanyRule = typeof aiCompanyRules.$inferSelect;
+
+// ===========================
+// Month-End Close (Autonomous GL Engine)
+// ===========================
+export const monthEndClose = pgTable("month_end_close", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  status: text("status").default("open"),
+  checklist: text("checklist"),
+  closingJournalEntryId: uuid("closing_journal_entry_id"),
+  closedBy: uuid("closed_by"),
+  closedAt: timestamp("closed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMonthEndCloseSchema = createInsertSchema(monthEndClose).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMonthEndClose = z.infer<typeof insertMonthEndCloseSchema>;
+export type MonthEndClose = typeof monthEndClose.$inferSelect;
+
+// ===========================
+// Exchange Rates (Multi-Currency Support)
+// ===========================
+export const exchangeRates = pgTable("exchange_rates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  baseCurrency: text("base_currency").notNull().default("AED"),
+  targetCurrency: text("target_currency").notNull(),
+  rate: numeric("rate", { precision: 15, scale: 6 }).notNull(),
+  effectiveDate: date("effective_date").notNull(),
+  source: text("source").default("manual"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertExchangeRateSchema = createInsertSchema(exchangeRates).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertExchangeRate = z.infer<typeof insertExchangeRateSchema>;
+export type ExchangeRate = typeof exchangeRates.$inferSelect;
+
+// ===========================
+// Fiscal Years (Year-End Close)
+// ===========================
+export const fiscalYears = pgTable("fiscal_years", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // e.g., "FY 2025"
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  status: text("status").notNull().default("open"), // open | closed
+  closedBy: uuid("closed_by").references(() => users.id),
+  closedAt: timestamp("closed_at"),
+  closingEntryId: uuid("closing_entry_id").references(() => journalEntries.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFiscalYearSchema = createInsertSchema(fiscalYears).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertFiscalYear = z.infer<typeof insertFiscalYearSchema>;
+export type FiscalYear = typeof fiscalYears.$inferSelect;
+
+// ===========================
+// Credit Notes
+// ===========================
+export const creditNotes = pgTable("credit_notes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  customerId: uuid("customer_id").references(() => customerContacts.id),
+  customerName: text("customer_name").notNull(),
+  customerTrn: text("customer_trn"),
+  date: timestamp("date").notNull(),
+  currency: text("currency").default("AED"),
+  subtotal: numeric("subtotal", { precision: 15, scale: 2 }).default("0"),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }).default("0"),
+  total: numeric("total", { precision: 15, scale: 2 }).default("0"),
+  linkedInvoiceId: uuid("linked_invoice_id").references(() => invoices.id),
+  reason: text("reason"),
+  status: text("status").default("draft"), // draft | posted | void
+  journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id),
+  appliedAmount: numeric("applied_amount", { precision: 15, scale: 2 }).default("0"),
+  appliedToInvoiceId: uuid("applied_to_invoice_id"),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCreditNoteSchema = createInsertSchema(creditNotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCreditNote = z.infer<typeof insertCreditNoteSchema>;
+export type CreditNote = typeof creditNotes.$inferSelect;
+
+// ===========================
+// Credit Note Lines
+// ===========================
+export const creditNoteLines = pgTable("credit_note_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  creditNoteId: uuid("credit_note_id").notNull().references(() => creditNotes.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: real("quantity").notNull(),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
+  vatRate: real("vat_rate").default(0.05),
+  vatSupplyType: text("vat_supply_type").default("standard_rated"),
+});
+
+export const insertCreditNoteLineSchema = createInsertSchema(creditNoteLines).omit({
+  id: true,
+});
+
+export type InsertCreditNoteLine = z.infer<typeof insertCreditNoteLineSchema>;
+export type CreditNoteLine = typeof creditNoteLines.$inferSelect;

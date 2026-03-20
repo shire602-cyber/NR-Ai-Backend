@@ -491,6 +491,17 @@ export const defaultChartOfAccounts: DefaultAccountTemplate[] = [
     vatType: null,
     isSystemAccount: false,
   },
+  {
+    code: "5130",
+    nameEn: "Cost of Goods Sold",
+    nameAr: "تكلفة البضاعة المباعة",
+    description: "Cost of inventory sold",
+    type: "expense",
+    subType: null,
+    isVatAccount: false,
+    vatType: null,
+    isSystemAccount: true,
+  },
 ];
 
 export function createDefaultAccountsForCompany(companyId: string): Omit<InsertAccount, "id" | "createdAt">[] {

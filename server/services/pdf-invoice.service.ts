@@ -135,13 +135,13 @@ export async function generateInvoicePDF(
         const bgColor = index % 2 === 0 ? '#FFFFFF' : '#F9FAFB';
         doc.rect(margin, y, contentWidth, rowHeight).fill(bgColor);
 
-        const lineTotal = line.quantity * line.unitPrice;
+        const lineTotal = Number(line.quantity) * Number(line.unitPrice);
         const vatPercent = ((line.vatRate || 0.05) * 100).toFixed(0);
 
         doc.fillColor('#1F2937');
         doc.text(line.description, colX.description, y + 8, { width: 230 });
         doc.text(line.quantity.toString(), colX.qty, y + 8, { width: 50, align: 'center' });
-        doc.text(formatAmount(line.unitPrice, invoice.currency), colX.price, y + 8, { width: 60, align: 'center' });
+        doc.text(formatAmount(Number(line.unitPrice), invoice.currency), colX.price, y + 8, { width: 60, align: 'center' });
         doc.text(`${vatPercent}%`, colX.vat, y + 8, { width: 40, align: 'center' });
         doc.text(formatAmount(lineTotal, invoice.currency), colX.amount - 60, y + 8, { width: 60, align: 'right' });
 
@@ -159,18 +159,18 @@ export async function generateInvoicePDF(
 
       doc.fontSize(10).fillColor('#1F2937').font('Helvetica');
       doc.text('Subtotal:', totalsX, y);
-      doc.text(formatAmount(invoice.subtotal, invoice.currency), totalsValueX - 80, y, { width: 80, align: 'right' });
+      doc.text(formatAmount(Number(invoice.subtotal), invoice.currency), totalsValueX - 80, y, { width: 80, align: 'right' });
       y += 18;
 
       doc.text('VAT:', totalsX, y);
-      doc.text(formatAmount(invoice.vatAmount, invoice.currency), totalsValueX - 80, y, { width: 80, align: 'right' });
+      doc.text(formatAmount(Number(invoice.vatAmount), invoice.currency), totalsValueX - 80, y, { width: 80, align: 'right' });
       y += 22;
 
       // Total with blue background
       doc.rect(totalsX - 10, y - 7, 180, 28).fill('#1E40AF');
       doc.fontSize(13).fillColor('#FFFFFF').font('Helvetica-Bold');
       doc.text('TOTAL:', totalsX, y);
-      doc.text(formatAmount(invoice.total, invoice.currency), totalsValueX - 80, y, { width: 80, align: 'right' });
+      doc.text(formatAmount(Number(invoice.total), invoice.currency), totalsValueX - 80, y, { width: 80, align: 'right' });
 
       // --- Footer ---
       const footerY = 770;

@@ -65,7 +65,7 @@ export function registerAIRoutes(app: Express) {
 
       // Build account list for AI prompt
       const accountList = expenseAccounts.map(acc =>
-        `${acc.nameEn}${acc.nameAr ? ` (${acc.nameAr})` : ''}`
+        `${acc.code}: ${acc.nameEn}${acc.nameAr ? ` (${acc.nameAr})` : ''}`
       ).join('\n');
 
       // Use OpenAI to categorize the expense
@@ -76,11 +76,11 @@ export function registerAIRoutes(app: Express) {
             role: "system",
             content: `You are an expert accountant specializing in UAE business expenses. Your task is to categorize expenses into the appropriate account from the Chart of Accounts.
 
-Available expense accounts:
+Available expense accounts (format — code: name):
 ${accountList}
 
 Analyze the transaction description and amount, then respond with a JSON object containing:
-- accountCode: the most appropriate account code
+- accountCode: the account code (the number before the colon)
 - accountName: the English name of the account
 - confidence: a number between 0 and 1 indicating how confident you are
 - reason: a brief explanation (1-2 sentences) of why you chose this account
@@ -206,7 +206,7 @@ If no valid transactions can be found, return { "transactions": [] }`
         totalInvoices: invoices.length,
         outstandingInvoices: invoices.filter(i => i.status === 'sent' || i.status === 'draft').length,
         outstandingAmount: invoices.filter(i => i.status === 'sent' || i.status === 'draft')
-          .reduce((sum, i) => sum + i.total, 0),
+          .reduce((sum, i) => sum + Number(i.total), 0),
         totalReceipts: receipts.length,
         postedReceipts: receipts.filter(r => r.posted).length,
         accountCount: accounts.length,
@@ -285,7 +285,7 @@ Keep your tone professional but friendly, like a trusted advisor.`
       const allAccounts = [...expenseAccounts, ...incomeAccounts];
 
       const accountList = allAccounts.map(acc =>
-        `${acc.nameEn} (${acc.type})${acc.nameAr ? ` - ${acc.nameAr}` : ''}`
+        `${acc.code}: ${acc.nameEn} (${acc.type})${acc.nameAr ? ` - ${acc.nameAr}` : ''}`
       ).join('\n');
 
       // Get previous classifications for learning context
@@ -307,7 +307,7 @@ Keep your tone professional but friendly, like a trusted advisor.`
             role: "system",
             content: `You are an expert UAE accountant specializing in transaction categorization using machine learning principles.
 
-Available accounts:
+Available accounts (format — code: name (type)):
 ${accountList}
 
 ${learningContext ? `Previous learned patterns (user-confirmed):
@@ -323,6 +323,7 @@ Respond with a JSON object:
   "classifications": [
     {
       "index": 0,
+      "accountCode": "the account code (number before the colon)",
       "accountName": "suggested account name",
       "category": "expense or income category",
       "confidence": 0.95,
@@ -734,7 +735,7 @@ ${JSON.stringify(ledgerData, null, 2)}`
           companyId,
           transactionDate: new Date(t.date),
           description: t.description,
-          amount: parseFloat(t.amount),
+          amount: String(parseFloat(t.amount)),
           reference: t.reference,
           importSource: 'csv',
         });
@@ -774,8 +775,8 @@ ${JSON.stringify(ledgerData, null, 2)}`
       const recentInvoices = invoices.filter(i => new Date(i.date) >= sixMonthsAgo);
       const recentReceipts = receipts.filter(r => r.date && new Date(r.date) >= sixMonthsAgo);
 
-      const monthlyInflow = recentInvoices.reduce((sum, i) => sum + i.total, 0) / 6;
-      const monthlyOutflow = recentReceipts.reduce((sum, r) => sum + (r.amount || 0), 0) / 6;
+      const monthlyInflow = recentInvoices.reduce((sum, i) => sum + Number(i.total), 0) / 6;
+      const monthlyOutflow = recentReceipts.reduce((sum, r) => sum + Number(r.amount || 0), 0) / 6;
 
       const historicalData = {
         averageMonthlyRevenue: monthlyInflow,
@@ -784,7 +785,7 @@ ${JSON.stringify(ledgerData, null, 2)}`
         paidInvoices: invoices.filter(i => i.status === 'paid').length,
         pendingReceivables: invoices
           .filter(i => i.status === 'sent')
-          .reduce((sum, i) => sum + i.total, 0),
+          .reduce((sum, i) => sum + Number(i.total), 0),
         recentMonths: Array.from({ length: 6 }, (_, i) => {
           const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const monthInvoices = recentInvoices.filter(inv => {
@@ -798,8 +799,8 @@ ${JSON.stringify(ledgerData, null, 2)}`
           });
           return {
             month: month.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-            revenue: monthInvoices.reduce((s, i) => s + i.total, 0),
-            expenses: monthReceipts.reduce((s, r) => s + (r.amount || 0), 0),
+            revenue: monthInvoices.reduce((s, i) => s + Number(i.total), 0),
+            expenses: monthReceipts.reduce((s, r) => s + Number(r.amount || 0), 0),
           };
         }).reverse(),
       };
@@ -1008,7 +1009,7 @@ Respond with JSON:
         })),
         recentExpenses: receipts.slice(-5).map(r => ({
           merchant: r.merchant,
-          amount: (r.amount || 0) + (r.vatAmount || 0),
+          amount: Number(r.amount || 0) + Number(r.vatAmount || 0),
           category: r.category,
           date: r.date,
         })),
@@ -1675,9 +1676,9 @@ IMPORTANT GUIDELINES:
         if (suggestions.length === 0 && context.merchant) {
           const expenseAccounts = accounts.filter(a => a.type === 'expense');
           const prompt = `Given a UAE business expense from merchant "${context.merchant}"${context.category ? ` categorized as "${context.category}"` : ''}, suggest the most appropriate expense account from this list:
-${expenseAccounts.map(a => `- ${a.nameEn}`).join('\n')}
+${expenseAccounts.map(a => `- ${a.code}: ${a.nameEn}`).join('\n')}
 
-Respond with just the account name, nothing else.`;
+Respond with just the account code and name (e.g. "5010: Office Supplies"), nothing else.`;
 
           const response = await openai.chat.completions.create({
             model: AI_MODEL,
@@ -1686,10 +1687,21 @@ Respond with just the account name, nothing else.`;
             max_tokens: 50,
           });
 
-          const suggestedName = response.choices[0]?.message?.content?.trim();
-          const matchedAccount = expenseAccounts.find(a =>
-            a.nameEn.toLowerCase() === suggestedName?.toLowerCase()
-          );
+          const suggestedText = response.choices[0]?.message?.content?.trim() || '';
+          // Try to match by code first (extract code before colon)
+          const codeMatch = suggestedText.match(/^(\d+)\s*:/);
+          let matchedAccount = codeMatch
+            ? expenseAccounts.find(a => a.code === codeMatch[1])
+            : undefined;
+          // Fall back to nameEn matching
+          if (!matchedAccount) {
+            const nameOnly = suggestedText.replace(/^\d+\s*:\s*/, '').trim();
+            matchedAccount = expenseAccounts.find(a =>
+              a.nameEn.toLowerCase() === nameOnly.toLowerCase()
+            ) || expenseAccounts.find(a =>
+              a.nameEn.toLowerCase() === suggestedText.toLowerCase()
+            );
+          }
 
           if (matchedAccount) {
             suggestions.push({

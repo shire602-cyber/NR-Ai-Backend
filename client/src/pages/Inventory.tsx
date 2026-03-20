@@ -216,8 +216,8 @@ export default function Inventory() {
       nameAr: product.nameAr || '',
       sku: product.sku || '',
       description: product.description || '',
-      unitPrice: product.unitPrice,
-      costPrice: product.costPrice || 0,
+      unitPrice: Number(product.unitPrice),
+      costPrice: Number(product.costPrice || 0),
       vatRate: product.vatRate,
       unit: product.unit,
       lowStockThreshold: product.lowStockThreshold || 10,
@@ -230,7 +230,7 @@ export default function Inventory() {
     movementForm.reset({
       type: 'purchase',
       quantity: 1,
-      unitCost: product.costPrice || 0,
+      unitCost: Number(product.costPrice || 0),
       notes: '',
     });
     setAddStockDialogOpen(true);
@@ -388,8 +388,8 @@ export default function Inventory() {
                               </div>
                             </TableCell>
                             <TableCell className="text-muted-foreground">{product.sku || '-'}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(product.unitPrice, 'AED', locale)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(product.costPrice || 0, 'AED', locale)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(Number(product.unitPrice), 'AED', locale)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(Number(product.costPrice || 0), 'AED', locale)}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
                                 {product.currentStock}
@@ -493,7 +493,7 @@ export default function Inventory() {
                             {movement.type === 'sale' ? '-' : '+'}{Math.abs(movement.quantity)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {movement.unitCost != null ? formatCurrency(movement.unitCost, 'AED', locale) : '-'}
+                            {movement.unitCost != null ? formatCurrency(Number(movement.unitCost), 'AED', locale) : '-'}
                           </TableCell>
                           <TableCell className="text-muted-foreground">{movement.reference || '-'}</TableCell>
                           <TableCell className="text-muted-foreground max-w-[200px] truncate">

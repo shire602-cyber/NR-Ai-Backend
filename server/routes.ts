@@ -42,6 +42,22 @@ import { registerAdminRoutes } from './routes/admin.routes';
 import { registerRecurringInvoiceRoutes } from './routes/recurring-invoices.routes';
 import { registerInventoryRoutes } from './routes/inventory.routes';
 
+// ─── Recovered modules from worktree ────────────────────────
+import { registerPayrollRoutes } from './routes/payroll.routes';
+import { registerFixedAssetRoutes } from './routes/fixed-assets.routes';
+import { registerBillPayRoutes } from './routes/bill-pay.routes';
+import { registerExpenseClaimRoutes } from './routes/expense-claims.routes';
+import { registerBudgetRoutes } from './routes/budgets.routes';
+import { registerMonthEndRoutes } from './routes/month-end.routes';
+import { registerCashFlowRoutes } from './routes/cashflow.routes';
+import { registerAnomalyRoutes } from './routes/anomaly.routes';
+import { registerAutoReconcileRoutes } from './routes/auto-reconcile.routes';
+import { registerAIGLRoutes } from './routes/ai-gl.routes';
+import { registerAdminHealthRoutes } from './routes/admin-health.routes';
+import { registerExchangeRateRoutes } from './routes/exchange-rates.routes';
+import { registerCreditNoteRoutes } from './routes/credit-notes.routes';
+import { registerFiscalYearRoutes } from './routes/fiscal-years.routes';
+
 const log = createLogger('routes');
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -57,10 +73,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerContactRoutes(app);
   registerJournalRoutes(app);
   registerInventoryRoutes(app);
+  registerPayrollRoutes(app);
+  registerFixedAssetRoutes(app);
+  registerBillPayRoutes(app);
+  registerExpenseClaimRoutes(app);
+  registerBudgetRoutes(app);
+  registerMonthEndRoutes(app);
+  registerExchangeRateRoutes(app);
+  registerCreditNoteRoutes(app);
+  registerFiscalYearRoutes(app);
 
   // ─── AI & Intelligence ──────────────────────────────────
   registerAIRoutes(app);
   registerOCRRoutes(app);
+  registerAIGLRoutes(app);
+  registerAnomalyRoutes(app);
+  registerAutoReconcileRoutes(app);
+  registerCashFlowRoutes(app);
 
   // ─── Reporting & Analytics ──────────────────────────────
   registerDashboardRoutes(app);
@@ -90,6 +119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Admin Panel ────────────────────────────────────────
   registerAdminRoutes(app);
+  registerAdminHealthRoutes(app);
 
   log.info('All route modules registered');
 

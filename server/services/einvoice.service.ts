@@ -41,8 +41,8 @@ export function generateEInvoiceXML(
   // Build invoice lines XML
   const invoiceLinesXml = lines
     .map((line, index) => {
-      const lineExtension = line.quantity * line.unitPrice;
-      const vatRate = line.vatRate ?? 0.05;
+      const lineExtension = Number(line.quantity) * Number(line.unitPrice);
+      const vatRate = Number(line.vatRate ?? 0.05);
       const vatAmount = lineExtension * vatRate;
       const vatPercent = (vatRate * 100).toFixed(2);
 
@@ -62,7 +62,7 @@ export function generateEInvoiceXML(
         </cac:ClassifiedTaxCategory>
       </cac:Item>
       <cac:Price>
-        <cbc:PriceAmount currencyID="${escapeXml(currency)}">${line.unitPrice.toFixed(2)}</cbc:PriceAmount>
+        <cbc:PriceAmount currencyID="${escapeXml(currency)}">${Number(line.unitPrice).toFixed(2)}</cbc:PriceAmount>
       </cac:Price>
     </cac:InvoiceLine>`;
     })
@@ -71,8 +71,8 @@ export function generateEInvoiceXML(
   // Calculate tax breakdown (grouped by VAT rate)
   const taxByRate = new Map<number, { taxable: number; tax: number }>();
   for (const line of lines) {
-    const vatRate = line.vatRate ?? 0.05;
-    const lineExtension = line.quantity * line.unitPrice;
+    const vatRate = Number(line.vatRate ?? 0.05);
+    const lineExtension = Number(line.quantity) * Number(line.unitPrice);
     const existing = taxByRate.get(vatRate) || { taxable: 0, tax: 0 };
     existing.taxable += lineExtension;
     existing.tax += lineExtension * vatRate;
@@ -161,15 +161,15 @@ export function generateEInvoiceXML(
 
   <!-- Tax Total -->
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="${escapeXml(currency)}">${invoice.vatAmount.toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
+    <cbc:TaxAmount currencyID="${escapeXml(currency)}">${Number(invoice.vatAmount).toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
   </cac:TaxTotal>
 
   <!-- Monetary Totals -->
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="${escapeXml(currency)}">${invoice.subtotal.toFixed(2)}</cbc:LineExtensionAmount>
-    <cbc:TaxExclusiveAmount currencyID="${escapeXml(currency)}">${invoice.subtotal.toFixed(2)}</cbc:TaxExclusiveAmount>
-    <cbc:TaxInclusiveAmount currencyID="${escapeXml(currency)}">${invoice.total.toFixed(2)}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="${escapeXml(currency)}">${invoice.total.toFixed(2)}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="${escapeXml(currency)}">${Number(invoice.subtotal).toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="${escapeXml(currency)}">${Number(invoice.subtotal).toFixed(2)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="${escapeXml(currency)}">${Number(invoice.total).toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="${escapeXml(currency)}">${Number(invoice.total).toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
 
   <!-- Invoice Lines -->${invoiceLinesXml}

@@ -72,8 +72,8 @@ export function registerVATRoutes(app: Express) {
       const lines = await storage.getInvoiceLinesByInvoiceId(invoice.id);
 
       for (const line of lines) {
-        const lineAmount = line.quantity * line.unitPrice;
-        const lineVat = lineAmount * (line.vatRate || 0);
+        const lineAmount = Number(line.quantity) * Number(line.unitPrice);
+        const lineVat = lineAmount * (Number(line.vatRate) || 0);
         const supplyType = (line as any).vatSupplyType || 'standard_rated';
 
         if (supplyType === 'zero_rated' || line.vatRate === 0) {
@@ -96,8 +96,8 @@ export function registerVATRoutes(app: Express) {
       return recDate >= startDate && recDate <= endDate;
     });
 
-    const totalExpenses = periodReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
-    const inputTax = periodReceipts.reduce((sum, rec) => sum + (rec.vatAmount || 0), 0);
+    const totalExpenses = periodReceipts.reduce((sum, rec) => sum + (Number(rec.amount) || 0), 0);
+    const inputTax = periodReceipts.reduce((sum, rec) => sum + (Number(rec.vatAmount) || 0), 0);
 
     // Due date is 28 days after period end (FTA requirement)
     const dueDate = new Date(endDate);
@@ -108,45 +108,45 @@ export function registerVATRoutes(app: Express) {
 
     // Initialize emirate breakdown - all to company's registered emirate
     const emirateBreakdown = {
-      box1aAbuDhabiAmount: 0, box1aAbuDhabiVat: 0, box1aAbuDhabiAdj: 0,
-      box1bDubaiAmount: 0, box1bDubaiVat: 0, box1bDubaiAdj: 0,
-      box1cSharjahAmount: 0, box1cSharjahVat: 0, box1cSharjahAdj: 0,
-      box1dAjmanAmount: 0, box1dAjmanVat: 0, box1dAjmanAdj: 0,
-      box1eUmmAlQuwainAmount: 0, box1eUmmAlQuwainVat: 0, box1eUmmAlQuwainAdj: 0,
-      box1fRasAlKhaimahAmount: 0, box1fRasAlKhaimahVat: 0, box1fRasAlKhaimahAdj: 0,
-      box1gFujairahAmount: 0, box1gFujairahVat: 0, box1gFujairahAdj: 0,
+      box1aAbuDhabiAmount: '0', box1aAbuDhabiVat: '0', box1aAbuDhabiAdj: '0',
+      box1bDubaiAmount: '0', box1bDubaiVat: '0', box1bDubaiAdj: '0',
+      box1cSharjahAmount: '0', box1cSharjahVat: '0', box1cSharjahAdj: '0',
+      box1dAjmanAmount: '0', box1dAjmanVat: '0', box1dAjmanAdj: '0',
+      box1eUmmAlQuwainAmount: '0', box1eUmmAlQuwainVat: '0', box1eUmmAlQuwainAdj: '0',
+      box1fRasAlKhaimahAmount: '0', box1fRasAlKhaimahVat: '0', box1fRasAlKhaimahAdj: '0',
+      box1gFujairahAmount: '0', box1gFujairahVat: '0', box1gFujairahAdj: '0',
     };
 
     // Assign standard rated sales to company's emirate
     switch (companyEmirate) {
       case 'abu_dhabi':
-        emirateBreakdown.box1aAbuDhabiAmount = standardRatedAmount;
-        emirateBreakdown.box1aAbuDhabiVat = standardRatedVat;
+        emirateBreakdown.box1aAbuDhabiAmount = String(standardRatedAmount);
+        emirateBreakdown.box1aAbuDhabiVat = String(standardRatedVat);
         break;
       case 'sharjah':
-        emirateBreakdown.box1cSharjahAmount = standardRatedAmount;
-        emirateBreakdown.box1cSharjahVat = standardRatedVat;
+        emirateBreakdown.box1cSharjahAmount = String(standardRatedAmount);
+        emirateBreakdown.box1cSharjahVat = String(standardRatedVat);
         break;
       case 'ajman':
-        emirateBreakdown.box1dAjmanAmount = standardRatedAmount;
-        emirateBreakdown.box1dAjmanVat = standardRatedVat;
+        emirateBreakdown.box1dAjmanAmount = String(standardRatedAmount);
+        emirateBreakdown.box1dAjmanVat = String(standardRatedVat);
         break;
       case 'umm_al_quwain':
-        emirateBreakdown.box1eUmmAlQuwainAmount = standardRatedAmount;
-        emirateBreakdown.box1eUmmAlQuwainVat = standardRatedVat;
+        emirateBreakdown.box1eUmmAlQuwainAmount = String(standardRatedAmount);
+        emirateBreakdown.box1eUmmAlQuwainVat = String(standardRatedVat);
         break;
       case 'ras_al_khaimah':
-        emirateBreakdown.box1fRasAlKhaimahAmount = standardRatedAmount;
-        emirateBreakdown.box1fRasAlKhaimahVat = standardRatedVat;
+        emirateBreakdown.box1fRasAlKhaimahAmount = String(standardRatedAmount);
+        emirateBreakdown.box1fRasAlKhaimahVat = String(standardRatedVat);
         break;
       case 'fujairah':
-        emirateBreakdown.box1gFujairahAmount = standardRatedAmount;
-        emirateBreakdown.box1gFujairahVat = standardRatedVat;
+        emirateBreakdown.box1gFujairahAmount = String(standardRatedAmount);
+        emirateBreakdown.box1gFujairahVat = String(standardRatedVat);
         break;
       case 'dubai':
       default:
-        emirateBreakdown.box1bDubaiAmount = standardRatedAmount;
-        emirateBreakdown.box1bDubaiVat = standardRatedVat;
+        emirateBreakdown.box1bDubaiAmount = String(standardRatedAmount);
+        emirateBreakdown.box1bDubaiVat = String(standardRatedVat);
         break;
     }
 
@@ -164,50 +164,50 @@ export function registerVATRoutes(app: Express) {
       // Emirate breakdown from company registration
       ...emirateBreakdown,
       // Box 2: Tourist Refund Scheme (manual entry needed)
-      box2TouristRefundAmount: 0,
-      box2TouristRefundVat: 0,
+      box2TouristRefundAmount: String(0),
+      box2TouristRefundVat: String(0),
       // Box 3: Reverse charge supplies (imports requiring reverse charge)
-      box3ReverseChargeAmount: 0,
-      box3ReverseChargeVat: 0,
+      box3ReverseChargeAmount: String(0),
+      box3ReverseChargeVat: String(0),
       // Box 4: Zero-rated supplies (exports, international services)
-      box4ZeroRatedAmount: zeroRatedAmount,
+      box4ZeroRatedAmount: String(zeroRatedAmount),
       // Box 5: Exempt supplies (financial services, residential rent)
-      box5ExemptAmount: exemptAmount,
+      box5ExemptAmount: String(exemptAmount),
       // Box 6: Imports subject to VAT
-      box6ImportsAmount: 0,
-      box6ImportsVat: 0,
+      box6ImportsAmount: String(0),
+      box6ImportsVat: String(0),
       // Box 7: Adjustments for imports
-      box7ImportsAdjAmount: 0,
-      box7ImportsAdjVat: 0,
+      box7ImportsAdjAmount: String(0),
+      box7ImportsAdjVat: String(0),
       // Box 8: Total output amounts and VAT
-      box8TotalAmount: totalOutputAmount,
-      box8TotalVat: totalOutputVat,
-      box8TotalAdj: 0,
+      box8TotalAmount: String(totalOutputAmount),
+      box8TotalVat: String(totalOutputVat),
+      box8TotalAdj: String(0),
       // Box 9: Standard rated expenses (input VAT recovery)
-      box9ExpensesAmount: totalExpenses,
-      box9ExpensesVat: inputTax,
-      box9ExpensesAdj: 0,
+      box9ExpensesAmount: String(totalExpenses),
+      box9ExpensesVat: String(inputTax),
+      box9ExpensesAdj: String(0),
       // Box 10: Reverse charge on imports (input side)
-      box10ReverseChargeAmount: 0,
-      box10ReverseChargeVat: 0,
+      box10ReverseChargeAmount: String(0),
+      box10ReverseChargeVat: String(0),
       // Box 11: Total input amounts and VAT
-      box11TotalAmount: totalExpenses,
-      box11TotalVat: inputTax,
-      box11TotalAdj: 0,
+      box11TotalAmount: String(totalExpenses),
+      box11TotalVat: String(inputTax),
+      box11TotalAdj: String(0),
       // Box 12-14: VAT calculations
-      box12TotalDueTax: totalOutputVat,
-      box13RecoverableTax: inputTax,
-      box14PayableTax: totalOutputVat - inputTax,
+      box12TotalDueTax: String(totalOutputVat),
+      box13RecoverableTax: String(inputTax),
+      box14PayableTax: String(totalOutputVat - inputTax),
       // Legacy fields for backward compatibility
-      box1SalesStandard: standardRatedAmount,
-      box2SalesOtherEmirates: 0,
-      box3SalesTaxExempt: zeroRatedAmount,
-      box4SalesExempt: exemptAmount,
-      box5TotalOutputTax: totalOutputVat,
-      box6ExpensesStandard: totalExpenses,
-      box7ExpensesTouristRefund: 0,
-      box8TotalInputTax: inputTax,
-      box9NetTax: totalOutputVat - inputTax,
+      box1SalesStandard: String(standardRatedAmount),
+      box2SalesOtherEmirates: String(0),
+      box3SalesTaxExempt: String(zeroRatedAmount),
+      box4SalesExempt: String(exemptAmount),
+      box5TotalOutputTax: String(totalOutputVat),
+      box6ExpensesStandard: String(totalExpenses),
+      box7ExpensesTouristRefund: String(0),
+      box8TotalInputTax: String(inputTax),
+      box9NetTax: String(totalOutputVat - inputTax),
       createdBy: userId,
     });
 

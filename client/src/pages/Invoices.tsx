@@ -820,7 +820,7 @@ export default function Invoices() {
                       <TableCell>{invoice.customerName}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(invoice.date, locale)}</TableCell>
                       <TableCell className="text-right font-mono font-medium">
-                        {formatCurrency(invoice.total, invoice.currency, locale)}
+                        {formatCurrency(Number(invoice.total), invoice.currency, locale)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Select
@@ -958,7 +958,7 @@ export default function Invoices() {
                                 const message = fillTemplate(templateStr, {
                                   customer_name: invoice.customerName,
                                   invoice_number: invoice.number,
-                                  amount: `${invoice.currency} ${invoice.total.toFixed(2)}`,
+                                  amount: `${invoice.currency} ${Number(invoice.total).toFixed(2)}`,
                                   due_date: dueDate.toLocaleDateString(locale === 'en' ? 'en-AE' : 'ar-AE'),
                                   link: shareUrl,
                                   company_name: company?.name || '',

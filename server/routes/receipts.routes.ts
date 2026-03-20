@@ -1,8 +1,11 @@
 import { Router, type Express, type Request, type Response } from 'express';
 import { storage } from '../storage';
+import { db } from '../db';
+import { journalEntries, journalLines, receipts as receiptsTable } from '../../shared/schema';
 import { z } from 'zod';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { eq } from 'drizzle-orm';
 import { insertInvoiceSchema } from '../../shared/schema';
 
 export function registerReceiptRoutes(app: Express) {
@@ -49,7 +52,7 @@ export function registerReceiptRoutes(app: Express) {
 
       // Check if amount is within 10% range
       const amountMatch = amount && receipt.amount &&
-        Math.abs(receipt.amount - amount) / amount < 0.1;
+        Math.abs(Number(receipt.amount) - amount) / amount < 0.1;
 
       // Check if date is within 7 days
       let dateMatch = false;
@@ -77,7 +80,7 @@ export function registerReceiptRoutes(app: Express) {
     });
   }));
 
-  app.post("/api/companies/:companyId/receipts", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/receipts", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -161,7 +164,7 @@ export function registerReceiptRoutes(app: Express) {
     }
 
     // Validate amount is present and positive
-    const totalAmount = (receipt.amount || 0) + (receipt.vatAmount || 0);
+    const totalAmount = (Number(receipt.amount) || 0) + (Number(receipt.vatAmount) || 0);
     if (totalAmount <= 0) {
       return res.status(400).json({ message: 'Receipt amount must be greater than zero' });
     }
@@ -192,13 +195,6 @@ export function registerReceiptRoutes(app: Express) {
       return res.status(400).json({ message: 'Payment account must be a cash or bank account (asset)' });
     }
 
-    // TODO: Wrap in database transaction to ensure atomicity
-    // For now, we'll proceed with the journal entry creation
-    // In production, this should be wrapped in a transaction
-    // NOTE: The operations below (journal entry creation, journal line creation,
-    // and receipt update) need to be wrapped in a database transaction to prevent
-    // partial writes if any step fails mid-way.
-
     // Parse date safely
     let entryDate: Date;
     try {
@@ -212,50 +208,71 @@ export function registerReceiptRoutes(app: Express) {
       entryDate = new Date();
     }
 
-    // Generate entry number atomically via storage helper
-    const entryNumber = await storage.generateEntryNumber(receipt.companyId, entryDate);
+    // Multi-currency support: determine exchange rate
+    const receiptCurrency = receipt.currency || 'AED';
+    let exchangeRate = 1.0;
+    if (receiptCurrency !== 'AED') {
+      exchangeRate = await storage.getLatestExchangeRate(receipt.companyId, 'AED', receiptCurrency);
+    }
 
-    // Create journal entry for the receipt
-    const entry = await storage.createJournalEntry({
-      companyId: receipt.companyId,
-      date: entryDate,
-      memo: `Receipt: ${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-      entryNumber,
-      status: 'posted',
-      source: 'receipt',
-      sourceId: receipt.id,
-      createdBy: userId,
-      postedBy: userId,
-      postedAt: new Date(),
+    // Convert amounts to base currency (AED) for GL
+    const baseTotalAmount = receiptCurrency !== 'AED' ? totalAmount * exchangeRate : totalAmount;
+
+    // Wrap receipt posting + journal entry in a single transaction
+    const updatedReceipt = await (db as any).transaction(async (tx: any) => {
+      const entryNumber = await storage.generateEntryNumber(receipt.companyId, entryDate, tx);
+
+      // Create journal entry for the receipt
+      const [entry] = await tx.insert(journalEntries).values({
+        companyId: receipt.companyId,
+        date: entryDate,
+        memo: `Receipt: ${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
+        entryNumber,
+        status: 'posted',
+        source: 'receipt',
+        sourceId: receipt.id,
+        createdBy: userId,
+        postedBy: userId,
+        postedAt: new Date(),
+        currency: receiptCurrency,
+        exchangeRate: String(exchangeRate),
+      }).returning();
+
+      // Debit: Expense Account (total amount including VAT)
+      await tx.insert(journalLines).values({
+        entryId: entry.id,
+        accountId: expenseAccount.id,
+        debit: baseTotalAmount,
+        credit: 0,
+        description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
+        ...(receiptCurrency !== 'AED' ? { originalAmount: totalAmount, originalCurrency: receiptCurrency } : {}),
+      });
+
+      // Credit: Payment Account (cash/bank)
+      await tx.insert(journalLines).values({
+        entryId: entry.id,
+        accountId: paymentAccount.id,
+        debit: 0,
+        credit: baseTotalAmount,
+        description: `Payment for ${receipt.merchant || 'expense'}`,
+        ...(receiptCurrency !== 'AED' ? { originalAmount: totalAmount, originalCurrency: receiptCurrency } : {}),
+      });
+
+      // Update receipt with posting information
+      const [updated] = await tx.update(receiptsTable)
+        .set({
+          accountId,
+          paymentAccountId,
+          posted: true,
+          journalEntryId: entry.id,
+        })
+        .where(eq(receiptsTable.id, id))
+        .returning();
+
+      return updated;
     });
 
-    // Debit: Expense Account (total amount including VAT)
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: expenseAccount.id,
-      debit: totalAmount,
-      credit: 0,
-      description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-    });
-
-    // Credit: Payment Account (cash/bank)
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: paymentAccount.id,
-      debit: 0,
-      credit: totalAmount,
-      description: `Payment for ${receipt.merchant || 'expense'}`,
-    });
-
-    // Update receipt with posting information
-    const updatedReceipt = await storage.updateReceipt(id, {
-      accountId,
-      paymentAccountId,
-      posted: true,
-      journalEntryId: entry.id,
-    });
-
-    console.log('[Receipts] Receipt posted successfully:', id, 'Journal entry:', entry.id);
+    console.log('[Receipts] Receipt posted successfully:', id);
     res.json(updatedReceipt);
   }));
 }

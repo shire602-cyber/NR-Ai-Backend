@@ -145,7 +145,7 @@ export function registerReminderRoutes(app: Express) {
         id: `invoice-${inv.id}`,
         type: isOverdue ? 'invoice_overdue' : 'invoice_due',
         title: isOverdue ? `Invoice ${inv.number} Overdue` : `Invoice ${inv.number} Due Soon`,
-        description: `${inv.customerName} - AED ${inv.total.toFixed(2)}`,
+        description: `${inv.customerName} - AED ${Number(inv.total).toFixed(2)}`,
         dueDate: dueDate.toISOString(),
         daysRemaining,
         priority: isOverdue ? 'urgent' : (daysRemaining <= 7 ? 'high' : 'normal'),

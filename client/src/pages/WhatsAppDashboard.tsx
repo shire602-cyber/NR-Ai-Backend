@@ -200,7 +200,7 @@ export default function WhatsAppDashboard() {
     const message = fillTemplate(templateStr, {
       customer_name: inv.customerName || 'Customer',
       invoice_number: inv.number,
-      amount: `AED ${inv.total.toFixed(2)}`,
+      amount: `AED ${Number(inv.total).toFixed(2)}`,
       due_date: dueDate.toLocaleDateString(en ? 'en-AE' : 'ar-AE'),
       company_name: currentCompany?.name || 'Our Company',
     });
@@ -271,7 +271,7 @@ export default function WhatsAppDashboard() {
         const message = fillTemplate(templateStr, {
           customer_name: inv.customerName || 'Customer',
           invoice_number: inv.number,
-          amount: `AED ${inv.total.toFixed(2)}`,
+          amount: `AED ${Number(inv.total).toFixed(2)}`,
           due_date: dueDate.toLocaleDateString(en ? 'en-AE' : 'ar-AE'),
           company_name: currentCompany?.name || 'Our Company',
         });
@@ -396,7 +396,7 @@ export default function WhatsAppDashboard() {
                         .filter(inv => inv.status !== 'paid')
                         .map(inv => (
                           <SelectItem key={inv.id} value={inv.id}>
-                            {inv.number} - {inv.customerName} - AED {inv.total.toFixed(2)}
+                            {inv.number} - {inv.customerName} - AED {Number(inv.total).toFixed(2)}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -425,7 +425,7 @@ export default function WhatsAppDashboard() {
                   return inv ? (
                     <div className="p-3 rounded-lg bg-muted text-sm space-y-1">
                       <p><strong>{en ? 'Customer' : 'العميل'}:</strong> {inv.customerName}</p>
-                      <p><strong>{en ? 'Amount' : 'المبلغ'}:</strong> AED {inv.total.toFixed(2)}</p>
+                      <p><strong>{en ? 'Amount' : 'المبلغ'}:</strong> AED {Number(inv.total).toFixed(2)}</p>
                       <p><strong>{en ? 'Phone' : 'الهاتف'}:</strong> {cust?.phone || (en ? 'No phone' : 'لا يوجد رقم')}</p>
                     </div>
                   ) : null;

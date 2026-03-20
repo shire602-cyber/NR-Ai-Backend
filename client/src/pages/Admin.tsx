@@ -1350,8 +1350,8 @@ function PlanForm({
   const [formData, setFormData] = useState<Partial<SubscriptionPlan>>(initialData || {
     name: '',
     description: '',
-    priceMonthly: 0,
-    priceYearly: 0,
+    priceMonthly: '0',
+    priceYearly: '0',
     currency: 'AED',
     maxCompanies: 1,
     maxUsers: 1,
@@ -1415,7 +1415,7 @@ function PlanForm({
             id="priceMonthly"
             type="number"
             value={formData.priceMonthly || 0}
-            onChange={(e) => setFormData({ ...formData, priceMonthly: parseFloat(e.target.value) })}
+            onChange={(e) => setFormData({ ...formData, priceMonthly: e.target.value })}
             required
             data-testid="input-price-monthly"
           />
@@ -1426,7 +1426,7 @@ function PlanForm({
             id="priceYearly"
             type="number"
             value={formData.priceYearly || 0}
-            onChange={(e) => setFormData({ ...formData, priceYearly: parseFloat(e.target.value) })}
+            onChange={(e) => setFormData({ ...formData, priceYearly: e.target.value })}
             data-testid="input-price-yearly"
           />
         </div>

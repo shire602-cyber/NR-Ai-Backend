@@ -55,7 +55,9 @@ import type {
   RecurringInvoice, InsertRecurringInvoice,
   CorporateTaxReturn, InsertCorporateTaxReturn,
   Product, InsertProduct,
-  InventoryMovement, InsertInventoryMovement
+  InventoryMovement, InsertInventoryMovement,
+  CreditNote, InsertCreditNote,
+  CreditNoteLine, InsertCreditNoteLine
 } from "@shared/schema";
 import {
   users,
@@ -114,10 +116,13 @@ import {
   recurringInvoices,
   corporateTaxReturns,
   products,
-  inventoryMovements
+  inventoryMovements,
+  exchangeRates,
+  creditNotes,
+  creditNoteLines
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, lte } from "drizzle-orm";
+import { eq, and, desc, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -141,6 +146,7 @@ export interface IStorage {
   // Accounts
   getAccount(id: string): Promise<Account | undefined>;
   getAccountsByCompanyId(companyId: string): Promise<Account[]>;
+  getAccountByCode(companyId: string, code: string): Promise<Account | undefined>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: string, data: Partial<InsertAccount>): Promise<Account>;
   deleteAccount(id: string): Promise<void>;
@@ -202,7 +208,7 @@ export interface IStorage {
   createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry>;
   updateJournalEntry(id: string, data: Partial<InsertJournalEntry>): Promise<JournalEntry>;
   deleteJournalEntry(id: string): Promise<void>;
-  generateEntryNumber(companyId: string, date: Date): Promise<string>;
+  generateEntryNumber(companyId: string, date: Date, tx?: any): Promise<string>;
   
   // Journal Lines
   createJournalLine(line: InsertJournalLine): Promise<JournalLine>;
@@ -302,6 +308,7 @@ export interface IStorage {
 
   // E-Commerce Integrations
   getEcommerceIntegrations(companyId: string): Promise<EcommerceIntegration[]>;
+  getEcommerceIntegration(id: string): Promise<EcommerceIntegration | undefined>;
   createEcommerceIntegration(integration: InsertEcommerceIntegration): Promise<EcommerceIntegration>;
   updateEcommerceIntegration(id: string, data: Partial<InsertEcommerceIntegration>): Promise<EcommerceIntegration>;
   deleteEcommerceIntegration(id: string): Promise<void>;
@@ -544,6 +551,26 @@ export interface IStorage {
   getInventoryMovementsByProductId(productId: string): Promise<InventoryMovement[]>;
   getInventoryMovementsByCompanyId(companyId: string): Promise<InventoryMovement[]>;
   createInventoryMovement(data: InsertInventoryMovement): Promise<InventoryMovement>;
+
+  // Exchange Rates
+  getExchangeRatesByCompanyId(companyId: string): Promise<any[]>;
+  getExchangeRate(id: string): Promise<any>;
+  getLatestExchangeRate(companyId: string, baseCurrency: string, targetCurrency: string): Promise<number>;
+  createExchangeRate(data: any): Promise<any>;
+  updateExchangeRate(id: string, data: any): Promise<any>;
+  deleteExchangeRate(id: string): Promise<void>;
+
+  // Credit Notes
+  getCreditNotesByCompanyId(companyId: string): Promise<CreditNote[]>;
+  getCreditNote(id: string): Promise<CreditNote | undefined>;
+  createCreditNote(data: InsertCreditNote): Promise<CreditNote>;
+  updateCreditNote(id: string, data: Partial<InsertCreditNote>): Promise<CreditNote>;
+  deleteCreditNote(id: string): Promise<void>;
+
+  // Credit Note Lines
+  getCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<CreditNoteLine[]>;
+  createCreditNoteLine(data: InsertCreditNoteLine): Promise<CreditNoteLine>;
+  deleteCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -587,7 +614,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(companyUsers, eq(companies.id, companyUsers.companyId))
       .where(eq(companyUsers.userId, userId));
     
-    return results.map(r => r.companies);
+    return results.map((r: any) => r.companies);
   }
 
   async createCompany(insertCompany: InsertCompany): Promise<Company> {
@@ -648,6 +675,15 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(accounts).where(eq(accounts.companyId, companyId));
   }
 
+  async getAccountByCode(companyId: string, code: string): Promise<Account | undefined> {
+    const [account] = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.companyId, companyId), eq(accounts.code, code)))
+      .limit(1);
+    return account;
+  }
+
   async createAccount(insertAccount: InsertAccount): Promise<Account> {
     const [account] = await db
       .insert(accounts)
@@ -684,14 +720,6 @@ export class DatabaseStorage implements IStorage {
     return account;
   }
 
-  async getAccountByCode(companyId: string, code: string): Promise<Account | undefined> {
-    const [account] = await db
-      .select()
-      .from(accounts)
-      .where(and(eq(accounts.companyId, companyId), eq(accounts.code, code)));
-    return account || undefined;
-  }
-
   async getVatAccounts(companyId: string): Promise<Account[]> {
     return await db
       .select()
@@ -703,7 +731,7 @@ export class DatabaseStorage implements IStorage {
     if (accountsData.length === 0) return [];
     
     const expectedCount = accountsData.length;
-    const createdAccounts = await db.transaction(async (tx) => {
+    const createdAccounts = await db.transaction(async (tx: any) => {
       const inserted = await tx
         .insert(accounts)
         .values(accountsData)
@@ -741,8 +769,8 @@ export class DatabaseStorage implements IStorage {
   async getAccountsWithBalances(companyId: string, dateRange?: { start: Date; end: Date }) {
     const accountsList = await db.select().from(accounts).where(eq(accounts.companyId, companyId));
     
-    const results = await Promise.all(accountsList.map(async (account) => {
-      let lines = await db
+    const results = await Promise.all(accountsList.map(async (account: any) => {
+      let lines: any[] = await db
         .select({
           debit: journalLines.debit,
           credit: journalLines.credit,
@@ -752,18 +780,18 @@ export class DatabaseStorage implements IStorage {
         .from(journalLines)
         .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
         .where(eq(journalLines.accountId, account.id));
-      
+
       if (dateRange) {
-        lines = lines.filter(line => {
+        lines = lines.filter((line: any) => {
           const lineDate = new Date(line.date);
           return lineDate >= dateRange.start && lineDate <= dateRange.end;
         });
       }
+
+      const postedLines = lines.filter((l: any) => l.status === 'posted');
       
-      const postedLines = lines.filter(l => l.status === 'posted');
-      
-      const debitTotal = postedLines.reduce((sum, l) => sum + (l.debit || 0), 0);
-      const creditTotal = postedLines.reduce((sum, l) => sum + (l.credit || 0), 0);
+      const debitTotal = postedLines.reduce((sum: number, l: any) => sum + Number(l.debit || 0), 0);
+      const creditTotal = postedLines.reduce((sum: number, l: any) => sum + Number(l.credit || 0), 0);
       
       let balance = 0;
       if (['asset', 'expense'].includes(account.type)) {
@@ -812,14 +840,14 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
       .where(eq(journalLines.accountId, accountId));
     
-    const postedLines = allLines.filter(l => l.status === 'posted');
-    postedLines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
+    const postedLines = allLines.filter((l: any) => l.status === 'posted');
+    postedLines.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
     let openingBalance = 0;
     if (options?.dateStart) {
-      const priorLines = postedLines.filter(l => new Date(l.date) < options.dateStart!);
-      const priorDebit = priorLines.reduce((sum, l) => sum + (l.debit || 0), 0);
-      const priorCredit = priorLines.reduce((sum, l) => sum + (l.credit || 0), 0);
+      const priorLines = postedLines.filter((l: any) => new Date(l.date) < options.dateStart!);
+      const priorDebit = priorLines.reduce((sum: number, l: any) => sum + Number(l.debit || 0), 0);
+      const priorCredit = priorLines.reduce((sum: number, l: any) => sum + Number(l.credit || 0), 0);
       
       if (['asset', 'expense'].includes(account.type)) {
         openingBalance = priorDebit - priorCredit;
@@ -830,28 +858,28 @@ export class DatabaseStorage implements IStorage {
     
     let filteredLines = postedLines;
     if (options?.dateStart) {
-      filteredLines = filteredLines.filter(l => new Date(l.date) >= options.dateStart!);
+      filteredLines = filteredLines.filter((l: any) => new Date(l.date) >= options.dateStart!);
     }
     if (options?.dateEnd) {
-      filteredLines = filteredLines.filter(l => new Date(l.date) <= options.dateEnd!);
+      filteredLines = filteredLines.filter((l: any) => new Date(l.date) <= options.dateEnd!);
     }
-    
+
     if (options?.search) {
       const searchLower = options.search.toLowerCase();
-      filteredLines = filteredLines.filter(l => 
+      filteredLines = filteredLines.filter((l: any) =>
         l.entryNumber?.toLowerCase().includes(searchLower) ||
         l.memo?.toLowerCase().includes(searchLower) ||
         l.lineDescription?.toLowerCase().includes(searchLower)
       );
     }
-    
+
     let runningBalance = openingBalance;
     let totalDebit = 0;
     let totalCredit = 0;
-    
-    const allEntries = filteredLines.map(line => {
-      const debit = line.debit || 0;
-      const credit = line.credit || 0;
+
+    const allEntries = filteredLines.map((line: any) => {
+      const debit = Number(line.debit || 0);
+      const credit = Number(line.credit || 0);
       
       totalDebit += debit;
       totalCredit += credit;
@@ -937,22 +965,18 @@ export class DatabaseStorage implements IStorage {
     await db.delete(journalEntries).where(eq(journalEntries.id, id));
   }
 
-  async generateEntryNumber(companyId: string, date: Date): Promise<string> {
+  async generateEntryNumber(companyId: string, date: Date, tx?: any): Promise<string> {
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     const prefix = `JE-${dateStr}`;
-    
-    // Get count of entries for this company and date prefix using SQL for atomicity
-    const allEntries = await db
-      .select()
-      .from(journalEntries)
-      .where(eq(journalEntries.companyId, companyId));
-    
-    // Filter entries that match this date prefix
-    const todayEntries = allEntries.filter(e => 
-      e.entryNumber?.startsWith(prefix)
+
+    // Use SELECT FOR UPDATE to lock matching rows and prevent duplicate entry numbers
+    const executor = tx || db;
+    const result = await executor.execute(
+      sql`SELECT COUNT(*) as count FROM journal_entries WHERE company_id = ${companyId} AND entry_number LIKE ${prefix + '%'} FOR UPDATE`
     );
-    
-    const nextNumber = todayEntries.length + 1;
+
+    const count = Number(result.rows?.[0]?.count || 0);
+    const nextNumber = count + 1;
     return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
   }
 
@@ -1513,6 +1537,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(ecommerceIntegrations.createdAt));
   }
 
+  async getEcommerceIntegration(id: string): Promise<EcommerceIntegration | undefined> {
+    const [integration] = await db
+      .select()
+      .from(ecommerceIntegrations)
+      .where(eq(ecommerceIntegrations.id, id))
+      .limit(1);
+    return integration;
+  }
+
   async createEcommerceIntegration(insertIntegration: InsertEcommerceIntegration): Promise<EcommerceIntegration> {
     const [integration] = await db
       .insert(ecommerceIntegrations)
@@ -1547,7 +1580,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(ecommerceIntegrations, eq(ecommerceTransactions.integrationId, ecommerceIntegrations.id))
       .where(eq(ecommerceIntegrations.companyId, companyId));
     
-    return results.map(r => r.ecommerceTransactions);
+    return results.map((r: any) => r.ecommerceTransactions);
   }
 
   async createEcommerceTransaction(insertTransaction: InsertEcommerceTransaction): Promise<EcommerceTransaction> {
@@ -2105,7 +2138,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(companyUsers.userId, users.id))
       .where(eq(companyUsers.companyId, companyId));
     
-    return results.map(r => ({
+    return results.map((r: any) => ({
       ...r.company_users,
       user: r.users
     }));
@@ -2768,6 +2801,91 @@ export class DatabaseStorage implements IStorage {
       .values(data)
       .returning();
     return movement;
+  }
+
+  // Exchange Rates
+  async getExchangeRatesByCompanyId(companyId: string): Promise<any[]> {
+    return await db.select().from(exchangeRates).where(eq(exchangeRates.companyId, companyId));
+  }
+
+  async getExchangeRate(id: string): Promise<any> {
+    const [rate] = await db.select().from(exchangeRates).where(eq(exchangeRates.id, id)).limit(1);
+    return rate;
+  }
+
+  async getLatestExchangeRate(companyId: string, baseCurrency: string, targetCurrency: string): Promise<number> {
+    const [rate] = await db
+      .select()
+      .from(exchangeRates)
+      .where(
+        and(
+          eq(exchangeRates.companyId, companyId),
+          eq(exchangeRates.baseCurrency, baseCurrency),
+          eq(exchangeRates.targetCurrency, targetCurrency)
+        )
+      )
+      .orderBy(desc(exchangeRates.effectiveDate))
+      .limit(1);
+    return rate ? Number(rate.rate) : 1.0;
+  }
+
+  async createExchangeRate(data: any): Promise<any> {
+    const [rate] = await db.insert(exchangeRates).values(data).returning();
+    return rate;
+  }
+
+  async updateExchangeRate(id: string, data: any): Promise<any> {
+    const [rate] = await db.update(exchangeRates).set(data).where(eq(exchangeRates.id, id)).returning();
+    return rate;
+  }
+
+  async deleteExchangeRate(id: string): Promise<void> {
+    await db.delete(exchangeRates).where(eq(exchangeRates.id, id));
+  }
+
+  // Credit Notes
+  async getCreditNotesByCompanyId(companyId: string): Promise<CreditNote[]> {
+    return await db
+      .select()
+      .from(creditNotes)
+      .where(eq(creditNotes.companyId, companyId))
+      .orderBy(desc(creditNotes.date));
+  }
+
+  async getCreditNote(id: string): Promise<CreditNote | undefined> {
+    const [note] = await db.select().from(creditNotes).where(eq(creditNotes.id, id));
+    return note || undefined;
+  }
+
+  async createCreditNote(data: InsertCreditNote): Promise<CreditNote> {
+    const [note] = await db.insert(creditNotes).values(data).returning();
+    return note;
+  }
+
+  async updateCreditNote(id: string, data: Partial<InsertCreditNote>): Promise<CreditNote> {
+    const [note] = await db.update(creditNotes).set(data).where(eq(creditNotes.id, id)).returning();
+    return note;
+  }
+
+  async deleteCreditNote(id: string): Promise<void> {
+    await db.delete(creditNotes).where(eq(creditNotes.id, id));
+  }
+
+  // Credit Note Lines
+  async getCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<CreditNoteLine[]> {
+    return await db
+      .select()
+      .from(creditNoteLines)
+      .where(eq(creditNoteLines.creditNoteId, creditNoteId));
+  }
+
+  async createCreditNoteLine(data: InsertCreditNoteLine): Promise<CreditNoteLine> {
+    const [line] = await db.insert(creditNoteLines).values(data).returning();
+    return line;
+  }
+
+  async deleteCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<void> {
+    await db.delete(creditNoteLines).where(eq(creditNoteLines.creditNoteId, creditNoteId));
   }
 }
 

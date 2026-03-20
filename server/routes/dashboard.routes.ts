@@ -14,7 +14,8 @@ export function registerDashboardRoutes(app: Express) {
   app.get("/api/companies/:companyId/dashboard/stats", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const invoices = await storage.getInvoicesByCompanyId(companyId);
-    const entries = await storage.getJournalEntriesByCompanyId(companyId);
+    let entries = await storage.getJournalEntriesByCompanyId(companyId);
+    entries = entries.filter(e => e.status === 'posted');
     const accounts = await storage.getAccountsByCompanyId(companyId);
 
     // Calculate from journal entries
@@ -27,9 +28,9 @@ export function registerDashboardRoutes(app: Express) {
 
         const current = balances.get(account.type) || 0;
         if (account.type === 'income') {
-          balances.set('income', current + line.credit - line.debit);
+          balances.set('income', current + Number(line.credit) - Number(line.debit));
         } else if (account.type === 'expense') {
-          balances.set('expense', current + line.debit - line.credit);
+          balances.set('expense', current + Number(line.debit) - Number(line.credit));
         }
       }
     }
@@ -37,7 +38,7 @@ export function registerDashboardRoutes(app: Express) {
     const revenue = balances.get('income') || 0;
     const expenses = balances.get('expense') || 0;
     const outstanding = invoices.filter(inv => inv.status === 'sent' || inv.status === 'draft')
-      .reduce((sum, inv) => sum + inv.total, 0);
+      .reduce((sum, inv) => sum + Number(inv.total), 0);
 
     res.json({
       revenue,
@@ -50,7 +51,8 @@ export function registerDashboardRoutes(app: Express) {
 
   app.get("/api/companies/:companyId/dashboard/expense-breakdown", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
-    const entries = await storage.getJournalEntriesByCompanyId(companyId);
+    let entries = await storage.getJournalEntriesByCompanyId(companyId);
+    entries = entries.filter(e => e.status === 'posted');
     const accounts = await storage.getAccountsByCompanyId(companyId);
     const expenseAccounts = accounts.filter(a => a.type === 'expense');
 
@@ -62,7 +64,7 @@ export function registerDashboardRoutes(app: Express) {
         if (!account || account.type !== 'expense') continue;
 
         const current = balances.get(account.id) || 0;
-        balances.set(account.id, current + line.debit - line.credit);
+        balances.set(account.id, current + Number(line.debit) - Number(line.credit));
       }
     }
 
@@ -81,7 +83,8 @@ export function registerDashboardRoutes(app: Express) {
   app.get("/api/companies/:companyId/dashboard/monthly-trends", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const invoices = await storage.getInvoicesByCompanyId(companyId);
-    const entries = await storage.getJournalEntriesByCompanyId(companyId);
+    let entries = await storage.getJournalEntriesByCompanyId(companyId);
+    entries = entries.filter(e => e.status === 'posted');
     const accounts = await storage.getAccountsByCompanyId(companyId);
 
     // Get last 6 months
@@ -102,7 +105,7 @@ export function registerDashboardRoutes(app: Express) {
           const invDate = new Date(inv.date);
           return invDate.getMonth() === monthNum && invDate.getFullYear() === yearNum;
         })
-        .reduce((sum, inv) => sum + (inv.subtotal || 0), 0);
+        .reduce((sum, inv) => sum + (Number(inv.subtotal) || 0), 0);
 
       // Calculate expenses from journal entries
       let expenses = 0;
@@ -113,7 +116,7 @@ export function registerDashboardRoutes(app: Express) {
           for (const line of lines) {
             const account = accounts.find(a => a.id === line.accountId);
             if (account && account.type === 'expense') {
-              expenses += line.debit - line.credit;
+              expenses += Number(line.debit) - Number(line.credit);
             }
           }
         }
@@ -135,6 +138,7 @@ export function registerDashboardRoutes(app: Express) {
 
     const accounts = await storage.getAccountsByCompanyId(companyId);
     let entries = await storage.getJournalEntriesByCompanyId(companyId);
+    entries = entries.filter(e => e.status === 'posted');
 
     // Filter entries by date range if provided
     if (startDate || endDate) {
@@ -160,9 +164,9 @@ export function registerDashboardRoutes(app: Express) {
 
         const current = balances.get(account.id) || 0;
         if (account.type === 'income') {
-          balances.set(account.id, current + line.credit - line.debit);
+          balances.set(account.id, current + Number(line.credit) - Number(line.debit));
         } else if (account.type === 'expense') {
-          balances.set(account.id, current + line.debit - line.credit);
+          balances.set(account.id, current + Number(line.debit) - Number(line.credit));
         }
       }
     }
@@ -202,6 +206,7 @@ export function registerDashboardRoutes(app: Express) {
 
     const accounts = await storage.getAccountsByCompanyId(companyId);
     let entries = await storage.getJournalEntriesByCompanyId(companyId);
+    entries = entries.filter(e => e.status === 'posted');
 
     // Filter entries by date range if provided
     if (startDate || endDate) {
@@ -227,9 +232,9 @@ export function registerDashboardRoutes(app: Express) {
 
         const current = balances.get(account.id) || 0;
         if (account.type === 'asset' || account.type === 'expense') {
-          balances.set(account.id, current + line.debit - line.credit);
+          balances.set(account.id, current + Number(line.debit) - Number(line.credit));
         } else {
-          balances.set(account.id, current + line.credit - line.debit);
+          balances.set(account.id, current + Number(line.credit) - Number(line.debit));
         }
       }
     }
@@ -254,6 +259,16 @@ export function registerDashboardRoutes(app: Express) {
         accountName: a.nameEn,
         amount: balances.get(a.id) || 0,
       }));
+
+    // Include current-period net income in equity so A = L + E holds
+    const incomeTotal = accounts
+      .filter(a => a.type === 'income')
+      .reduce((sum, a) => sum + (balances.get(a.id) || 0), 0);
+    const expenseTotal = accounts
+      .filter(a => a.type === 'expense')
+      .reduce((sum, a) => sum + (balances.get(a.id) || 0), 0);
+    const netIncome = incomeTotal - expenseTotal;
+    equity.push({ accountName: "Current Period Earnings", amount: netIncome });
 
     const totalAssets = assets.reduce((sum, item) => sum + item.amount, 0);
     const totalLiabilities = liabilities.reduce((sum, item) => sum + item.amount, 0);
@@ -289,6 +304,7 @@ export function registerDashboardRoutes(app: Express) {
       });
 
       receipts = receipts.filter(receipt => {
+        if (!receipt.date) return false;
         const receiptDate = new Date(receipt.date);
         if (start && receiptDate < start) return false;
         if (end && receiptDate > end) return false;
@@ -301,8 +317,8 @@ export function registerDashboardRoutes(app: Express) {
 
     for (const invoice of invoices) {
       if (invoice.status !== 'void') {
-        salesSubtotal += invoice.subtotal;
-        salesVAT += invoice.vatAmount;
+        salesSubtotal += Number(invoice.subtotal);
+        salesVAT += Number(invoice.vatAmount);
       }
     }
 
@@ -315,8 +331,8 @@ export function registerDashboardRoutes(app: Express) {
       if (receipt.posted) {
         // receipt.amount = subtotal (VAT-exclusive)
         // receipt.vatAmount = VAT amount (separate field)
-        purchasesSubtotal += (receipt.amount || 0);
-        purchasesVAT += (receipt.vatAmount || 0);
+        purchasesSubtotal += (Number(receipt.amount) || 0);
+        purchasesVAT += (Number(receipt.vatAmount) || 0);
       }
     }
 
@@ -344,7 +360,8 @@ export function registerDashboardRoutes(app: Express) {
 
     const invoices = await storage.getInvoicesByCompanyId(companyId as string);
     const accounts = await storage.getAccountsByCompanyId(companyId as string);
-    const entries = await storage.getJournalEntriesByCompanyId(companyId as string);
+    let entries = await storage.getJournalEntriesByCompanyId(companyId as string);
+    entries = entries.filter(e => e.status === 'posted');
 
     // Calculate revenue and expenses from journal entries
     const balances = new Map<string, number>();
@@ -355,16 +372,16 @@ export function registerDashboardRoutes(app: Express) {
         if (!account) continue;
         const current = balances.get(account.type) || 0;
         if (account.type === 'income') {
-          balances.set('income', current + line.credit - line.debit);
+          balances.set('income', current + Number(line.credit) - Number(line.debit));
         } else if (account.type === 'expense') {
-          balances.set('expense', current + line.debit - line.credit);
+          balances.set('expense', current + Number(line.debit) - Number(line.credit));
         }
       }
     }
 
     const outstanding = invoices
       .filter(inv => inv.status === 'sent' || inv.status === 'draft')
-      .reduce((sum, inv) => sum + inv.total, 0);
+      .reduce((sum, inv) => sum + Number(inv.total), 0);
 
     res.json({
       revenue: balances.get('income') || 0,
@@ -392,7 +409,8 @@ export function registerDashboardRoutes(app: Express) {
     }
 
     const accounts = await storage.getAccountsByCompanyId(companyId as string);
-    const entries = await storage.getJournalEntriesByCompanyId(companyId as string);
+    let entries = await storage.getJournalEntriesByCompanyId(companyId as string);
+    entries = entries.filter(e => e.status === 'posted');
 
     const balances = new Map<string, { name: string; value: number }>();
 
@@ -403,7 +421,7 @@ export function registerDashboardRoutes(app: Express) {
         if (!account || account.type !== 'expense') continue;
 
         const current = balances.get(account.id) || { name: account.nameEn, value: 0 };
-        current.value += line.debit - line.credit;
+        current.value += Number(line.debit) - Number(line.credit);
         balances.set(account.id, current);
       }
     }

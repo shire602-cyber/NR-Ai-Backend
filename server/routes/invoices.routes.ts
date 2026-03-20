@@ -1,12 +1,18 @@
 import { Router, type Express, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { storage } from '../storage';
+import { db } from '../db';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
-import { insertInvoiceSchema } from '../../shared/schema';
+import { insertInvoiceSchema, invoices as invoicesTable, invoiceLines as invoiceLinesTable, journalEntries, journalLines, inventoryMovements, products } from '../../shared/schema';
 import { generateInvoicePDF } from '../services/pdf-invoice.service';
 import { generateEInvoiceXML } from '../services/einvoice.service';
+import { ACCOUNT_CODES } from '../lib/account-codes';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('invoices');
 
 export function registerInvoiceRoutes(app: Express) {
   // =====================================
@@ -75,7 +81,7 @@ export function registerInvoiceRoutes(app: Express) {
 
       // Check if total is within 10% range
       const amountMatch = total && invoice.total &&
-        Math.abs(invoice.total - total) / total < 0.1;
+        Math.abs(Number(invoice.total) - total) / total < 0.1;
 
       // Check if date is within 7 days
       let dateMatch = false;
@@ -123,7 +129,7 @@ export function registerInvoiceRoutes(app: Express) {
     for (const line of lines) {
       const lineTotal = line.quantity * line.unitPrice;
       subtotal += lineTotal;
-      vatAmount += lineTotal * (line.vatRate || 0.05);
+      vatAmount += lineTotal * (line.vatRate || 0);
     }
 
     const total = subtotal + vatAmount;
@@ -142,79 +148,206 @@ export function registerInvoiceRoutes(app: Express) {
       linesCount: lines.length
     });
 
-    // Create invoice
-    const invoice = await storage.createInvoice({
-      ...invoiceData,
-      date: invoiceDate,
-      companyId,
-      subtotal,
-      vatAmount,
-      total,
-    });
+    // Resolve accounts by code (not by fragile nameEn string matching)
+    const accountsReceivable = await storage.getAccountByCode(companyId, ACCOUNT_CODES.ACCOUNTS_RECEIVABLE);
+    const salesRevenue = await storage.getAccountByCode(companyId, ACCOUNT_CODES.PRODUCT_SALES);
+    const vatPayable = await storage.getAccountByCode(companyId, ACCOUNT_CODES.VAT_PAYABLE_OUTPUT);
 
-    // Create invoice lines
-    for (const line of lines) {
-      await storage.createInvoiceLine({
-        invoiceId: invoice.id,
-        ...line,
-      });
+    if (!accountsReceivable || !salesRevenue) {
+      return res.status(500).json({ message: `Required accounts not found in chart of accounts for company ${companyId}. Ensure Accounts Receivable (${ACCOUNT_CODES.ACCOUNTS_RECEIVABLE}) and Product Sales (${ACCOUNT_CODES.PRODUCT_SALES}) exist.` });
     }
 
-    // Revenue recognition: create journal entry immediately when invoice is raised
-    const accounts = await storage.getAccountsByCompanyId(companyId);
-    const accountsReceivable = accounts.find(a => a.nameEn === 'Accounts Receivable');
-    const salesRevenue = accounts.find(a => a.nameEn === 'Sales Revenue');
-    const vatPayable = accounts.find(a => a.nameEn === 'VAT Payable');
+    // Multi-currency support: determine exchange rate
+    const invoiceCurrency = invoiceData.currency || 'AED';
+    let exchangeRate = 1.0;
+    if (invoiceCurrency !== 'AED') {
+      exchangeRate = await storage.getLatestExchangeRate(companyId, 'AED', invoiceCurrency);
+    }
 
-    if (accountsReceivable && salesRevenue) {
-      // Generate entry number atomically via storage helper
-      const entryNumber = await storage.generateEntryNumber(companyId, invoiceDate);
-
-      const entry = await storage.createJournalEntry({
-        companyId: companyId,
+    // Wrap invoice creation + journal entry in a single transaction
+    const invoice = await (db as any).transaction(async (tx: any) => {
+      // Create invoice
+      const [inv] = await tx.insert(invoicesTable).values({
+        ...invoiceData,
         date: invoiceDate,
-        memo: `Sales Invoice ${invoice.number} - ${invoice.customerName}`,
-        entryNumber,
-        status: 'draft', // Wait for manual posting
-        source: 'invoice',
-        sourceId: invoice.id,
-        createdBy: userId,
-        postedBy: null,
-        postedAt: null,
-      });
+        companyId,
+        subtotal,
+        vatAmount,
+        total,
+      }).returning();
 
-      // Debit: Accounts Receivable (total)
-      await storage.createJournalLine({
-        entryId: entry.id,
-        accountId: accountsReceivable.id,
-        debit: total,
-        credit: 0,
-        description: `Invoice ${invoice.number} - ${invoice.customerName}`,
-      });
-
-      // Credit: Sales Revenue (subtotal)
-      await storage.createJournalLine({
-        entryId: entry.id,
-        accountId: salesRevenue.id,
-        debit: 0,
-        credit: subtotal,
-        description: `Sales revenue - Invoice ${invoice.number}`,
-      });
-
-      // Credit: VAT Payable (vat amount) - if there's VAT
-      if (vatAmount > 0 && vatPayable) {
-        await storage.createJournalLine({
-          entryId: entry.id,
-          accountId: vatPayable.id,
-          debit: 0,
-          credit: vatAmount,
-          description: `VAT output - Invoice ${invoice.number}`,
+      // Create invoice lines
+      for (const line of lines) {
+        await tx.insert(invoiceLinesTable).values({
+          invoiceId: inv.id,
+          ...line,
         });
       }
 
-      console.log('[Invoices] Revenue recognition journal entry created:', entryNumber, 'for invoice:', invoice.id);
-    } else {
-      console.warn('[Invoices] Could not create revenue recognition entry - missing accounts');
+      // Generate entry number atomically via storage helper
+      const entryNumber = await storage.generateEntryNumber(companyId, invoiceDate, tx);
+
+      // Convert amounts to base currency (AED) for GL
+      const baseTotal = invoiceCurrency !== 'AED' ? total * exchangeRate : total;
+      const baseSubtotal = invoiceCurrency !== 'AED' ? subtotal * exchangeRate : subtotal;
+      const baseVatAmount = invoiceCurrency !== 'AED' ? vatAmount * exchangeRate : vatAmount;
+
+      // Create journal entry for revenue recognition
+      const [entry] = await tx.insert(journalEntries).values({
+        companyId: companyId,
+        date: invoiceDate,
+        memo: `Sales Invoice ${inv.number} - ${inv.customerName}`,
+        entryNumber,
+        status: 'draft',
+        source: 'invoice',
+        sourceId: inv.id,
+        createdBy: userId,
+        postedBy: null,
+        postedAt: null,
+        currency: invoiceCurrency,
+        exchangeRate: String(exchangeRate),
+      }).returning();
+
+      // Debit: Accounts Receivable (total)
+      await tx.insert(journalLines).values({
+        entryId: entry.id,
+        accountId: accountsReceivable.id,
+        debit: baseTotal,
+        credit: 0,
+        description: `Invoice ${inv.number} - ${inv.customerName}`,
+        ...(invoiceCurrency !== 'AED' ? { originalAmount: total, originalCurrency: invoiceCurrency } : {}),
+      });
+
+      // Credit: Sales Revenue (subtotal)
+      await tx.insert(journalLines).values({
+        entryId: entry.id,
+        accountId: salesRevenue.id,
+        debit: 0,
+        credit: baseSubtotal,
+        description: `Sales revenue - Invoice ${inv.number}`,
+        ...(invoiceCurrency !== 'AED' ? { originalAmount: subtotal, originalCurrency: invoiceCurrency } : {}),
+      });
+
+      // Credit: VAT Payable (vat amount) - only if there's VAT
+      if (vatAmount > 0 && vatPayable) {
+        await tx.insert(journalLines).values({
+          entryId: entry.id,
+          accountId: vatPayable.id,
+          debit: 0,
+          credit: baseVatAmount,
+          description: `VAT output - Invoice ${inv.number}`,
+          ...(invoiceCurrency !== 'AED' ? { originalAmount: vatAmount, originalCurrency: invoiceCurrency } : {}),
+        });
+      }
+
+      console.log('[Invoices] Revenue recognition journal entry created:', entryNumber, 'for invoice:', inv.id, invoiceCurrency !== 'AED' ? `(${invoiceCurrency} @ ${exchangeRate})` : '');
+      return inv;
+    });
+
+    // =========================================
+    // COGS: Create journal entry for cost of goods sold (separate transaction)
+    // Only for invoice lines that reference products
+    // =========================================
+    try {
+      // Filter lines that have a productId
+      const productLines = lines.filter((line: any) => line.productId);
+
+      if (productLines.length > 0) {
+        // Look up each product to get costPrice and calculate total COGS
+        let totalCOGS = 0;
+        const cogsDetails: { productId: string; quantity: number; costPrice: number; cogsAmount: number; productName: string }[] = [];
+
+        for (const line of productLines) {
+          const product = await storage.getProduct(line.productId);
+          if (product && product.costPrice) {
+            const costPrice = parseFloat(String(product.costPrice));
+            const cogsAmount = Math.round(line.quantity * costPrice * 100) / 100;
+            if (cogsAmount > 0) {
+              totalCOGS += cogsAmount;
+              cogsDetails.push({
+                productId: product.id,
+                quantity: line.quantity,
+                costPrice,
+                cogsAmount,
+                productName: product.name,
+              });
+            }
+          }
+        }
+
+        if (totalCOGS > 0) {
+          totalCOGS = Math.round(totalCOGS * 100) / 100;
+
+          // Resolve COGS and Inventory accounts
+          const cogsAccount = await storage.getAccountByCode(companyId, ACCOUNT_CODES.COGS);
+          const inventoryAccount = await storage.getAccountByCode(companyId, ACCOUNT_CODES.INVENTORY);
+
+          if (cogsAccount && inventoryAccount) {
+            // COGS journal entry + inventory movements in a separate Drizzle transaction
+            await (db as any).transaction(async (tx: any) => {
+              const cogsEntryNumber = await storage.generateEntryNumber(companyId, invoiceDate, tx);
+
+              // Create COGS journal entry
+              const [cogsEntry] = await tx.insert(journalEntries).values({
+                companyId,
+                date: invoiceDate,
+                memo: `COGS - Invoice ${invoice.number}`,
+                entryNumber: cogsEntryNumber,
+                status: 'draft',
+                source: 'cogs',
+                sourceId: invoice.id,
+                createdBy: userId,
+                postedBy: null,
+                postedAt: null,
+              }).returning();
+
+              // Debit: COGS
+              await tx.insert(journalLines).values({
+                entryId: cogsEntry.id,
+                accountId: cogsAccount.id,
+                debit: totalCOGS,
+                credit: 0,
+                description: `Cost of goods sold - Invoice ${invoice.number}`,
+              });
+
+              // Credit: Inventory
+              await tx.insert(journalLines).values({
+                entryId: cogsEntry.id,
+                accountId: inventoryAccount.id,
+                debit: 0,
+                credit: totalCOGS,
+                description: `Inventory reduction - Invoice ${invoice.number}`,
+              });
+
+              // Create inventory movements (type "sale") for each product line
+              for (const detail of cogsDetails) {
+                await tx.insert(inventoryMovements).values({
+                  productId: detail.productId,
+                  companyId,
+                  type: 'sale',
+                  quantity: -Math.abs(detail.quantity), // Negative for sales
+                  unitCost: String(detail.costPrice),
+                  reference: `Invoice ${invoice.number}`,
+                  notes: `Auto-generated COGS for invoice ${invoice.number}`,
+                  totalCost: String(detail.cogsAmount),
+                });
+
+                // Update product stock
+                await storage.updateProduct(detail.productId, {
+                  currentStock: (await storage.getProduct(detail.productId))!.currentStock - Math.abs(detail.quantity),
+                });
+              }
+
+              log.info({ invoiceId: invoice.id, cogsEntryId: cogsEntry.id, totalCOGS, productCount: cogsDetails.length }, 'COGS journal entry and inventory movements created');
+            });
+          } else {
+            log.warn({ companyId }, 'COGS or Inventory accounts not found — skipping COGS journal entry');
+          }
+        }
+      }
+    } catch (cogsError: any) {
+      // COGS is supplementary — if it fails, the invoice is still valid
+      log.error({ invoiceId: invoice.id, error: cogsError.message }, 'Failed to create COGS journal entry (invoice still valid)');
     }
 
     console.log('[Invoices] Invoice created successfully:', invoice.id);
@@ -284,7 +417,7 @@ export function registerInvoiceRoutes(app: Express) {
     for (const line of lines) {
       const lineTotal = line.quantity * line.unitPrice;
       subtotal += lineTotal;
-      vatAmount += lineTotal * (line.vatRate || 0.05);
+      vatAmount += lineTotal * (line.vatRate || 0);
     }
 
     const total = subtotal + vatAmount;
@@ -292,23 +425,33 @@ export function registerInvoiceRoutes(app: Express) {
     // Convert date string to Date object if it's a string
     const invoiceDate = typeof date === 'string' ? new Date(date) : date;
 
-    // Update invoice
-    const updatedInvoice = await storage.updateInvoice(id, {
-      ...invoiceData,
-      date: invoiceDate,
-      subtotal,
-      vatAmount,
-      total,
-    });
+    // Wrap update + delete old lines + insert new lines in a transaction
+    const updatedInvoice = await (db as any).transaction(async (tx: any) => {
+      // Update invoice
+      const [inv] = await tx.update(invoicesTable)
+        .set({
+          ...invoiceData,
+          date: invoiceDate,
+          subtotal,
+          vatAmount,
+          total,
+        })
+        .where(eq(invoicesTable.id, id))
+        .returning();
 
-    // Delete existing lines and create new ones
-    await storage.deleteInvoiceLinesByInvoiceId(id);
-    for (const line of lines) {
-      await storage.createInvoiceLine({
-        invoiceId: id,
-        ...line,
-      });
-    }
+      // Delete existing lines
+      await tx.delete(invoiceLinesTable).where(eq(invoiceLinesTable.invoiceId, id));
+
+      // Insert new lines
+      for (const line of lines) {
+        await tx.insert(invoiceLinesTable).values({
+          invoiceId: id,
+          ...line,
+        });
+      }
+
+      return inv;
+    });
 
     console.log('[Invoices] Invoice updated successfully:', id);
     res.json(updatedInvoice);
@@ -383,15 +526,17 @@ export function registerInvoiceRoutes(app: Express) {
         return res.status(400).json({ message: 'Payment account must be a cash or bank account' });
       }
 
-      const accounts = await storage.getAccountsByCompanyId(invoice.companyId);
-      const accountsReceivable = accounts.find(a => a.nameEn === 'Accounts Receivable');
+      const accountsReceivable = await storage.getAccountByCode(invoice.companyId, ACCOUNT_CODES.ACCOUNTS_RECEIVABLE);
+      if (!accountsReceivable) {
+        return res.status(500).json({ message: `Accounts Receivable account (${ACCOUNT_CODES.ACCOUNTS_RECEIVABLE}) not found for company ${invoice.companyId}` });
+      }
 
-      if (accountsReceivable) {
-        // Generate entry number atomically via storage helper
+      // Wrap payment journal entry in transaction
+      await (db as any).transaction(async (tx: any) => {
         const now = new Date();
-        const entryNumber = await storage.generateEntryNumber(invoice.companyId, now);
+        const entryNumber = await storage.generateEntryNumber(invoice.companyId, now, tx);
 
-        const entry = await storage.createJournalEntry({
+        const [entry] = await tx.insert(journalEntries).values({
           companyId: invoice.companyId,
           date: now,
           memo: `Payment received for Invoice ${invoice.number}`,
@@ -402,10 +547,10 @@ export function registerInvoiceRoutes(app: Express) {
           createdBy: userId,
           postedBy: null,
           postedAt: null,
-        });
+        }).returning();
 
         // Debit: Selected payment account (total)
-        await storage.createJournalLine({
+        await tx.insert(journalLines).values({
           entryId: entry.id,
           accountId: paymentAccountId,
           debit: invoice.total,
@@ -414,7 +559,7 @@ export function registerInvoiceRoutes(app: Express) {
         });
 
         // Credit: Accounts Receivable (total)
-        await storage.createJournalLine({
+        await tx.insert(journalLines).values({
           entryId: entry.id,
           accountId: accountsReceivable.id,
           debit: 0,
@@ -423,9 +568,7 @@ export function registerInvoiceRoutes(app: Express) {
         });
 
         console.log('[Invoices] Payment journal entry created:', entryNumber, 'for invoice:', id, 'to account:', paymentAccount.nameEn);
-      } else {
-        return res.status(500).json({ message: 'Accounts Receivable account not found' });
-      }
+      });
     }
 
     console.log('[Invoices] Invoice status updated:', id, status);

@@ -23,12 +23,12 @@ export function registerReferralRoutes(app: Express) {
         code,
         isActive: true,
         referrerRewardType: 'credit',
-        referrerRewardValue: 50, // AED 50 credit
+        referrerRewardValue: "50", // AED 50 credit
         refereeRewardType: 'discount',
-        refereeRewardValue: 20, // 20% discount
+        refereeRewardValue: "20", // 20% discount
         totalReferrals: 0,
         successfulReferrals: 0,
-        totalRewardsEarned: 0,
+        totalRewardsEarned: "0",
       });
     }
 
