@@ -266,9 +266,9 @@ export const invoiceLines = pgTable("invoice_lines", {
   invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
   productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   description: text("description").notNull(),
-  quantity: real("quantity").notNull(),
+  quantity: numeric("quantity", { precision: 15, scale: 4 }).notNull(),
   unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
-  vatRate: real("vat_rate").notNull().default(0.05), // UAE standard 5%
+  vatRate: numeric("vat_rate", { precision: 15, scale: 4 }).notNull().default("0.05"), // UAE standard 5%
   vatSupplyType: text("vat_supply_type").default("standard_rated"), // standard_rated | zero_rated | exempt | out_of_scope
 });
 
@@ -349,7 +349,7 @@ export const products = pgTable("products", {
   description: text("description"),
   unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull().default("0"),
   costPrice: numeric("cost_price", { precision: 15, scale: 2 }).default("0"),
-  vatRate: real("vat_rate").notNull().default(0.05),
+  vatRate: numeric("vat_rate", { precision: 15, scale: 4 }).notNull().default("0.05"),
   unit: text("unit").notNull().default("pcs"), // pcs, kg, m, hr, etc.
   currentStock: integer("current_stock").notNull().default(0),
   lowStockThreshold: integer("low_stock_threshold").default(10),
@@ -786,7 +786,7 @@ export const financialKpis = pgTable("financial_kpis", {
   periodEnd: timestamp("period_end").notNull(),
   value: numeric("value", { precision: 15, scale: 2 }).notNull(),
   previousValue: numeric("previous_value", { precision: 15, scale: 2 }),
-  changePercent: real("change_percent"),
+  changePercent: numeric("change_percent", { precision: 15, scale: 4 }),
   trend: text("trend"), // up | down | stable
   benchmark: numeric("benchmark", { precision: 15, scale: 2 }), // Industry benchmark
   calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
@@ -1378,7 +1378,7 @@ export const corporateTaxReturns = pgTable("corporate_tax_returns", {
   totalDeductions: numeric("total_deductions", { precision: 15, scale: 2 }).notNull().default("0"),
   taxableIncome: numeric("taxable_income", { precision: 15, scale: 2 }).notNull().default("0"),
   exemptionThreshold: numeric("exemption_threshold", { precision: 15, scale: 2 }).notNull().default("375000"),
-  taxRate: real("tax_rate").notNull().default(0.09),
+  taxRate: numeric("tax_rate", { precision: 15, scale: 4 }).notNull().default("0.09"),
   taxPayable: numeric("tax_payable", { precision: 15, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("draft"), // draft | filed | paid
   filedAt: timestamp("filed_at"),
@@ -1743,9 +1743,9 @@ export const serviceInvoiceLines = pgTable("service_invoice_lines", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   serviceInvoiceId: uuid("service_invoice_id").notNull().references(() => serviceInvoices.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
-  quantity: real("quantity").notNull().default(1),
+  quantity: numeric("quantity", { precision: 15, scale: 4 }).notNull().default("1"),
   unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
-  vatRate: real("vat_rate").notNull().default(0.05), // UAE 5%
+  vatRate: numeric("vat_rate", { precision: 15, scale: 4 }).notNull().default("0.05"), // UAE 5%
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(), // quantity * unitPrice
 });
 
@@ -2399,9 +2399,9 @@ export const creditNoteLines = pgTable("credit_note_lines", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   creditNoteId: uuid("credit_note_id").notNull().references(() => creditNotes.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
-  quantity: real("quantity").notNull(),
+  quantity: numeric("quantity", { precision: 15, scale: 4 }).notNull(),
   unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
-  vatRate: real("vat_rate").default(0.05),
+  vatRate: numeric("vat_rate", { precision: 15, scale: 4 }).default("0.05"),
   vatSupplyType: text("vat_supply_type").default("standard_rated"),
 });
 

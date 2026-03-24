@@ -10,6 +10,7 @@ import { insertInvoiceSchema, invoices as invoicesTable, invoiceLines as invoice
 import { generateInvoicePDF } from '../services/pdf-invoice.service';
 import { generateEInvoiceXML } from '../services/einvoice.service';
 import { ACCOUNT_CODES } from '../lib/account-codes';
+import { assertFiscalYearOpen } from '../lib/fiscal-year-guard';
 import { createLogger } from '../config/logger';
 
 const log = createLogger('invoices');
@@ -137,16 +138,8 @@ export function registerInvoiceRoutes(app: Express) {
     // Convert date string to Date object if it's a string
     const invoiceDate = typeof date === 'string' ? new Date(date) : date;
 
-    console.log('[Invoices] Creating invoice:', {
-      companyId,
-      userId,
-      number: invoiceData.number,
-      date: invoiceDate,
-      subtotal,
-      vatAmount,
-      total,
-      linesCount: lines.length
-    });
+    // Fiscal year guard — block invoices into closed periods
+    await assertFiscalYearOpen(companyId, new Date(req.body.date || new Date()));
 
     // Resolve accounts by code (not by fragile nameEn string matching)
     const accountsReceivable = await storage.getAccountByCode(companyId, ACCOUNT_CODES.ACCOUNTS_RECEIVABLE);
@@ -240,7 +233,6 @@ export function registerInvoiceRoutes(app: Express) {
         });
       }
 
-      console.log('[Invoices] Revenue recognition journal entry created:', entryNumber, 'for invoice:', inv.id, invoiceCurrency !== 'AED' ? `(${invoiceCurrency} @ ${exchangeRate})` : '');
       return inv;
     });
 
@@ -350,7 +342,6 @@ export function registerInvoiceRoutes(app: Express) {
       log.error({ invoiceId: invoice.id, error: cogsError.message }, 'Failed to create COGS journal entry (invoice still valid)');
     }
 
-    console.log('[Invoices] Invoice created successfully:', invoice.id);
     res.json(invoice);
   }));
 
@@ -459,7 +450,6 @@ export function registerInvoiceRoutes(app: Express) {
       return inv;
     });
 
-    console.log('[Invoices] Invoice updated successfully:', id);
     res.json(updatedInvoice);
   }));
 
@@ -519,8 +509,6 @@ export function registerInvoiceRoutes(app: Express) {
 
     const oldStatus = invoice.status;
     const updatedInvoice = await storage.updateInvoiceStatus(id, status);
-
-    console.log(`[Invoices] Status transition: ${oldStatus} -> ${status} for invoice ${id}`);
 
     // Payment recording when invoice is marked as paid
     // Note: Revenue is already recognized when invoice is created
@@ -582,11 +570,9 @@ export function registerInvoiceRoutes(app: Express) {
           description: `Clear A/R - Invoice ${invoice.number}`,
         });
 
-        console.log('[Invoices] Payment journal entry created:', entryNumber, 'for invoice:', id, 'to account:', paymentAccount.nameEn);
       });
     }
 
-    console.log('[Invoices] Invoice status updated:', id, status);
     res.json(updatedInvoice);
   }));
 
@@ -628,8 +614,6 @@ export function registerInvoiceRoutes(app: Express) {
       einvoiceHash: hash,
       einvoiceStatus: 'generated',
     });
-
-    console.log('[E-Invoice] Generated e-invoice for invoice:', id, 'UUID:', uuid);
 
     res.json({ uuid, hash, status: 'generated' });
   }));

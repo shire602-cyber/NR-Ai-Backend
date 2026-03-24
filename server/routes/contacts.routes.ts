@@ -128,7 +128,6 @@ export function registerContactRoutes(app: Express) {
       }
     }
 
-    console.log('[CustomerContacts] Import completed:', results);
     res.json({
       message: `Import completed: ${results.created} created, ${results.updated} updated, ${results.skipped} skipped`,
       ...results

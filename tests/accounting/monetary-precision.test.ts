@@ -34,10 +34,9 @@ describe('Monetary Precision', () => {
     // invoiceLines.unitPrice should be numeric(15,2)
     expect(invoiceLines.unitPrice.columnType).toBe('PgNumeric');
 
-    // invoiceLines.quantity uses real (float) which is acceptable for quantities
-    // but invoiceLines.vatRate uses real which is for percentages, not money
-    expect(invoiceLines.quantity.columnType).toBe('PgReal');
-    expect(invoiceLines.vatRate.columnType).toBe('PgReal');
+    // invoiceLines.quantity and vatRate are now numeric(15,4) for precision
+    expect(invoiceLines.quantity.columnType).toBe('PgNumeric');
+    expect(invoiceLines.vatRate.columnType).toBe('PgNumeric');
   });
 
   it('monetary calculations do not lose precision (0.1 + 0.2 = 0.3 exactly)', () => {

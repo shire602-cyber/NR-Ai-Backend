@@ -92,7 +92,6 @@ export function registerRecurringInvoiceRoutes(app: Express) {
       totalGenerated: 0,
     });
 
-    console.log('[RecurringInvoices] Created recurring invoice:', item.id, 'for company:', companyId);
     res.json(item);
   }));
 
@@ -132,7 +131,6 @@ export function registerRecurringInvoiceRoutes(app: Express) {
     if (linesJson !== undefined) updateData.linesJson = typeof linesJson === 'string' ? linesJson : JSON.stringify(linesJson);
 
     const item = await storage.updateRecurringInvoice(id, updateData);
-    console.log('[RecurringInvoices] Updated recurring invoice:', id);
     res.json(item);
   }));
 
@@ -155,7 +153,6 @@ export function registerRecurringInvoiceRoutes(app: Express) {
       isActive: !existing.isActive,
     });
 
-    console.log('[RecurringInvoices] Toggled recurring invoice:', id, 'isActive:', item.isActive);
     res.json(item);
   }));
 
@@ -175,7 +172,6 @@ export function registerRecurringInvoiceRoutes(app: Express) {
     }
 
     await storage.deleteRecurringInvoice(id);
-    console.log('[RecurringInvoices] Deleted recurring invoice:', id);
     res.json({ message: 'Recurring invoice deleted successfully' });
   }));
 }

@@ -396,7 +396,7 @@ export function registerReportRoutes(app: Express) {
     res.json({ receivables, payables });
   }));
 
-  // Period comparison report - supports both path segment and query param for period
+  // Period comparison report - uses GL (journal entries) for revenue/expense figures so numbers match P&L
   app.get("/api/reports/:companyId/comparison/:period?", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, period: pathPeriod } = req.params;
@@ -406,9 +406,6 @@ export function registerReportRoutes(app: Express) {
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
     }
-
-    const invoices = await storage.getInvoicesByCompanyId(companyId);
-    const receipts = await storage.getReceiptsByCompanyId(companyId);
 
     const now = new Date();
     let currentStart: Date, currentEnd: Date, previousStart: Date, previousEnd: Date;
@@ -431,64 +428,64 @@ export function registerReportRoutes(app: Express) {
       previousEnd = new Date(now.getFullYear(), currentQ * 3, 0);
     }
 
-    const currentInvoices = invoices.filter(inv => {
-      const d = new Date(inv.date);
-      return d >= currentStart && d <= currentEnd;
-    });
-    const previousInvoices = invoices.filter(inv => {
-      const d = new Date(inv.date);
-      return d >= previousStart && d <= previousEnd;
-    });
+    // Helper: compute revenue & expenses from posted journal entries within a date range
+    async function computeFromGL(startDate: Date, endDate: Date) {
+      const glResult = await pool.query(
+        `SELECT
+           a.type,
+           COALESCE(SUM(jl.debit), 0) AS total_debit,
+           COALESCE(SUM(jl.credit), 0) AS total_credit
+         FROM journal_entries je
+         JOIN journal_lines jl ON jl.entry_id = je.id
+         JOIN accounts a ON a.id = jl.account_id
+         WHERE je.company_id = $1
+           AND je.status = 'posted'
+           AND je.date >= $2
+           AND je.date <= $3
+           AND a.type IN ('income', 'expense')
+         GROUP BY a.type`,
+        [companyId, startDate.toISOString(), endDate.toISOString()]
+      );
 
-    const currentReceipts = receipts.filter(rec => {
-      const d = new Date(rec.date || rec.createdAt);
-      return d >= currentStart && d <= currentEnd;
-    });
-    const previousReceipts = receipts.filter(rec => {
-      const d = new Date(rec.date || rec.createdAt);
-      return d >= previousStart && d <= previousEnd;
-    });
+      let revenue = 0;
+      let expenses = 0;
+      for (const row of (glResult.rows || [])) {
+        if (row.type === 'income') {
+          revenue = Number(row.total_credit) - Number(row.total_debit);
+        } else if (row.type === 'expense') {
+          expenses = Number(row.total_debit) - Number(row.total_credit);
+        }
+      }
+      return { revenue, expenses };
+    }
 
-    const currentRevenue = currentInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
-    const previousRevenue = previousInvoices.reduce((sum, inv) => sum + Number(inv.total), 0);
-    const currentExpenses = currentReceipts.reduce((sum, rec) => sum + (Number(rec.amount) || 0), 0);
-    const previousExpenses = previousReceipts.reduce((sum, rec) => sum + (Number(rec.amount) || 0), 0);
+    const current = await computeFromGL(currentStart, currentEnd);
+    const previous = await computeFromGL(previousStart, previousEnd);
+
+    const currentNetProfit = current.revenue - current.expenses;
+    const previousNetProfit = previous.revenue - previous.expenses;
 
     const comparison = [
       {
         metric: 'Total Revenue',
-        current: currentRevenue,
-        previous: previousRevenue,
-        change: currentRevenue - previousRevenue,
-        changePercent: previousRevenue ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0,
+        current: current.revenue,
+        previous: previous.revenue,
+        change: current.revenue - previous.revenue,
+        changePercent: previous.revenue ? ((current.revenue - previous.revenue) / previous.revenue) * 100 : 0,
       },
       {
         metric: 'Total Expenses',
-        current: currentExpenses,
-        previous: previousExpenses,
-        change: currentExpenses - previousExpenses,
-        changePercent: previousExpenses ? ((currentExpenses - previousExpenses) / previousExpenses) * 100 : 0,
+        current: current.expenses,
+        previous: previous.expenses,
+        change: current.expenses - previous.expenses,
+        changePercent: previous.expenses ? ((current.expenses - previous.expenses) / previous.expenses) * 100 : 0,
       },
       {
         metric: 'Net Profit',
-        current: currentRevenue - currentExpenses,
-        previous: previousRevenue - previousExpenses,
-        change: (currentRevenue - currentExpenses) - (previousRevenue - previousExpenses),
-        changePercent: (previousRevenue - previousExpenses) ? (((currentRevenue - currentExpenses) - (previousRevenue - previousExpenses)) / Math.abs(previousRevenue - previousExpenses)) * 100 : 0,
-      },
-      {
-        metric: 'Invoice Count',
-        current: currentInvoices.length,
-        previous: previousInvoices.length,
-        change: currentInvoices.length - previousInvoices.length,
-        changePercent: previousInvoices.length ? ((currentInvoices.length - previousInvoices.length) / previousInvoices.length) * 100 : 0,
-      },
-      {
-        metric: 'Avg Invoice Value',
-        current: currentInvoices.length ? currentRevenue / currentInvoices.length : 0,
-        previous: previousInvoices.length ? previousRevenue / previousInvoices.length : 0,
-        change: (currentInvoices.length ? currentRevenue / currentInvoices.length : 0) - (previousInvoices.length ? previousRevenue / previousInvoices.length : 0),
-        changePercent: (previousInvoices.length && previousRevenue / previousInvoices.length) ? (((currentInvoices.length ? currentRevenue / currentInvoices.length : 0) - (previousRevenue / previousInvoices.length)) / (previousRevenue / previousInvoices.length)) * 100 : 0,
+        current: currentNetProfit,
+        previous: previousNetProfit,
+        change: currentNetProfit - previousNetProfit,
+        changePercent: previousNetProfit ? ((currentNetProfit - previousNetProfit) / Math.abs(previousNetProfit)) * 100 : 0,
       },
     ];
 
@@ -636,6 +633,128 @@ export function registerReportRoutes(app: Express) {
       periodEquityChanges,
       netIncome,
       closingEquity,
+    });
+  }));
+
+  // =====================================
+  // BALANCE SHEET (dedicated reports endpoint with as-of date support)
+  // =====================================
+
+  app.get("/api/reports/:companyId/balance-sheet", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const { companyId } = req.params;
+    const { date: asOfDateParam } = req.query;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // As-of date: include all posted journal entries up to (and including) this date
+    const asOfDate = asOfDateParam ? new Date(asOfDateParam as string) : new Date();
+
+    // Single query: aggregate debits/credits per account from posted entries up to asOfDate
+    const result = await pool.query(
+      `SELECT
+         a.id,
+         a.name_en,
+         a.name_ar,
+         a.code,
+         a.type,
+         a.sub_type,
+         COALESCE(SUM(CASE WHEN je.status = 'posted' THEN jl.debit ELSE 0 END), 0) AS total_debit,
+         COALESCE(SUM(CASE WHEN je.status = 'posted' THEN jl.credit ELSE 0 END), 0) AS total_credit
+       FROM accounts a
+       LEFT JOIN journal_lines jl ON jl.account_id = a.id
+       LEFT JOIN journal_entries je ON je.id = jl.entry_id AND je.date <= $2
+       WHERE a.company_id = $1
+       GROUP BY a.id
+       ORDER BY a.code`,
+      [companyId, asOfDate.toISOString()]
+    );
+
+    const rows: any[] = result.rows || [];
+
+    // Build balance map keyed by account type
+    const accountsByType: Record<string, { accountName: string; code: string; subType: string | null; amount: number }[]> = {
+      asset: [],
+      liability: [],
+      equity: [],
+      income: [],
+      expense: [],
+    };
+
+    for (const row of rows) {
+      const debit = Number(row.total_debit || 0);
+      const credit = Number(row.total_credit || 0);
+      let amount: number;
+      if (row.type === 'asset' || row.type === 'expense') {
+        amount = debit - credit;
+      } else {
+        amount = credit - debit;
+      }
+      if (!accountsByType[row.type]) accountsByType[row.type] = [];
+      accountsByType[row.type].push({
+        accountName: row.name_en,
+        code: row.code,
+        subType: row.sub_type,
+        amount,
+      });
+    }
+
+    // Sub-categorize assets
+    const currentAssets = accountsByType.asset.filter(a =>
+      !a.subType || a.subType === 'current' || a.subType === 'current_asset'
+    );
+    const fixedAssets = accountsByType.asset.filter(a =>
+      a.subType === 'fixed' || a.subType === 'fixed_asset' || a.subType === 'non_current'
+    );
+    // If no sub_type classification exists, all go to currentAssets (already handled above)
+
+    // Sub-categorize liabilities
+    const currentLiabilities = accountsByType.liability.filter(a =>
+      !a.subType || a.subType === 'current' || a.subType === 'current_liability'
+    );
+    const longTermLiabilities = accountsByType.liability.filter(a =>
+      a.subType === 'long_term' || a.subType === 'non_current' || a.subType === 'long_term_liability'
+    );
+
+    // Current Period Earnings = revenue - expenses
+    const totalIncome = accountsByType.income.reduce((sum, a) => sum + a.amount, 0);
+    const totalExpenses = accountsByType.expense.reduce((sum, a) => sum + a.amount, 0);
+    const currentPeriodEarnings = totalIncome - totalExpenses;
+
+    const equityItems = [
+      ...accountsByType.equity,
+      { accountName: 'Current Period Earnings', code: '', subType: null, amount: currentPeriodEarnings },
+    ];
+
+    const totalAssets = accountsByType.asset.reduce((sum, a) => sum + a.amount, 0);
+    const totalLiabilities = accountsByType.liability.reduce((sum, a) => sum + a.amount, 0);
+    const totalEquity = equityItems.reduce((sum, a) => sum + a.amount, 0);
+
+    const balanced = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01;
+
+    res.json({
+      asOfDate: asOfDate.toISOString().split('T')[0],
+      assets: {
+        current: currentAssets,
+        fixed: fixedAssets,
+        total: totalAssets,
+      },
+      liabilities: {
+        current: currentLiabilities,
+        longTerm: longTermLiabilities,
+        total: totalLiabilities,
+      },
+      equity: {
+        items: equityItems,
+        total: totalEquity,
+      },
+      totalAssets,
+      totalLiabilities,
+      totalEquity,
+      balanced,
     });
   }));
 }

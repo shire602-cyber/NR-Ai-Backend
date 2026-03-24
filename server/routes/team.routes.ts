@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 export function registerTeamRoutes(app: Express) {
@@ -9,7 +9,7 @@ export function registerTeamRoutes(app: Express) {
   // =====================================
 
   // Get team members for a company
-  app.get("/api/companies/:companyId/team", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/team", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 
@@ -23,7 +23,7 @@ export function registerTeamRoutes(app: Express) {
   }));
 
   // Invite team member
-  app.post("/api/companies/:companyId/team/invite", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/team/invite", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { email, role } = req.body;
@@ -61,7 +61,7 @@ export function registerTeamRoutes(app: Express) {
   }));
 
   // Update team member role
-  app.put("/api/companies/:companyId/team/:memberId", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.put("/api/companies/:companyId/team/:memberId", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, memberId } = req.params;
     const { role } = req.body;
@@ -76,7 +76,7 @@ export function registerTeamRoutes(app: Express) {
   }));
 
   // Remove team member
-  app.delete("/api/companies/:companyId/team/:memberId", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/companies/:companyId/team/:memberId", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, memberId } = req.params;
 

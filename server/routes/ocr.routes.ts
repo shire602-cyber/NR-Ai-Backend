@@ -108,7 +108,7 @@ export function registerOCRRoutes(app: Express) {
           messageId: sanitizedMessageId,
         };
       } catch (aiError: any) {
-        console.log('AI extraction error:', aiError.message || 'Unknown error');
+        console.error('AI extraction error:', aiError.message || 'Unknown error');
         // Return default data with lower confidence
         extractedData.confidence = 0.3;
       }

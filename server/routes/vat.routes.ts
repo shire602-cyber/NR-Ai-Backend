@@ -23,7 +23,7 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Generate VAT return (FTA VAT 201 format with emirate breakdown)
-  app.post("/api/companies/:companyId/vat-returns/generate", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/vat-returns/generate", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { periodStart, periodEnd } = req.body;

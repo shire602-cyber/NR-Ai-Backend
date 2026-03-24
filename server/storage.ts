@@ -767,48 +767,44 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAccountsWithBalances(companyId: string, dateRange?: { start: Date; end: Date }) {
-    const accountsList = await db.select().from(accounts).where(eq(accounts.companyId, companyId));
-    
-    const results = await Promise.all(accountsList.map(async (account: any) => {
-      let lines: any[] = await db
-        .select({
-          debit: journalLines.debit,
-          credit: journalLines.credit,
-          date: journalEntries.date,
-          status: journalEntries.status
-        })
-        .from(journalLines)
-        .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
-        .where(eq(journalLines.accountId, account.id));
+    // Single aggregated query — eliminates N+1 by joining accounts with journal line totals
+    const dateFilter = dateRange
+      ? sql` AND je.date >= ${dateRange.start.toISOString()} AND je.date <= ${dateRange.end.toISOString()}`
+      : sql``;
 
-      if (dateRange) {
-        lines = lines.filter((line: any) => {
-          const lineDate = new Date(line.date);
-          return lineDate >= dateRange.start && lineDate <= dateRange.end;
-        });
-      }
+    const result = await db.execute(sql`
+      SELECT
+        a.*,
+        COALESCE(SUM(CASE WHEN je.status = 'posted' THEN jl.debit ELSE 0 END), 0) as total_debit,
+        COALESCE(SUM(CASE WHEN je.status = 'posted' THEN jl.credit ELSE 0 END), 0) as total_credit
+      FROM accounts a
+      LEFT JOIN journal_lines jl ON jl.account_id = a.id
+      LEFT JOIN journal_entries je ON je.id = jl.entry_id${dateFilter}
+      WHERE a.company_id = ${companyId}
+      GROUP BY a.id
+      ORDER BY a.code
+    `);
 
-      const postedLines = lines.filter((l: any) => l.status === 'posted');
-      
-      const debitTotal = postedLines.reduce((sum: number, l: any) => sum + Number(l.debit || 0), 0);
-      const creditTotal = postedLines.reduce((sum: number, l: any) => sum + Number(l.credit || 0), 0);
-      
-      let balance = 0;
-      if (['asset', 'expense'].includes(account.type)) {
+    return (result.rows || []).map((row: any) => {
+      const debitTotal = Number(row.total_debit || 0);
+      const creditTotal = Number(row.total_credit || 0);
+      let balance: number;
+      // Assets and expenses have debit normal balance
+      if (row.type === 'asset' || row.type === 'expense') {
         balance = debitTotal - creditTotal;
       } else {
         balance = creditTotal - debitTotal;
       }
-      
+
+      // Reconstruct account object to preserve the existing return shape
+      const { total_debit, total_credit, ...accountFields } = row;
       return {
-        account,
+        account: accountFields,
         balance,
         debitTotal,
-        creditTotal
+        creditTotal,
       };
-    }));
-    
-    return results;
+    });
   }
 
   async getAccountLedger(accountId: string, options?: { 

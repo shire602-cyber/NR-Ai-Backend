@@ -8,6 +8,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { eq } from 'drizzle-orm';
 import { insertInvoiceSchema } from '../../shared/schema';
 import { ACCOUNT_CODES } from '../lib/account-codes';
+import { assertFiscalYearOpen } from '../lib/fiscal-year-guard';
 
 export function registerReceiptRoutes(app: Express) {
   // =====================================
@@ -93,22 +94,12 @@ export function registerReceiptRoutes(app: Express) {
 
     const receiptData = req.body;
 
-    console.log('[Receipts] Creating receipt:', {
-      companyId,
-      userId,
-      merchant: receiptData.merchant,
-      amount: receiptData.amount,
-      hasImageData: !!receiptData.imageData,
-      imageDataLength: receiptData.imageData?.length
-    });
-
     const receipt = await storage.createReceipt({
       ...receiptData,
       companyId, // Add companyId from URL params
       uploadedBy: userId,
     });
 
-    console.log('[Receipts] Receipt created successfully:', receipt.id);
     res.json(receipt);
   }));
 
@@ -134,7 +125,6 @@ export function registerReceiptRoutes(app: Express) {
     }
 
     const updatedReceipt = await storage.updateReceipt(id, req.body);
-    console.log('[Receipts] Receipt updated successfully:', id);
     res.json(updatedReceipt);
   }));
 
@@ -248,6 +238,9 @@ export function registerReceiptRoutes(app: Express) {
     const baseVatAmount = receiptCurrency !== 'AED' ? vatAmount * exchangeRate : vatAmount;
     const baseTotalAmount = receiptCurrency !== 'AED' ? totalAmount * exchangeRate : totalAmount;
 
+    // Fiscal year guard — block posting into closed periods
+    await assertFiscalYearOpen(receipt.companyId, new Date(receipt.date || new Date()));
+
     // Resolve VAT Receivable Input account for VAT split
     const vatInputAccount = vatAmount > 0
       ? await storage.getAccountByCode(receipt.companyId, ACCOUNT_CODES.VAT_RECEIVABLE_INPUT)
@@ -319,7 +312,6 @@ export function registerReceiptRoutes(app: Express) {
       return updated;
     });
 
-    console.log('[Receipts] Receipt posted successfully:', id);
     res.json(updatedReceipt);
   }));
 }

@@ -271,8 +271,14 @@ export function registerFixedAssetRoutes(app: Express) {
           });
         }
 
-        // Generate entry number
-        const entryNumber = await storage.generateEntryNumber(asset.company_id, depreciationDate);
+        // Generate entry number inside the transaction (inline SQL to avoid Drizzle/pool mismatch)
+        const depDateStr = new Date(depreciationDate).toISOString().slice(0, 10).replace(/-/g, '');
+        const depEntryNumResult = await client.query(
+          `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+          [asset.company_id, `JE-${depDateStr}%`]
+        );
+        const depEntryCount = Number(depEntryNumResult.rows[0]?.count || 0);
+        const entryNumber = `JE-${depDateStr}-${String(depEntryCount + 1).padStart(3, '0')}`;
 
         // Create journal entry
         const jeResult = await client.query(
@@ -413,7 +419,14 @@ export function registerFixedAssetRoutes(app: Express) {
         );
 
         if (dupeCheck.rows.length === 0) {
-          const entryNumber = await storage.generateEntryNumber(companyId, depreciationDate);
+          // Generate entry number inside the transaction (inline SQL to avoid Drizzle/pool mismatch)
+          const batchDateStr = new Date(depreciationDate).toISOString().slice(0, 10).replace(/-/g, '');
+          const batchEntryNumResult = await client.query(
+            `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+            [companyId, `JE-${batchDateStr}%`]
+          );
+          const batchEntryCount = Number(batchEntryNumResult.rows[0]?.count || 0);
+          const entryNumber = `JE-${batchDateStr}-${String(batchEntryCount + 1).padStart(3, '0')}`;
 
           const jeResult = await client.query(
             `INSERT INTO journal_entries (company_id, date, memo, entry_number, status, source, source_id, created_by)
@@ -539,7 +552,14 @@ export function registerFixedAssetRoutes(app: Express) {
       );
 
       // Create disposal journal entry (accounts guaranteed non-null by fail-fast above)
-      const entryNumber = await storage.generateEntryNumber(asset.company_id, new Date(disposalDate));
+      // Generate entry number inside the transaction (inline SQL to avoid Drizzle/pool mismatch)
+      const disposalDateStr = new Date(disposalDate).toISOString().slice(0, 10).replace(/-/g, '');
+      const disposalEntryNumResult = await client.query(
+        `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+        [asset.company_id, `JE-${disposalDateStr}%`]
+      );
+      const disposalEntryCount = Number(disposalEntryNumResult.rows[0]?.count || 0);
+      const entryNumber = `JE-${disposalDateStr}-${String(disposalEntryCount + 1).padStart(3, '0')}`;
 
       const jeResult = await client.query(
         `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)

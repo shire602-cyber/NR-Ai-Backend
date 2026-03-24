@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
+import { assertFiscalYearOpen } from '../lib/fiscal-year-guard';
 import { db } from '../db';
 import { insertJournalEntrySchema, journalEntries, journalLines } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
@@ -80,6 +81,9 @@ export function registerJournalRoutes(app: Express) {
 
     // Convert date string to Date object if it's a string
     const entryDate = typeof date === 'string' ? new Date(date) : date;
+
+    // Fiscal year guard — block entries into closed periods
+    await assertFiscalYearOpen(companyId, new Date(req.body.date || new Date()));
 
     // Determine if posting immediately
     const isPosting = status === 'posted';
@@ -239,7 +243,6 @@ export function registerJournalRoutes(app: Express) {
       return updated;
     });
 
-    console.log('[Journal] Draft journal entry updated successfully:', id);
     res.json({ id: updatedEntry.id, status: updatedEntry.status, message: 'Draft entry updated successfully' });
   }));
 
@@ -285,7 +288,6 @@ export function registerJournalRoutes(app: Express) {
       postedAt: new Date(),
     });
 
-    console.log('[Journal] Entry posted successfully:', id);
     res.json({ id: updatedEntry.id, status: 'posted', message: 'Entry posted successfully' });
   }));
 
@@ -311,6 +313,9 @@ export function registerJournalRoutes(app: Express) {
 
     // Get original lines
     const originalLines = await storage.getJournalLinesByEntryId(id);
+
+    // Fiscal year guard — block reversals into closed periods
+    await assertFiscalYearOpen(entry.companyId, new Date(req.body.date || new Date()));
 
     // Wrap reversal + void in a single transaction
     const reversalEntry = await (db as any).transaction(async (tx: any) => {
@@ -356,7 +361,6 @@ export function registerJournalRoutes(app: Express) {
       return revEntry;
     });
 
-    console.log('[Journal] Entry reversed:', id, '-> new entry:', reversalEntry.id);
     res.json({
       originalId: id,
       reversalId: reversalEntry.id,
@@ -400,7 +404,6 @@ export function registerJournalRoutes(app: Express) {
 
     // Only draft entries can be deleted
     await storage.deleteJournalEntry(id);
-    console.log('[Journal] Draft entry deleted:', id);
     res.json({ message: 'Draft entry deleted successfully' });
   }));
 }

@@ -84,17 +84,6 @@ export function registerCreditNoteRoutes(app: Express) {
     const existing = await storage.getCreditNotesByCompanyId(companyId);
     const number = noteData.number || `CN-${String(existing.length + 1).padStart(4, '0')}`;
 
-    console.log('[CreditNotes] Creating credit note:', {
-      companyId,
-      userId,
-      number,
-      date: noteDate,
-      subtotal,
-      vatAmount,
-      total,
-      linesCount: lines.length
-    });
-
     const creditNote = await (db as any).transaction(async (tx: any) => {
       // Create credit note
       const [cn] = await tx.insert(creditNotesTable).values({
@@ -124,7 +113,6 @@ export function registerCreditNoteRoutes(app: Express) {
       return cn;
     });
 
-    console.log('[CreditNotes] Credit note created successfully:', creditNote.id);
     res.json(creditNote);
   }));
 
@@ -197,7 +185,6 @@ export function registerCreditNoteRoutes(app: Express) {
       return cn;
     });
 
-    console.log('[CreditNotes] Credit note updated:', updatedCreditNote.id);
     res.json(updatedCreditNote);
   }));
 
@@ -294,11 +281,9 @@ export function registerCreditNoteRoutes(app: Express) {
         .where(eq(creditNotesTable.id, id))
         .returning();
 
-      console.log('[CreditNotes] Journal entry created:', entryNumber, 'for credit note:', cn.id);
       return cn;
     });
 
-    console.log('[CreditNotes] Credit note posted successfully:', posted.id);
     res.json(posted);
   }));
 
@@ -361,7 +346,6 @@ export function registerCreditNoteRoutes(app: Express) {
     });
 
     const updated = await storage.getCreditNote(id);
-    console.log('[CreditNotes] Credit note applied:', id, 'to invoice:', invoiceId, 'amount:', appliedAmount);
     res.json(updated);
   }));
 
@@ -399,7 +383,6 @@ export function registerCreditNoteRoutes(app: Express) {
     });
 
     const voided = await storage.getCreditNote(id);
-    console.log('[CreditNotes] Credit note voided:', id);
     res.json(voided);
   }));
 }

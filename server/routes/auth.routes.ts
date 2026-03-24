@@ -27,7 +27,6 @@ async function seedChartOfAccounts(
 ): Promise<{ created: number; alreadyExisted: boolean }> {
   const hasAccounts = await storage.companyHasAccounts(companyId);
   if (hasAccounts) {
-    console.log(`[Seed COA] Company ${companyId} already has accounts, skipping seed`);
     return { created: 0, alreadyExisted: true };
   }
 
@@ -35,7 +34,6 @@ async function seedChartOfAccounts(
 
   try {
     const createdAccounts = await storage.createBulkAccounts(defaultAccounts as any);
-    console.log(`[Seed COA] Created ${createdAccounts.length} accounts for company ${companyId}`);
     return { created: createdAccounts.length, alreadyExisted: false };
   } catch (error: any) {
     if (error.message?.includes('PARTIAL_INSERT')) {

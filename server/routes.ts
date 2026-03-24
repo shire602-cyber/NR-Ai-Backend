@@ -57,6 +57,7 @@ import { registerAdminHealthRoutes } from './routes/admin-health.routes';
 import { registerExchangeRateRoutes } from './routes/exchange-rates.routes';
 import { registerCreditNoteRoutes } from './routes/credit-notes.routes';
 import { registerFiscalYearRoutes } from './routes/fiscal-years.routes';
+import { registerBankReconciliationRoutes } from './routes/bank-reconciliation.routes';
 
 const log = createLogger('routes');
 
@@ -89,6 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAIGLRoutes(app);
   registerAnomalyRoutes(app);
   registerAutoReconcileRoutes(app);
+  registerBankReconciliationRoutes(app);
   registerCashFlowRoutes(app);
 
   // ─── Reporting & Analytics ──────────────────────────────

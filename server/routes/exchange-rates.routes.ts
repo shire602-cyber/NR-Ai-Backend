@@ -1,11 +1,11 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 export function registerExchangeRateRoutes(app: Express) {
   // List exchange rates for a company
-  app.get("/api/companies/:companyId/exchange-rates", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/exchange-rates", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 
@@ -19,7 +19,7 @@ export function registerExchangeRateRoutes(app: Express) {
   }));
 
   // Create exchange rate
-  app.post("/api/companies/:companyId/exchange-rates", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/exchange-rates", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 
@@ -36,7 +36,7 @@ export function registerExchangeRateRoutes(app: Express) {
   }));
 
   // Update exchange rate
-  app.put("/api/companies/:companyId/exchange-rates/:id", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.put("/api/companies/:companyId/exchange-rates/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, id } = req.params;
 
@@ -50,7 +50,7 @@ export function registerExchangeRateRoutes(app: Express) {
   }));
 
   // Delete exchange rate
-  app.delete("/api/companies/:companyId/exchange-rates/:id", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/companies/:companyId/exchange-rates/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, id } = req.params;
 

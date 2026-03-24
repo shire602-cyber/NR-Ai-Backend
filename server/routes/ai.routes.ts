@@ -179,8 +179,6 @@ If no valid transactions can be found, return { "transactions": [] }`
         reference: t.reference || null,
       }));
 
-      console.log('[AI] Parsed bank statement, found', validTransactions.length, 'transactions');
-
       res.json({ transactions: validTransactions });
     } catch (error: any) {
       console.error('AI bank statement parsing error:', error);
@@ -1166,6 +1164,7 @@ Company: ${company.name}`;
     let fullResponse = '';
     let conversationId: string | undefined;
     let isStreaming = false; // Track if we're in streaming mode (headers sent)
+    let validated: { message: string; companyId?: string; model: string; systemPrompt?: string; stream: boolean } | null = null;
 
     try {
       const userId = (req as any).user.id;
@@ -1179,7 +1178,7 @@ Company: ${company.name}`;
         stream: z.boolean().optional().default(false),
       });
 
-      const validated = validationSchema.parse(req.body);
+      validated = validationSchema.parse(req.body);
 
       // If companyId is provided, verify access
       if (validated.companyId) {
@@ -1337,17 +1336,16 @@ IMPORTANT GUIDELINES:
         }
 
         // Store error conversation if we have partial data
-        // Use optional chaining since validated might not exist if error occurred early
         try {
           const userId = (req as any).user?.id;
-          if (userId) {
+          if (userId && validated) {
             await storage.createAiConversation({
               userId,
-              companyId: (validated as any)?.companyId || null,
-              prompt: (validated as any)?.message || 'Unknown',
+              companyId: validated.companyId || null,
+              prompt: validated.message || 'Unknown',
               response: fullResponse || 'Error: ' + errorMessage,
-              model: (validated as any)?.model || 'gpt-3.5-turbo',
-              systemPrompt: (validated as any)?.systemPrompt || null,
+              model: validated.model || 'gpt-3.5-turbo',
+              systemPrompt: validated.systemPrompt || null,
               responseTime: Date.now() - startTime,
               error: errorMessage,
             });

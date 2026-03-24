@@ -347,6 +347,11 @@ export function registerBillPayRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Block deletion of bills that have been approved, partially paid, or fully paid
+    if (['approved', 'partial', 'paid'].includes(bill.status)) {
+      return res.status(400).json({ error: "Cannot delete a bill that has been approved, partially paid, or fully paid. Void the bill instead." });
+    }
+
     // Cascade delete will handle line_items and payments
     await pool.query('DELETE FROM vendor_bills WHERE id = $1', [id]);
 
@@ -397,8 +402,14 @@ export function registerBillPayRoutes(app: Express) {
         [userId, id]
       );
 
-      // Generate entry number for the journal entry
-      const entryNumber = await storage.generateEntryNumber(bill.company_id, billDate);
+      // Generate entry number inside the transaction (inline SQL to avoid Drizzle/pool mismatch)
+      const dateStr = new Date(billDate).toISOString().slice(0, 10).replace(/-/g, '');
+      const entryNumResult = await client.query(
+        `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+        [bill.company_id, `JE-${dateStr}%`]
+      );
+      const entryCount = Number(entryNumResult.rows[0]?.count || 0);
+      const entryNumber = `JE-${dateStr}-${String(entryCount + 1).padStart(3, '0')}`;
 
       // Look up required accounts
       const apAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.ACCOUNTS_PAYABLE);
@@ -583,7 +594,14 @@ export function registerBillPayRoutes(app: Express) {
         return res.status(400).json({ error: 'Bank account (1020) not found. Add it to your chart of accounts.' });
       }
 
-      const entryNumber = await storage.generateEntryNumber(bill.company_id, paymentDateObj);
+      // Generate entry number inside the transaction (inline SQL to avoid Drizzle/pool mismatch)
+      const payDateStr = new Date(paymentDateObj).toISOString().slice(0, 10).replace(/-/g, '');
+      const payEntryNumResult = await client.query(
+        `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+        [bill.company_id, `JE-${payDateStr}%`]
+      );
+      const payEntryCount = Number(payEntryNumResult.rows[0]?.count || 0);
+      const entryNumber = `JE-${payDateStr}-${String(payEntryCount + 1).padStart(3, '0')}`;
 
       const jeResult = await client.query(
         `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
