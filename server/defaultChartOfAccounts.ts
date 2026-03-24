@@ -355,6 +355,17 @@ export const defaultChartOfAccounts: DefaultAccountTemplate[] = [
     vatType: "exempt",
     isSystemAccount: false,
   },
+  {
+    code: "4080",
+    nameEn: "Gain on Asset Disposal",
+    nameAr: "أرباح التخلص من الأصول",
+    description: "Gain recognized on disposal of fixed assets",
+    type: "income",
+    subType: null,
+    isVatAccount: false,
+    vatType: null,
+    isSystemAccount: false,
+  },
 
   // ===========================
   // EXPENSES (5000-5199)
@@ -501,6 +512,28 @@ export const defaultChartOfAccounts: DefaultAccountTemplate[] = [
     isVatAccount: false,
     vatType: null,
     isSystemAccount: true,
+  },
+  {
+    code: "5140",
+    nameEn: "Loss on Asset Disposal",
+    nameAr: "خسائر التخلص من الأصول",
+    description: "Loss recognized on disposal of fixed assets",
+    type: "expense",
+    subType: null,
+    isVatAccount: false,
+    vatType: null,
+    isSystemAccount: false,
+  },
+  {
+    code: "5150",
+    nameEn: "General Expenses",
+    nameAr: "مصاريف عامة",
+    description: "General and miscellaneous business expenses",
+    type: "expense",
+    subType: null,
+    isVatAccount: false,
+    vatType: null,
+    isSystemAccount: false,
   },
 ];
 

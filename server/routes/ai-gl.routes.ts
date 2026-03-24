@@ -9,6 +9,7 @@ import {
   processUserFeedback,
   getAIGLStats,
 } from '../services/autonomous-gl.service';
+import { assertFiscalYearOpen } from '../lib/fiscal-year-guard';
 import { createLogger } from '../config/logger';
 
 const log = createLogger('ai-gl-routes');
@@ -81,6 +82,14 @@ export function registerAIGLRoutes(app: Express) {
       const hasAccess = await storage.hasCompanyAccess(userId, companyId);
       if (!hasAccess) {
         return res.status(403).json({ message: 'Access denied' });
+      }
+
+      try {
+        await assertFiscalYearOpen(companyId, new Date());
+      } catch (err: any) {
+        if (err.statusCode === 400) {
+          return res.status(400).json({ error: err.message });
+        }
       }
 
       const result = await processUserFeedback(id, 'accept', userId);

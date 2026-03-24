@@ -1001,6 +1001,7 @@ export default function Receipts() {
                 variant="outline"
                 onClick={resetForm}
                 disabled={isProcessingBulk}
+                aria-label="Clear all receipts"
                 data-testid="button-reset"
               >
                 <Trash2 className="w-4 h-4" />
@@ -1301,6 +1302,7 @@ export default function Receipts() {
                         size="sm"
                         onClick={() => handleDeleteReceipt(receipt)}
                         disabled={deleteMutation.isPending}
+                        aria-label="Delete receipt"
                         data-testid={`button-delete-receipt-${receipt.id}`}
                       >
                         <Trash2 className="w-4 h-4 text-destructive" />

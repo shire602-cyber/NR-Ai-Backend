@@ -190,21 +190,19 @@ export function registerFiscalYearRoutes(app: Express) {
       );
 
       const closingEntry = jeResult.rows[0];
-      let lineOrder = 1;
 
       // Debit each income account to zero it out
       for (const incomeRow of incomeAccounts) {
         const amount = Math.abs(Number(incomeRow.balance)).toFixed(2);
         await client.query(
-          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description, line_order)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, $4, $5)`,
           [
             closingEntry.id,
             incomeRow.account_id,
             amount,   // Debit to zero out income (which normally has credit balance)
             '0.00',
-            `Close ${incomeRow.account_name} (${incomeRow.account_code})`,
-            lineOrder++
+            `Close ${incomeRow.account_name} (${incomeRow.account_code})`
           ]
         );
       }
@@ -213,15 +211,14 @@ export function registerFiscalYearRoutes(app: Express) {
       for (const expenseRow of expenseAccounts) {
         const amount = Math.abs(Number(expenseRow.balance)).toFixed(2);
         await client.query(
-          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description, line_order)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, $4, $5)`,
           [
             closingEntry.id,
             expenseRow.account_id,
             '0.00',
             amount,   // Credit to zero out expense (which normally has debit balance)
-            `Close ${expenseRow.account_name} (${expenseRow.account_code})`,
-            lineOrder++
+            `Close ${expenseRow.account_name} (${expenseRow.account_code})`
           ]
         );
       }
@@ -232,15 +229,14 @@ export function registerFiscalYearRoutes(app: Express) {
       if (netIncome !== 0) {
         const reAmount = Math.abs(netIncome).toFixed(2);
         await client.query(
-          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description, line_order)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, $4, $5)`,
           [
             closingEntry.id,
             retainedEarningsAccount.id,
             netIncome < 0 ? reAmount : '0.00',   // Debit if loss
             netIncome > 0 ? reAmount : '0.00',   // Credit if profit
-            `Net income transferred to Retained Earnings`,
-            lineOrder++
+            `Net income transferred to Retained Earnings`
           ]
         );
       }

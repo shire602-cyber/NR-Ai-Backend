@@ -452,6 +452,7 @@ export default function Journal() {
                             variant="ghost"
                             size="icon"
                             onClick={() => remove(index)}
+                            aria-label="Remove line item"
                             data-testid={`button-remove-line-${index}`}
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
@@ -606,6 +607,7 @@ export default function Journal() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                aria-label="Delete journal entry"
                                 data-testid={`button-delete-journal-${entry.id}`}
                               >
                                 <Trash2 className="w-4 h-4 text-destructive" />

@@ -103,7 +103,9 @@ export const companyUsers = pgTable("company_users", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   role: text("role").notNull().default("owner"), // owner | accountant | cfo | employee
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  companyUserUnique: unique("uq_company_users_company_user").on(table.companyId, table.userId),
+}));
 
 export const insertCompanyUserSchema = createInsertSchema(companyUsers).omit({
   id: true,
@@ -183,7 +185,9 @@ export const journalEntries = pgTable("journal_entries", {
   // Multi-currency support
   currency: text("currency").default("AED"),
   exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).default("1"),
-});
+}, (table) => ({
+  companyEntryUnique: unique("uq_journal_entries_company_entry").on(table.companyId, table.entryNumber),
+}));
 
 export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({
   id: true,

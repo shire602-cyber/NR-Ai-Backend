@@ -7,6 +7,7 @@ import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { eq } from 'drizzle-orm';
 import { insertInvoiceSchema } from '../../shared/schema';
+import { ACCOUNT_CODES } from '../lib/account-codes';
 
 export function registerReceiptRoutes(app: Express) {
   // =====================================
@@ -116,6 +117,17 @@ export function registerReceiptRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
+    // Verify receipt exists and user has access
+    const receipt = await storage.getReceipt(id);
+    if (!receipt) {
+      return res.status(404).json({ message: 'Receipt not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, receipt.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     // Convert empty category string to null (UUID field cannot accept empty strings)
     if (req.body.category === '') {
       req.body.category = null;
@@ -130,6 +142,20 @@ export function registerReceiptRoutes(app: Express) {
   app.delete("/api/receipts/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
+
+    const receipt = await storage.getReceipt(id);
+    if (!receipt) {
+      return res.status(404).json({ message: 'Receipt not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, receipt.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (receipt.posted) {
+      return res.status(400).json({ error: 'Cannot delete a posted receipt.' });
+    }
 
     await storage.deleteReceipt(id);
     res.json({ message: 'Receipt deleted successfully' });
@@ -216,7 +242,16 @@ export function registerReceiptRoutes(app: Express) {
     }
 
     // Convert amounts to base currency (AED) for GL
+    const netAmount = Number(receipt.amount) || 0;
+    const vatAmount = Number(receipt.vatAmount) || 0;
+    const baseNetAmount = receiptCurrency !== 'AED' ? netAmount * exchangeRate : netAmount;
+    const baseVatAmount = receiptCurrency !== 'AED' ? vatAmount * exchangeRate : vatAmount;
     const baseTotalAmount = receiptCurrency !== 'AED' ? totalAmount * exchangeRate : totalAmount;
+
+    // Resolve VAT Receivable Input account for VAT split
+    const vatInputAccount = vatAmount > 0
+      ? await storage.getAccountByCode(receipt.companyId, ACCOUNT_CODES.VAT_RECEIVABLE_INPUT)
+      : null;
 
     // Wrap receipt posting + journal entry in a single transaction
     const updatedReceipt = await (db as any).transaction(async (tx: any) => {
@@ -238,17 +273,29 @@ export function registerReceiptRoutes(app: Express) {
         exchangeRate: String(exchangeRate),
       }).returning();
 
-      // Debit: Expense Account (total amount including VAT)
+      // Debit: Expense Account (NET amount, excluding VAT)
       await tx.insert(journalLines).values({
         entryId: entry.id,
         accountId: expenseAccount.id,
-        debit: baseTotalAmount,
+        debit: baseNetAmount,
         credit: 0,
         description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-        ...(receiptCurrency !== 'AED' ? { originalAmount: totalAmount, originalCurrency: receiptCurrency } : {}),
+        ...(receiptCurrency !== 'AED' ? { originalAmount: netAmount, originalCurrency: receiptCurrency } : {}),
       });
 
-      // Credit: Payment Account (cash/bank)
+      // Debit: VAT Receivable Input (if VAT > 0 and account exists)
+      if (vatAmount > 0 && vatInputAccount) {
+        await tx.insert(journalLines).values({
+          entryId: entry.id,
+          accountId: vatInputAccount.id,
+          debit: baseVatAmount,
+          credit: 0,
+          description: `VAT input - ${receipt.merchant || 'expense'}`,
+          ...(receiptCurrency !== 'AED' ? { originalAmount: vatAmount, originalCurrency: receiptCurrency } : {}),
+        });
+      }
+
+      // Credit: Payment Account (cash/bank) for TOTAL (amount + vatAmount)
       await tx.insert(journalLines).values({
         entryId: entry.id,
         accountId: paymentAccount.id,

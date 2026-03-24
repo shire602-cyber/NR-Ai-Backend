@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 /**
@@ -11,8 +11,12 @@ export function registerDashboardRoutes(app: Express) {
   // Dashboard Stats Routes
   // =====================================
 
-  app.get("/api/companies/:companyId/dashboard/stats", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/dashboard/stats", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const invoices = await storage.getInvoicesByCompanyId(companyId);
     let entries = await storage.getJournalEntriesByCompanyId(companyId);
     entries = entries.filter(e => e.status === 'posted');
@@ -49,8 +53,12 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/companies/:companyId/dashboard/expense-breakdown", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/dashboard/expense-breakdown", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     let entries = await storage.getJournalEntriesByCompanyId(companyId);
     entries = entries.filter(e => e.status === 'posted');
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -80,8 +88,12 @@ export function registerDashboardRoutes(app: Express) {
     res.json(breakdown);
   }));
 
-  app.get("/api/companies/:companyId/dashboard/monthly-trends", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/dashboard/monthly-trends", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const invoices = await storage.getInvoicesByCompanyId(companyId);
     let entries = await storage.getJournalEntriesByCompanyId(companyId);
     entries = entries.filter(e => e.status === 'posted');
@@ -132,8 +144,12 @@ export function registerDashboardRoutes(app: Express) {
   // Reports Routes
   // =====================================
 
-  app.get("/api/companies/:companyId/reports/pl", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reports/pl", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const { startDate, endDate } = req.query;
 
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -200,8 +216,12 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/companies/:companyId/reports/balance-sheet", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reports/balance-sheet", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const { startDate, endDate } = req.query;
 
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -284,8 +304,12 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/companies/:companyId/reports/vat-summary", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reports/vat-summary", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const { startDate, endDate } = req.query;
 
     let invoices = await storage.getInvoicesByCompanyId(companyId);
@@ -352,11 +376,15 @@ export function registerDashboardRoutes(app: Express) {
   // Dashboard Routes
   // =====================================
 
-  app.get("/api/dashboard/stats", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/dashboard/stats", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.query;
     if (!companyId) {
       return res.json({ revenue: 0, expenses: 0, outstanding: 0, totalInvoices: 0, totalEntries: 0 });
     }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId as string);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const invoices = await storage.getInvoicesByCompanyId(companyId as string);
     const accounts = await storage.getAccountsByCompanyId(companyId as string);
@@ -392,21 +420,29 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/dashboard/recent-invoices", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/dashboard/recent-invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.query;
     if (!companyId) {
       return res.json([]);
     }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId as string);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const invoices = await storage.getInvoicesByCompanyId(companyId as string);
     res.json(invoices.slice(0, 5));
   }));
 
-  app.get("/api/dashboard/expense-breakdown", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/dashboard/expense-breakdown", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId } = req.query;
     if (!companyId) {
       return res.json([]);
     }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId as string);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const accounts = await storage.getAccountsByCompanyId(companyId as string);
     let entries = await storage.getJournalEntriesByCompanyId(companyId as string);

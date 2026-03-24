@@ -410,6 +410,12 @@ export function registerInvoiceRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    const allEntries = await storage.getJournalEntriesByCompanyId(invoice.companyId);
+    const postedJE = allEntries.find((e: any) => e.sourceId === id && e.status === 'posted');
+    if (postedJE) {
+      return res.status(400).json({ error: 'Cannot update invoice with a posted journal entry. Reverse the journal entry first.' });
+    }
+
     // Calculate totals
     let subtotal = 0;
     let vatAmount = 0;
@@ -472,6 +478,15 @@ export function registerInvoiceRoutes(app: Express) {
     const hasAccess = await storage.hasCompanyAccess(userId, invoice.companyId);
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (invoice.status === 'paid') {
+      return res.status(400).json({ error: 'Cannot delete a paid invoice.' });
+    }
+    const allEntries = await storage.getJournalEntriesByCompanyId(invoice.companyId);
+    const postedJE = allEntries.find((e: any) => e.sourceId === id && e.status === 'posted');
+    if (postedJE) {
+      return res.status(400).json({ error: 'Cannot delete invoice with a posted journal entry. Reverse the journal entry first.' });
     }
 
     await storage.deleteInvoice(id);

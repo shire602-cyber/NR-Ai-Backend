@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 export function registerVATRoutes(app: Express) {
@@ -229,10 +229,18 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Submit VAT return
-  app.post("/api/vat-returns/:id/submit", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/vat-returns/:id/submit", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { id } = req.params;
     const { adjustmentAmount, adjustmentReason, notes } = req.body;
+
+    const existing = await storage.getVatReturn(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'VAT return not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const vatReturn = await storage.updateVatReturn(id, {
       status: 'submitted',
@@ -247,9 +255,18 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Update VAT return (for editing draft returns)
-  app.patch("/api/vat-returns/:id", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/vat-returns/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { id } = req.params;
     const updateData = req.body;
+
+    const existing = await storage.getVatReturn(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'VAT return not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const vatReturn = await storage.updateVatReturn(id, {
       ...updateData,

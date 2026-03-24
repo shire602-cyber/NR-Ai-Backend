@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 export function registerPortalRoutes(app: Express) {
@@ -9,7 +9,7 @@ export function registerPortalRoutes(app: Express) {
   // =====================================
 
   // Get activity logs for user's company
-  app.get("/api/companies/:companyId/activity-logs", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/activity-logs", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const limit = parseInt(req.query.limit as string) || 100;
@@ -28,16 +28,22 @@ export function registerPortalRoutes(app: Express) {
   // =====================================
 
   // Get all documents for a company
-  app.get("/api/companies/:companyId/documents", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/documents", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const documents = await storage.getDocuments(companyId);
     res.json(documents);
   }));
 
   // Upload document (stub - would need file upload middleware in production)
-  app.post("/api/companies/:companyId/documents", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/documents", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     // For now, accept document metadata directly
     // In production, this would handle file uploads to storage
@@ -64,8 +70,17 @@ export function registerPortalRoutes(app: Express) {
   }));
 
   // Delete document
-  app.delete("/api/documents/:documentId", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/documents/:documentId", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { documentId } = req.params;
+
+    const document = await storage.getDocument(documentId);
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, document.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     await storage.deleteDocument(documentId);
     res.json({ success: true });
   }));
@@ -75,16 +90,22 @@ export function registerPortalRoutes(app: Express) {
   // =====================================
 
   // Get tax return archive for a company
-  app.get("/api/companies/:companyId/tax-returns-archive", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/tax-returns-archive", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const returns = await storage.getTaxReturnArchive(companyId);
     res.json(returns);
   }));
 
   // Add tax return to archive
-  app.post("/api/companies/:companyId/tax-returns-archive", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/tax-returns-archive", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const returnData = {
       companyId,
@@ -111,16 +132,22 @@ export function registerPortalRoutes(app: Express) {
   // =====================================
 
   // Get compliance tasks for a company
-  app.get("/api/companies/:companyId/compliance-tasks", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/compliance-tasks", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const tasks = await storage.getComplianceTasks(companyId);
     res.json(tasks);
   }));
 
   // Create compliance task
-  app.post("/api/companies/:companyId/compliance-tasks", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/compliance-tasks", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const taskData = {
       companyId,
@@ -149,9 +176,17 @@ export function registerPortalRoutes(app: Express) {
   }));
 
   // Update compliance task
-  app.patch("/api/compliance-tasks/:taskId", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/compliance-tasks/:taskId", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { taskId } = req.params;
     const userId = (req as any).user.id;
+
+    const task = await storage.getComplianceTask(taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Compliance task not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, task.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const updates: any = {};
     if (req.body.status) {
@@ -165,13 +200,22 @@ export function registerPortalRoutes(app: Express) {
     if (req.body.dueDate) updates.dueDate = new Date(req.body.dueDate);
     if (req.body.notes !== undefined) updates.notes = req.body.notes;
 
-    const task = await storage.updateComplianceTask(taskId, updates);
-    res.json(task);
+    const updatedTask = await storage.updateComplianceTask(taskId, updates);
+    res.json(updatedTask);
   }));
 
   // Delete compliance task
-  app.delete("/api/compliance-tasks/:taskId", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/compliance-tasks/:taskId", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { taskId } = req.params;
+
+    const task = await storage.getComplianceTask(taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Compliance task not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, task.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     await storage.deleteComplianceTask(taskId);
     res.json({ success: true });
   }));
@@ -181,16 +225,22 @@ export function registerPortalRoutes(app: Express) {
   // =====================================
 
   // Get messages for a company
-  app.get("/api/companies/:companyId/messages", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/messages", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     const messages = await storage.getMessages(companyId);
     res.json(messages);
   }));
 
   // Send message
-  app.post("/api/companies/:companyId/messages", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/messages", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const messageData = {
       companyId,

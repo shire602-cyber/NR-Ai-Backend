@@ -755,6 +755,7 @@ export default function Invoices() {
                             variant="ghost"
                             size="icon"
                             onClick={() => remove(index)}
+                            aria-label="Remove line item"
                             data-testid={`button-remove-line-${index}`}
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
@@ -987,6 +988,7 @@ export default function Invoices() {
                                 });
                               }
                             }}
+                            aria-label="Share invoice via WhatsApp"
                             data-testid={`button-whatsapp-invoice-${invoice.id}`}
                           >
                             <SiWhatsapp className="w-4 h-4" />
@@ -1004,6 +1006,7 @@ export default function Invoices() {
                               }
                             }}
                             title="Generate E-Invoice"
+                            aria-label="Generate E-Invoice"
                             data-testid={`button-einvoice-${invoice.id}`}
                           >
                             <FileCode className="w-4 h-4 text-blue-500" />
@@ -1017,6 +1020,7 @@ export default function Invoices() {
                               }
                             }}
                             disabled={deleteMutation.isPending}
+                            aria-label="Delete invoice"
                             data-testid={`button-delete-invoice-${invoice.id}`}
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />

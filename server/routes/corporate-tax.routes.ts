@@ -31,6 +31,9 @@ export function registerCorporateTaxRoutes(app: Express) {
       return res.status(404).json({ message: 'Corporate tax return not found' });
     }
 
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, taxReturn.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
     res.json(taxReturn);
   }));
 
@@ -60,6 +63,9 @@ export function registerCorporateTaxRoutes(app: Express) {
     if (!existing) {
       return res.status(404).json({ message: 'Corporate tax return not found' });
     }
+
+    const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, existing.companyId);
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const taxReturn = await storage.updateCorporateTaxReturn(id, req.body);
     res.json(taxReturn);

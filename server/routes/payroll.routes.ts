@@ -9,9 +9,11 @@ import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
-import { db } from '../db';
+import { db, pool } from '../db';
 import { generateSIFFile } from '../services/wps-sif.service';
 import { createLogger } from '../config/logger';
+import { ACCOUNT_CODES } from '../lib/account-codes';
+import { assertFiscalYearOpenPool } from '../lib/fiscal-year-guard';
 
 const log = createLogger('payroll');
 
@@ -445,17 +447,97 @@ export function registerPayrollRoutes(app: Express) {
       return res.status(400).json({ message: 'Please calculate payroll before approving' });
     }
 
-    const updated = await queryOne(
-      `UPDATE payroll_runs SET status = 'approved', approved_by = $1, approved_at = NOW()
-       WHERE id = $2 RETURNING *`,
-      [userId, id]
-    );
-
-    // Mark all payroll items as paid
-    await query(
-      "UPDATE payroll_items SET status = 'paid' WHERE payroll_run_id = $1",
+    // Fetch payroll items for JE creation
+    const items = await query(
+      'SELECT * FROM payroll_items WHERE payroll_run_id = $1',
       [id]
     );
+
+    // Resolve GL accounts for payroll JE
+    if (items.length > 0) {
+      const salaryExpenseAccount = await storage.getAccountByCode(run.company_id, ACCOUNT_CODES.SALARY_EXPENSE);
+      const salariesPayableAccount = await storage.getAccountByCode(run.company_id, ACCOUNT_CODES.SALARIES_PAYABLE);
+
+      if (!salaryExpenseAccount || !salariesPayableAccount) {
+        return res.status(400).json({
+          error: 'Required accounts not found. Ensure your chart of accounts includes Salary Expense (5020) and Salaries Payable (2030).'
+        });
+      }
+
+      const approvalDate = new Date();
+
+      // Calculate total net salary from all items
+      const totalNet = items.reduce((sum: number, item: any) => sum + (parseFloat(item.net_salary) || 0), 0);
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Fiscal year guard
+        await assertFiscalYearOpenPool(client, run.company_id, approvalDate);
+
+        // Generate entry number
+        const entryNumber = await storage.generateEntryNumber(run.company_id, approvalDate);
+
+        // Create journal entry: source "payroll", sourceId = run.id
+        const jeResult = await client.query(
+          `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
+           VALUES ($1, $2, $3, $4, 'posted', 'payroll', $5, $6)
+           RETURNING id`,
+          [run.company_id, entryNumber, approvalDate, `Payroll - ${run.period_year}/${String(run.period_month).padStart(2, '0')}`, run.id, userId]
+        );
+        const jeId = jeResult.rows[0].id;
+
+        // Debit: Salary Expense
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [jeId, salaryExpenseAccount.id, totalNet.toFixed(2), `Payroll expense - ${run.period_year}/${String(run.period_month).padStart(2, '0')}`]
+        );
+
+        // Credit: Salaries Payable
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, 0, $3, $4)`,
+          [jeId, salariesPayableAccount.id, totalNet.toFixed(2), `Salaries payable - ${run.period_year}/${String(run.period_month).padStart(2, '0')}`]
+        );
+
+        // Update payroll run status
+        await client.query(
+          `UPDATE payroll_runs SET status = 'approved', approved_by = $1, approved_at = NOW()
+           WHERE id = $2`,
+          [userId, id]
+        );
+
+        // Mark all payroll items as paid
+        await client.query(
+          "UPDATE payroll_items SET status = 'paid' WHERE payroll_run_id = $1",
+          [id]
+        );
+
+        await client.query('COMMIT');
+
+        log.info({ payrollRunId: id, approvedBy: userId, journalEntryId: jeId, totalNet }, 'Payroll run approved with GL entry');
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        if (err.statusCode) {
+          return res.status(err.statusCode).json({ message: err.message });
+        }
+        throw err;
+      } finally {
+        client.release();
+      }
+    } else {
+      // No items — just approve without JE
+      await queryOne(
+        `UPDATE payroll_runs SET status = 'approved', approved_by = $1, approved_at = NOW()
+         WHERE id = $2 RETURNING *`,
+        [userId, id]
+      );
+    }
+
+    // Fetch the updated run to return
+    const updated = await queryOne('SELECT * FROM payroll_runs WHERE id = $1', [id]);
 
     log.info({ payrollRunId: id, approvedBy: userId }, 'Payroll run approved');
     res.json(updated);

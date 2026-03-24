@@ -264,37 +264,40 @@ export function registerFixedAssetRoutes(app: Express) {
         const depExpenseAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.DEPRECIATION_EXPENSE);
         const accumDepAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.ACCUMULATED_DEPRECIATION);
 
-        if (depExpenseAccount && accumDepAccount) {
-          // Generate entry number
-          const entryNumber = await storage.generateEntryNumber(asset.company_id, depreciationDate);
-
-          // Create journal entry
-          const jeResult = await client.query(
-            `INSERT INTO journal_entries (company_id, date, memo, entry_number, status, source, source_id, created_by)
-             VALUES ($1, $2, $3, $4, 'draft', 'depreciation', $5, $6)
-             RETURNING id`,
-            [asset.company_id, depreciationDate, `Depreciation - ${asset.asset_name} (${monthKey})`, entryNumber, id, userId]
-          );
-          const entryId = jeResult.rows[0].id;
-
-          // Debit: Depreciation Expense
-          await client.query(
-            `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-             VALUES ($1, $2, $3, 0, $4)`,
-            [entryId, depExpenseAccount.id, monthlyDepreciation, `Depreciation expense - ${asset.asset_name}`]
-          );
-
-          // Credit: Accumulated Depreciation
-          await client.query(
-            `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-             VALUES ($1, $2, 0, $3, $4)`,
-            [entryId, accumDepAccount.id, monthlyDepreciation, `Accumulated depreciation - ${asset.asset_name}`]
-          );
-
-          log.info({ assetId: id, entryId, entryNumber, monthlyDepreciation }, 'Depreciation journal entry created');
-        } else {
-          log.warn({ assetId: id, companyId: asset.company_id }, 'Depreciation/Accumulated Depreciation accounts not found — skipping JE');
+        if (!depExpenseAccount || !accumDepAccount) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: 'Required accounts not found. Ensure your chart of accounts includes Depreciation Expense (5100) and Accumulated Depreciation (1240).'
+          });
         }
+
+        // Generate entry number
+        const entryNumber = await storage.generateEntryNumber(asset.company_id, depreciationDate);
+
+        // Create journal entry
+        const jeResult = await client.query(
+          `INSERT INTO journal_entries (company_id, date, memo, entry_number, status, source, source_id, created_by)
+           VALUES ($1, $2, $3, $4, 'draft', 'depreciation', $5, $6)
+           RETURNING id`,
+          [asset.company_id, depreciationDate, `Depreciation - ${asset.asset_name} (${monthKey})`, entryNumber, id, userId]
+        );
+        const entryId = jeResult.rows[0].id;
+
+        // Debit: Depreciation Expense
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [entryId, depExpenseAccount.id, monthlyDepreciation, `Depreciation expense - ${asset.asset_name}`]
+        );
+
+        // Credit: Accumulated Depreciation
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, 0, $3, $4)`,
+          [entryId, accumDepAccount.id, monthlyDepreciation, `Accumulated depreciation - ${asset.asset_name}`]
+        );
+
+        log.info({ assetId: id, entryId, entryNumber, monthlyDepreciation }, 'Depreciation journal entry created');
       }
 
       await client.query('COMMIT');
@@ -338,6 +341,12 @@ export function registerFixedAssetRoutes(app: Express) {
     // Resolve depreciation accounts once for the entire batch
     const depExpenseAccount = await storage.getAccountByCode(companyId, ACCOUNT_CODES.DEPRECIATION_EXPENSE);
     const accumDepAccount = await storage.getAccountByCode(companyId, ACCOUNT_CODES.ACCUMULATED_DEPRECIATION);
+
+    if (!depExpenseAccount || !accumDepAccount) {
+      return res.status(400).json({
+        error: 'Required accounts not found. Ensure your chart of accounts includes Depreciation Expense (5100) and Accumulated Depreciation (1240).'
+      });
+    }
 
     const assetsResult = await pool.query(
       `SELECT * FROM fixed_assets WHERE company_id = $1 AND status = 'active'`,
@@ -395,44 +404,42 @@ export function registerFixedAssetRoutes(app: Express) {
         );
 
         // Create depreciation journal entry with idempotency check
-        if (depExpenseAccount && accumDepAccount) {
-          const dupeCheck = await client.query(
-            `SELECT id FROM journal_entries
-             WHERE source = 'depreciation' AND source_id = $1
-               AND to_char(date, 'YYYY-MM') = $2
-             LIMIT 1`,
-            [asset.id, monthKey]
+        const dupeCheck = await client.query(
+          `SELECT id FROM journal_entries
+           WHERE source = 'depreciation' AND source_id = $1
+             AND to_char(date, 'YYYY-MM') = $2
+           LIMIT 1`,
+          [asset.id, monthKey]
+        );
+
+        if (dupeCheck.rows.length === 0) {
+          const entryNumber = await storage.generateEntryNumber(companyId, depreciationDate);
+
+          const jeResult = await client.query(
+            `INSERT INTO journal_entries (company_id, date, memo, entry_number, status, source, source_id, created_by)
+             VALUES ($1, $2, $3, $4, 'draft', 'depreciation', $5, $6)
+             RETURNING id`,
+            [companyId, depreciationDate, `Depreciation - ${asset.asset_name} (${monthKey})`, entryNumber, asset.id, userId]
+          );
+          const entryId = jeResult.rows[0].id;
+
+          // Debit: Depreciation Expense
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+             VALUES ($1, $2, $3, 0, $4)`,
+            [entryId, depExpenseAccount.id, monthlyDepreciation, `Depreciation expense - ${asset.asset_name}`]
           );
 
-          if (dupeCheck.rows.length === 0) {
-            const entryNumber = await storage.generateEntryNumber(companyId, depreciationDate);
+          // Credit: Accumulated Depreciation
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+             VALUES ($1, $2, 0, $3, $4)`,
+            [entryId, accumDepAccount.id, monthlyDepreciation, `Accumulated depreciation - ${asset.asset_name}`]
+          );
 
-            const jeResult = await client.query(
-              `INSERT INTO journal_entries (company_id, date, memo, entry_number, status, source, source_id, created_by)
-               VALUES ($1, $2, $3, $4, 'draft', 'depreciation', $5, $6)
-               RETURNING id`,
-              [companyId, depreciationDate, `Depreciation - ${asset.asset_name} (${monthKey})`, entryNumber, asset.id, userId]
-            );
-            const entryId = jeResult.rows[0].id;
-
-            // Debit: Depreciation Expense
-            await client.query(
-              `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-               VALUES ($1, $2, $3, 0, $4)`,
-              [entryId, depExpenseAccount.id, monthlyDepreciation, `Depreciation expense - ${asset.asset_name}`]
-            );
-
-            // Credit: Accumulated Depreciation
-            await client.query(
-              `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-               VALUES ($1, $2, 0, $3, $4)`,
-              [entryId, accumDepAccount.id, monthlyDepreciation, `Accumulated depreciation - ${asset.asset_name}`]
-            );
-
-            log.info({ assetId: asset.id, entryId, monthlyDepreciation, monthKey }, 'Batch depreciation JE created');
-          } else {
-            log.info({ assetId: asset.id, monthKey }, 'Depreciation JE already exists — skipped');
-          }
+          log.info({ assetId: asset.id, entryId, monthlyDepreciation, monthKey }, 'Batch depreciation JE created');
+        } else {
+          log.info({ assetId: asset.id, monthKey }, 'Depreciation JE already exists — skipped');
         }
 
         results.push({
@@ -492,17 +499,111 @@ export function registerFixedAssetRoutes(app: Express) {
 
     const dispAmount = parseFloat(disposalAmount || 0);
     const nbv = parseFloat(asset.net_book_value || 0);
+    const purchaseCost = parseFloat(asset.purchase_cost || 0);
+    const accumulatedDep = parseFloat(asset.accumulated_depreciation || 0);
     const gainLoss = Math.round((dispAmount - nbv) * 100) / 100;
 
-    await pool.query(
-      `UPDATE fixed_assets SET
-        status = 'disposed',
-        disposal_date = $1,
-        disposal_amount = $2,
-        notes = COALESCE($3, notes)
-       WHERE id = $4`,
-      [disposalDate, dispAmount, notes || null, id]
-    );
+    // Resolve disposal accounts
+    const bankAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.BANK_ACCOUNTS);
+    const accumDepAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.ACCUMULATED_DEPRECIATION);
+    const fixedAssetsAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.FIXED_ASSETS);
+    const gainOnDisposalAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.GAIN_ON_DISPOSAL);
+    const lossOnDisposalAccount = await storage.getAccountByCode(asset.company_id, ACCOUNT_CODES.LOSS_ON_DISPOSAL);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Fail-fast: required accounts must exist before creating any JE
+      if (!fixedAssetsAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Fixed Assets account (1210) not found. Add it to your chart of accounts.' });
+      }
+      if (!accumDepAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Accumulated Depreciation account (1240) not found. Add it to your chart of accounts.' });
+      }
+
+      // Fiscal year guard
+      await assertFiscalYearOpenPool(client, asset.company_id, new Date(disposalDate));
+
+      // Update asset status
+      await client.query(
+        `UPDATE fixed_assets SET
+          status = 'disposed',
+          disposal_date = $1,
+          disposal_amount = $2,
+          notes = COALESCE($3, notes)
+         WHERE id = $4`,
+        [disposalDate, dispAmount, notes || null, id]
+      );
+
+      // Create disposal journal entry (accounts guaranteed non-null by fail-fast above)
+      const entryNumber = await storage.generateEntryNumber(asset.company_id, new Date(disposalDate));
+
+      const jeResult = await client.query(
+        `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
+         VALUES ($1, $2, $3, $4, 'posted', 'disposal', $5, $6)
+         RETURNING id`,
+        [asset.company_id, entryNumber, disposalDate, `Asset disposal - ${asset.asset_name}`, asset.id, userId]
+      );
+      const jeId = jeResult.rows[0].id;
+
+      // Debit: Bank for proceeds (if any)
+      if (dispAmount > 0 && bankAccount) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [jeId, bankAccount.id, dispAmount.toFixed(2), `Disposal proceeds - ${asset.asset_name}`]
+        );
+      }
+
+      // Debit: Accumulated Depreciation (remove contra-asset)
+      if (accumulatedDep > 0) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [jeId, accumDepAccount.id, accumulatedDep.toFixed(2), `Remove accumulated depreciation - ${asset.asset_name}`]
+        );
+      }
+
+      // Debit: Loss on Disposal (if loss)
+      if (gainLoss < 0 && lossOnDisposalAccount) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [jeId, lossOnDisposalAccount.id, Math.abs(gainLoss).toFixed(2), `Loss on disposal - ${asset.asset_name}`]
+        );
+      }
+
+      // Credit: Fixed Assets (remove the asset at cost)
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+         VALUES ($1, $2, 0, $3, $4)`,
+        [jeId, fixedAssetsAccount.id, purchaseCost.toFixed(2), `Remove fixed asset - ${asset.asset_name}`]
+      );
+
+      // Credit: Gain on Disposal (if gain)
+      if (gainLoss > 0 && gainOnDisposalAccount) {
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, 0, $3, $4)`,
+          [jeId, gainOnDisposalAccount.id, gainLoss.toFixed(2), `Gain on disposal - ${asset.asset_name}`]
+        );
+      }
+
+      log.info({ assetId: id, journalEntryId: jeId, gainLoss }, 'Disposal journal entry created');
+
+      await client.query('COMMIT');
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
 
     const updated = await pool.query(`SELECT * FROM fixed_assets WHERE id = $1`, [id]);
     log.info({ assetId: id, disposalAmount: dispAmount, gainLoss }, 'Asset disposed');

@@ -49,6 +49,9 @@ export function registerAIRoutes(app: Express) {
 
   // Customer-only: AI expense categorization
   app.post("/api/ai/categorize", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const validated = categorizationRequestSchema.parse(req.body);
       const userId = (req as any).user.id;
@@ -114,6 +117,9 @@ Amount: ${validated.amount} ${validated.currency}`
 
   // AI Bank Statement Parser Route
   app.post("/api/ai/parse-bank-statement", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { text } = req.body;
 
@@ -184,6 +190,9 @@ If no valid transactions can be found, return { "transactions": [] }`
 
   // AI CFO Advice Route
   app.post("/api/ai/cfo-advice", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId, question, context } = req.body;
 
@@ -265,6 +274,9 @@ Keep your tone professional but friendly, like a trusted advisor.`
 
   // Enhanced AI Batch Transaction Categorization
   app.post("/api/ai/batch-categorize", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId, transactions } = req.body;
       const userId = (req as any).user.id;
@@ -369,6 +381,9 @@ Respond with a JSON object:
 
   // Anomaly & Duplicate Detection
   app.post("/api/ai/detect-anomalies", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId } = req.body;
       const userId = (req as any).user.id;
@@ -529,6 +544,9 @@ Respond with JSON:
 
   // AI-Assisted Bank Reconciliation
   app.post("/api/ai/reconcile", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId } = req.body;
       const userId = (req as any).user.id;
@@ -750,6 +768,9 @@ ${JSON.stringify(ledgerData, null, 2)}`
 
   // Predictive Cash Flow Forecasting
   app.post("/api/ai/forecast-cashflow", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId, forecastMonths = 3 } = req.body;
       const userId = (req as any).user.id;
@@ -928,6 +949,9 @@ Respond with JSON:
 
   // Main Natural Language Query Endpoint
   app.post("/api/ai/nl-gateway", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId, message, locale = 'en', context = {} } = req.body;
       const userId = (req as any).user.id;
@@ -1135,6 +1159,9 @@ Company: ${company.name}`;
 
   // Enhanced /api/ask endpoint with streaming support
   app.post("/api/ask", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     const startTime = Date.now();
     let fullResponse = '';
     let conversationId: string | undefined;
@@ -1160,11 +1187,6 @@ Company: ${company.name}`;
         if (!hasAccess) {
           return res.status(403).json({ message: 'Access denied' });
         }
-      }
-
-      // Check if OpenAI API key is configured
-      if (!process.env.OPENAI_API_KEY) {
-        return res.status(500).json({ message: 'OpenAI API key is not configured' });
       }
 
       const systemPrompt = validated.systemPrompt ||
@@ -1617,6 +1639,9 @@ IMPORTANT GUIDELINES:
 
   // Smart suggestions based on context
   app.post("/api/ai/smart-suggest", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) {
+      return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
+    }
     try {
       const { companyId, context, fieldType, currentValue } = req.body;
       const userId = (req as any).user.id;

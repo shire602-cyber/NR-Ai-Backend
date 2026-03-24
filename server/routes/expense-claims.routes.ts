@@ -4,6 +4,8 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
 import { pool } from '../db';
 import { createLogger } from '../config/logger';
+import { ACCOUNT_CODES } from '../lib/account-codes';
+import { assertFiscalYearOpenPool } from '../lib/fiscal-year-guard';
 
 const log = createLogger('expense-claims');
 
@@ -300,13 +302,114 @@ export function registerExpenseClaimRoutes(app: Express) {
 
     const { review_notes } = req.body;
 
-    const updatedResult = await pool.query(
-      `UPDATE expense_claims
-       SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_notes = $2
-       WHERE id = $3
-       RETURNING *`,
-      [userId, review_notes || null, id]
+    // Fetch expense claim items for JE creation
+    const itemsResult = await pool.query(
+      'SELECT * FROM expense_claim_items WHERE claim_id = $1',
+      [id]
     );
+    const items = itemsResult.rows;
+
+    if (items.length > 0) {
+      // Resolve GL accounts
+      const apAccount = await storage.getAccountByCode(claim.company_id, ACCOUNT_CODES.ACCOUNTS_PAYABLE);
+      const generalExpenseAccount = await storage.getAccountByCode(claim.company_id, ACCOUNT_CODES.GENERAL_EXPENSES);
+      const vatInputAccount = await storage.getAccountByCode(claim.company_id, ACCOUNT_CODES.VAT_RECEIVABLE_INPUT);
+
+      if (!apAccount) {
+        return res.status(400).json({
+          error: 'Required account not found. Ensure your chart of accounts includes Accounts Payable (2010).'
+        });
+      }
+
+      if (!generalExpenseAccount) {
+        return res.status(400).json({
+          error: 'General Expenses account (5150) not found. Add it to your chart of accounts.'
+        });
+      }
+
+      // Calculate totals from items
+      const totalExpenseAmount = items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || 0), 0);
+      const totalVatAmount = items.reduce((sum: number, item: any) => sum + (parseFloat(item.vat_amount) || 0), 0);
+      const grandTotal = totalExpenseAmount + totalVatAmount;
+
+      const approvalDate = new Date();
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Fiscal year guard
+        await assertFiscalYearOpenPool(client, claim.company_id, approvalDate);
+
+        // Generate entry number
+        const entryNumber = await storage.generateEntryNumber(claim.company_id, approvalDate);
+
+        // Create journal entry: source "expense_claim", sourceId = claim id
+        const jeResult = await client.query(
+          `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
+           VALUES ($1, $2, $3, $4, 'posted', 'expense_claim', $5, $6)
+           RETURNING id`,
+          [claim.company_id, entryNumber, approvalDate, `Expense Claim ${claim.claim_number} - ${claim.title}`, id, userId]
+        );
+        const jeId = jeResult.rows[0].id;
+
+        // Debit: General Expenses (expense portion)
+        if (totalExpenseAmount > 0 && generalExpenseAccount) {
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+             VALUES ($1, $2, $3, 0, $4)`,
+            [jeId, generalExpenseAccount.id, totalExpenseAmount.toFixed(2), `Expense claim - ${claim.claim_number}`]
+          );
+        }
+
+        // Debit: VAT Input (if VAT > 0 and account exists)
+        if (totalVatAmount > 0 && vatInputAccount) {
+          await client.query(
+            `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+             VALUES ($1, $2, $3, 0, $4)`,
+            [jeId, vatInputAccount.id, totalVatAmount.toFixed(2), `VAT input - Expense claim ${claim.claim_number}`]
+          );
+        }
+
+        // Credit: Accounts Payable for grand total
+        await client.query(
+          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+           VALUES ($1, $2, 0, $3, $4)`,
+          [jeId, apAccount.id, grandTotal.toFixed(2), `A/P - Expense claim ${claim.claim_number}`]
+        );
+
+        // Update claim status inside the transaction
+        await client.query(
+          `UPDATE expense_claims
+           SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_notes = $2
+           WHERE id = $3`,
+          [userId, review_notes || null, id]
+        );
+
+        await client.query('COMMIT');
+
+        log.info({ claimId: id, reviewedBy: userId, journalEntryId: jeId, grandTotal }, 'Expense claim approved with GL entry');
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        if (err.statusCode) {
+          return res.status(err.statusCode).json({ message: err.message });
+        }
+        throw err;
+      } finally {
+        client.release();
+      }
+    } else {
+      // No items — just approve without JE
+      await pool.query(
+        `UPDATE expense_claims
+         SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_notes = $2
+         WHERE id = $3`,
+        [userId, review_notes || null, id]
+      );
+    }
+
+    // Fetch updated claim
+    const updatedResult = await pool.query('SELECT * FROM expense_claims WHERE id = $1', [id]);
 
     log.info({ claimId: id, reviewedBy: userId }, 'Expense claim approved');
     res.json(updatedResult.rows[0]);

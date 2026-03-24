@@ -427,6 +427,15 @@ export function registerBillPayRoutes(app: Express) {
       );
 
       const billLines = linesResult.rows;
+
+      const missingAccounts = billLines.filter((l: any) => !l.account_id);
+      if (missingAccounts.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `${missingAccounts.length} line item(s) have no account assigned. All lines must have an account before approval.`
+        });
+      }
+
       const subtotal = Number(bill.subtotal) || 0;
       const vatAmount = Number(bill.vat_amount) || 0;
       const totalAmount = Number(bill.total_amount) || 0;
@@ -565,35 +574,40 @@ export function registerBillPayRoutes(app: Express) {
       const apAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.ACCOUNTS_PAYABLE);
       const bankAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.BANK_ACCOUNTS);
 
-      if (apAccount && bankAccount) {
-        const entryNumber = await storage.generateEntryNumber(bill.company_id, paymentDateObj);
+      if (!apAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Accounts Payable account (2010) not found. Add it to your chart of accounts.' });
+      }
+      if (!bankAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Bank account (1020) not found. Add it to your chart of accounts.' });
+      }
 
-        const jeResult = await client.query(
-          `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
+      const entryNumber = await storage.generateEntryNumber(bill.company_id, paymentDateObj);
+
+      const jeResult = await client.query(
+        `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
            VALUES ($1, $2, $3, $4, 'draft', 'payment', $5, $6)
            RETURNING id`,
-          [bill.company_id, entryNumber, paymentDateObj, `Bill payment - ${bill.vendor_name} (${bill.bill_number || id})`, id, userId]
-        );
-        const jeId = jeResult.rows[0].id;
+        [bill.company_id, entryNumber, paymentDateObj, `Bill payment - ${bill.vendor_name} (${bill.bill_number || id})`, id, userId]
+      );
+      const jeId = jeResult.rows[0].id;
 
-        // Debit: Accounts Payable
-        await client.query(
-          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+      // Debit: Accounts Payable
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
            VALUES ($1, $2, $3, 0, $4)`,
-          [jeId, apAccount.id, paymentAmount.toFixed(2), `Bill payment - ${bill.vendor_name}`]
-        );
+        [jeId, apAccount.id, paymentAmount.toFixed(2), `Bill payment - ${bill.vendor_name}`]
+      );
 
-        // Credit: Bank Account
-        await client.query(
-          `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+      // Credit: Bank Account
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
            VALUES ($1, $2, 0, $3, $4)`,
-          [jeId, bankAccount.id, paymentAmount.toFixed(2), `Bill payment - ${bill.vendor_name}`]
-        );
+        [jeId, bankAccount.id, paymentAmount.toFixed(2), `Bill payment - ${bill.vendor_name}`]
+      );
 
-        log.info({ billId: id, paymentId: paymentResult.rows[0].id, journalEntryId: jeId, amount: paymentAmount, newStatus }, 'Bill payment recorded with GL entry');
-      } else {
-        log.warn({ billId: id }, 'Bill payment recorded without GL entry - AP or Bank account not found');
-      }
+      log.info({ billId: id, paymentId: paymentResult.rows[0].id, journalEntryId: jeId, amount: paymentAmount, newStatus }, 'Bill payment recorded with GL entry');
 
       await client.query('COMMIT');
 
