@@ -248,7 +248,9 @@ export const invoices = pgTable("invoices", {
   einvoiceHash: text("einvoice_hash"),
   einvoiceStatus: text("einvoice_status"), // null | generated | submitted | accepted | rejected
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  companyNumberUnique: unique("uq_invoices_company_number").on(table.companyId, table.number),
+}));
 
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   id: true,

@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { pool } from "../db";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 /**
@@ -12,7 +12,7 @@ export function registerReportRoutes(app: Express) {
   // TRIAL BALANCE
   // =====================================
 
-  app.get("/api/reports/:companyId/trial-balance", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/trial-balance", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { startDate, endDate } = req.query;
@@ -77,7 +77,7 @@ export function registerReportRoutes(app: Express) {
   // =====================================
 
   // Cash flow report - properly separated into operating, investing, and financing activities
-  app.get("/api/reports/:companyId/cash-flow/:period?", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/cash-flow/:period?", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, period: pathPeriod } = req.params;
     const period = pathPeriod || req.query.period || 'quarter'; // Support path segment, query param, or default
@@ -291,7 +291,7 @@ export function registerReportRoutes(app: Express) {
   }));
 
   // Aging report — returns both receivables (from invoices) and payables (from vendor bills)
-  app.get("/api/reports/:companyId/aging", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/aging", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 
@@ -397,7 +397,7 @@ export function registerReportRoutes(app: Express) {
   }));
 
   // Period comparison report - uses GL (journal entries) for revenue/expense figures so numbers match P&L
-  app.get("/api/reports/:companyId/comparison/:period?", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/comparison/:period?", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId, period: pathPeriod } = req.params;
     const period = pathPeriod || req.query.period || 'quarter';
@@ -496,7 +496,7 @@ export function registerReportRoutes(app: Express) {
   // GENERAL LEDGER
   // =====================================
 
-  app.get("/api/reports/:companyId/general-ledger", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/general-ledger", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { startDate, endDate } = req.query;
@@ -570,7 +570,7 @@ export function registerReportRoutes(app: Express) {
   // STATEMENT OF CHANGES IN EQUITY
   // =====================================
 
-  app.get("/api/reports/:companyId/equity-changes", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/equity-changes", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { startDate, endDate } = req.query;
@@ -640,7 +640,7 @@ export function registerReportRoutes(app: Express) {
   // BALANCE SHEET (dedicated reports endpoint with as-of date support)
   // =====================================
 
-  app.get("/api/reports/:companyId/balance-sheet", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/reports/:companyId/balance-sheet", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { date: asOfDateParam } = req.query;

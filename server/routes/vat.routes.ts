@@ -9,7 +9,7 @@ export function registerVATRoutes(app: Express) {
   // =====================================
 
   // Get VAT returns by company
-  app.get("/api/companies/:companyId/vat-returns", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/vat-returns", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 

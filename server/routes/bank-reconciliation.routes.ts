@@ -21,6 +21,7 @@ export function registerBankReconciliationRoutes(app: Express) {
   app.get(
     '/api/companies/:companyId/bank-reconciliation/unreconciled',
     authMiddleware,
+    requireCustomer,
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user?.id;
@@ -210,6 +211,7 @@ export function registerBankReconciliationRoutes(app: Express) {
   app.get(
     '/api/companies/:companyId/bank-reconciliation/summary',
     authMiddleware,
+    requireCustomer,
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user?.id;
