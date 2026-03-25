@@ -92,8 +92,8 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center justify-between p-4 border-b bg-background sticky top-0 z-10">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          <header role="banner" className="flex items-center justify-between p-4 border-b bg-background sticky top-0 z-10">
+            <SidebarTrigger data-testid="button-sidebar-toggle" aria-label="Toggle sidebar" />
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -125,7 +125,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
               </Link>
             </div>
           </header>
-          <main id="main-content" className="flex-1 overflow-auto p-8">
+          <main id="main-content" role="main" className="flex-1 overflow-auto p-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location}

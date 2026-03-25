@@ -366,6 +366,17 @@ export const defaultChartOfAccounts: DefaultAccountTemplate[] = [
     vatType: null,
     isSystemAccount: false,
   },
+  {
+    code: "4090",
+    nameEn: "Unrealized Exchange Gain",
+    nameAr: "أرباح صرف غير محققة",
+    description: "Unrealized foreign exchange gains on monetary items per IAS 21",
+    type: "income",
+    subType: "other_income",
+    isVatAccount: false,
+    vatType: null,
+    isSystemAccount: true,
+  },
 
   // ===========================
   // EXPENSES (5000-5199)
@@ -534,6 +545,17 @@ export const defaultChartOfAccounts: DefaultAccountTemplate[] = [
     isVatAccount: false,
     vatType: null,
     isSystemAccount: false,
+  },
+  {
+    code: "5160",
+    nameEn: "Unrealized Exchange Loss",
+    nameAr: "خسائر صرف غير محققة",
+    description: "Unrealized foreign exchange losses on monetary items per IAS 21",
+    type: "expense",
+    subType: "other_expense",
+    isVatAccount: false,
+    vatType: null,
+    isSystemAccount: true,
   },
 ];
 

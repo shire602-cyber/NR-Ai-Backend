@@ -458,17 +458,18 @@ export default function AdminDocuments() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <Button size="icon" variant="ghost" data-testid={`button-view-${doc.id}`}>
+                                <Button size="icon" variant="ghost" data-testid={`button-view-${doc.id}`} aria-label="View document">
                                   <Eye className="w-4 h-4" />
                                 </Button>
-                                <Button size="icon" variant="ghost" data-testid={`button-download-${doc.id}`}>
+                                <Button size="icon" variant="ghost" data-testid={`button-download-${doc.id}`} aria-label="Download document">
                                   <Download className="w-4 h-4" />
                                 </Button>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
                                   onClick={() => deleteMutation.mutate(doc.id)}
                                   data-testid={`button-delete-${doc.id}`}
+                                  aria-label="Delete document"
                                 >
                                   <Trash2 className="w-4 h-4 text-destructive" />
                                 </Button>

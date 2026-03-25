@@ -171,6 +171,7 @@ export default function AccountLedger() {
               className="opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={() => handleReverseEntry(entry)}
               title={locale === 'ar' ? 'عكس القيد' : 'Reverse entry'}
+              aria-label={locale === 'ar' ? 'عكس القيد' : 'Reverse entry'}
               data-testid={`button-reverse-${entry.id}`}
             >
               <RotateCcw className="h-4 w-4" />
@@ -336,11 +337,12 @@ export default function AccountLedger() {
     <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => navigate('/chart-of-accounts')}
             data-testid="button-back"
+            aria-label="Back to chart of accounts"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -387,11 +389,12 @@ export default function AccountLedger() {
             <FileText className="h-4 w-4 mr-2" />
             PDF
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="icon"
             onClick={() => refetch()}
             data-testid="button-refresh"
+            aria-label="Refresh ledger"
           >
             <RefreshCw className="h-4 w-4" />
           </Button>

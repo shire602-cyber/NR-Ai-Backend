@@ -516,6 +516,7 @@ export default function AIChat() {
                     disabled={!input.trim() || isPending}
                     size="icon"
                     className="h-full"
+                    aria-label="Send message"
                   >
                     {isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -529,6 +530,7 @@ export default function AIChat() {
                       variant="destructive"
                       size="icon"
                       onClick={handleStop}
+                      aria-label="Stop generating"
                     >
                       <X className="h-4 w-4" />
                     </Button>

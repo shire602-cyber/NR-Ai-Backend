@@ -402,6 +402,7 @@ export default function BackupRestore() {
                           onClick={() => handleDownload(backup)}
                           disabled={backup.status !== 'completed'}
                           data-testid={`button-download-${backup.id}`}
+                          aria-label="Download backup"
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -414,6 +415,7 @@ export default function BackupRestore() {
                           }}
                           disabled={backup.status !== 'completed'}
                           data-testid={`button-restore-${backup.id}`}
+                          aria-label="Restore backup"
                         >
                           <Upload className="h-4 w-4" />
                         </Button>
@@ -424,6 +426,7 @@ export default function BackupRestore() {
                               size="sm"
                               className="text-destructive hover:text-destructive"
                               data-testid={`button-delete-${backup.id}`}
+                              aria-label="Delete backup"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>

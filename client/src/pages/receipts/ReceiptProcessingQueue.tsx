@@ -43,6 +43,7 @@ export function ReceiptProcessingQueue({
                   onClick={() => onRemoveReceipt(index)}
                   disabled={isProcessingBulk}
                   data-testid={`button-remove-${index}`}
+                  aria-label="Remove receipt"
                 >
                   <X className="w-3 h-3" />
                 </Button>

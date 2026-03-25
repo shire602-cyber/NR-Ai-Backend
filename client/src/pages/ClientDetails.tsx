@@ -117,7 +117,7 @@ export default function ClientDetails() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/admin/clients">
-            <Button variant="ghost" size="icon" data-testid="button-back">
+            <Button variant="ghost" size="icon" data-testid="button-back" aria-label="Back to clients">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>

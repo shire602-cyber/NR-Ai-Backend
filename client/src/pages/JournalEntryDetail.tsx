@@ -122,7 +122,7 @@ export default function JournalEntryDetail() {
       <div className="space-y-6 p-6">
         <div className="flex items-center gap-4">
           <Link href="/journal">
-            <Button variant="ghost" size="icon" data-testid="button-back-to-journal">
+            <Button variant="ghost" size="icon" data-testid="button-back-to-journal" aria-label="Back to journal">
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
@@ -153,7 +153,7 @@ export default function JournalEntryDetail() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
           <Link href="/journal">
-            <Button variant="ghost" size="icon" data-testid="button-back-to-journal">
+            <Button variant="ghost" size="icon" data-testid="button-back-to-journal" aria-label="Back to journal">
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>

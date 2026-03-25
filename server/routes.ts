@@ -58,6 +58,8 @@ import { registerExchangeRateRoutes } from './routes/exchange-rates.routes';
 import { registerCreditNoteRoutes } from './routes/credit-notes.routes';
 import { registerFiscalYearRoutes } from './routes/fiscal-years.routes';
 import { registerBankReconciliationRoutes } from './routes/bank-reconciliation.routes';
+import { registerFxRevaluationRoutes } from './routes/fx-revaluation.routes';
+import { registerPurchaseOrderRoutes } from './routes/purchase-orders.routes';
 
 const log = createLogger('routes');
 
@@ -81,8 +83,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerBudgetRoutes(app);
   registerMonthEndRoutes(app);
   registerExchangeRateRoutes(app);
+  registerFxRevaluationRoutes(app);
   registerCreditNoteRoutes(app);
   registerFiscalYearRoutes(app);
+  registerPurchaseOrderRoutes(app);
 
   // ─── AI & Intelligence ──────────────────────────────────
   registerAIRoutes(app);

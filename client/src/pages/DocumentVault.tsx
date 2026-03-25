@@ -397,6 +397,7 @@ export default function DocumentVault() {
                               variant="ghost"
                               onClick={() => window.open(doc.fileUrl, '_blank')}
                               data-testid={`button-view-${doc.id}`}
+                              aria-label="View document"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -410,6 +411,7 @@ export default function DocumentVault() {
                                 link.click();
                               }}
                               data-testid={`button-download-${doc.id}`}
+                              aria-label="Download document"
                             >
                               <Download className="w-4 h-4" />
                             </Button>
@@ -419,6 +421,7 @@ export default function DocumentVault() {
                               className="text-destructive hover:text-destructive"
                               onClick={() => setDeleteDocId(doc.id)}
                               data-testid={`button-delete-${doc.id}`}
+                              aria-label="Delete document"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>

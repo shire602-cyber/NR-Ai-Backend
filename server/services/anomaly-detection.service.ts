@@ -165,30 +165,32 @@ export async function detectAnomalies(companyId: string): Promise<AnomalyDetecti
   // ===========================
   // 3. Weekend transactions
   // ===========================
-  for (const entry of journalEntries) {
-    if (entry.status !== 'posted') continue;
+  // Batch-fetch lines for all posted weekend entries to avoid N+1
+  const postedWeekendEntries = journalEntries.filter(entry => {
+    if (entry.status !== 'posted') return false;
+    const dayOfWeek = new Date(entry.date).getDay();
+    return dayOfWeek === 5 || dayOfWeek === 6;
+  });
+  const weekendLinesMap = await storage.getJournalLinesByEntryIds(postedWeekendEntries.map(e => e.id));
+
+  for (const entry of postedWeekendEntries) {
     const entryDate = new Date(entry.date);
     const dayOfWeek = entryDate.getDay();
+    const dayName = dayOfWeek === 5 ? 'Friday' : 'Saturday';
+    const lines = weekendLinesMap.get(entry.id) || [];
+    const totalDebit = lines.reduce((s: number, l: any) => s + Number(l.debit || 0), 0);
 
-    // Friday and Saturday are typical UAE weekends
-    if (dayOfWeek === 5 || dayOfWeek === 6) {
-      const dayName = dayOfWeek === 5 ? 'Friday' : 'Saturday';
-      // Get total amount from lines
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
-      const totalDebit = lines.reduce((s, l) => s + Number(l.debit || 0), 0);
-
-      if (totalDebit > 0) {
-        anomalies.push({
-          id: generateId(),
-          type: 'weekend_transaction',
-          severity: 'info',
-          description: `Journal entry ${entry.entryNumber} posted on ${dayName} (${entryDate.toISOString().split('T')[0]}) for AED ${totalDebit.toLocaleString()}. UAE businesses typically don't transact on weekends.`,
-          amount: totalDebit,
-          date: entryDate.toISOString().split('T')[0],
-          relatedId: entry.id,
-          relatedType: 'journal_entry',
-        });
-      }
+    if (totalDebit > 0) {
+      anomalies.push({
+        id: generateId(),
+        type: 'weekend_transaction',
+        severity: 'info',
+        description: `Journal entry ${entry.entryNumber} posted on ${dayName} (${entryDate.toISOString().split('T')[0]}) for AED ${totalDebit.toLocaleString()}. UAE businesses typically don't transact on weekends.`,
+        amount: totalDebit,
+        date: entryDate.toISOString().split('T')[0],
+        relatedId: entry.id,
+        relatedType: 'journal_entry',
+      });
     }
   }
 

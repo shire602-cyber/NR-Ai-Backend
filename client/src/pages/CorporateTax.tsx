@@ -421,6 +421,7 @@ export default function CorporateTax() {
                               setViewReturn(taxReturn);
                               setViewDialogOpen(true);
                             }}
+                            aria-label="View details"
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -432,6 +433,7 @@ export default function CorporateTax() {
                                 onClick={() => updateStatusMutation.mutate({ id: taxReturn.id, status: 'filed' })}
                                 disabled={updateStatusMutation.isPending}
                                 title="Mark as Filed"
+                                aria-label="Mark as filed"
                               >
                                 <CheckCircle2 className="w-4 h-4 text-primary" />
                               </Button>
@@ -441,6 +443,7 @@ export default function CorporateTax() {
                                 onClick={() => deleteMutation.mutate(taxReturn.id)}
                                 disabled={deleteMutation.isPending}
                                 title="Delete"
+                                aria-label="Delete tax return"
                               >
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>
@@ -453,6 +456,7 @@ export default function CorporateTax() {
                               onClick={() => updateStatusMutation.mutate({ id: taxReturn.id, status: 'paid' })}
                               disabled={updateStatusMutation.isPending}
                               title="Mark as Paid"
+                              aria-label="Mark as paid"
                             >
                               <Banknote className="w-4 h-4 text-success" />
                             </Button>

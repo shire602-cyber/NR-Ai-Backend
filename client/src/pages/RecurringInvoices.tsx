@@ -499,6 +499,7 @@ export default function RecurringInvoices() {
                             size="icon"
                             onClick={() => remove(index)}
                             className={cn(index === 0 && 'mt-6')}
+                            aria-label="Remove line item"
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
@@ -596,7 +597,7 @@ export default function RecurringInvoices() {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" aria-label="More actions">
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>

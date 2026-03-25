@@ -321,11 +321,12 @@ export default function Accounts() {
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 data-testid={`button-delete-account-${account.id}`}
                                 disabled={deleteMutation.isPending}
+                                aria-label="Delete account"
                               >
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>

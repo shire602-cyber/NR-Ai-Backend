@@ -27,19 +27,12 @@ export function registerJournalRoutes(app: Express) {
 
     const entries = await storage.getJournalEntriesByCompanyId(companyId);
 
-    // Fetch lines and accounts for each entry
-    const entriesWithLines = await Promise.all(
-      entries.map(async (entry) => {
-        const lines = await storage.getJournalLinesByEntryId(entry.id);
-        const linesWithAccounts = await Promise.all(
-          lines.map(async (line) => {
-            const account = await storage.getAccount(line.accountId);
-            return { ...line, account };
-          })
-        );
-        return { ...entry, lines: linesWithAccounts };
-      })
-    );
+    // Batch-fetch all journal lines with accounts in a single query
+    const linesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
+    const entriesWithLines = entries.map(entry => ({
+      ...entry,
+      lines: linesMap.get(entry.id) || [],
+    }));
 
     res.json(entriesWithLines);
   }));

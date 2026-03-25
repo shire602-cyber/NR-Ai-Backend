@@ -214,6 +214,7 @@ export default function UAENewsFeed() {
                             variant="ghost"
                             onClick={() => window.open(item.sourceUrl!, '_blank')}
                             data-testid={`button-open-${item.id}`}
+                            aria-label="Open source link"
                           >
                             <ExternalLink className="w-4 h-4" />
                           </Button>

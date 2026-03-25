@@ -65,10 +65,11 @@ export async function generateCashFlowForecast(
     (e) => e.status === 'posted' && new Date(e.date) >= sixMonthsAgo
   );
 
-  // Get all journal lines for recent entries
+  // Batch-fetch all journal lines for recent entries in a single query
+  const recentLinesMap = await storage.getJournalLinesByEntryIds(recentEntries.map(e => e.id));
   const allLines: (JournalLine & { entryDate: Date })[] = [];
   for (const entry of recentEntries) {
-    const lines = await storage.getJournalLinesByEntryId(entry.id);
+    const lines = recentLinesMap.get(entry.id) || [];
     for (const line of lines) {
       allLines.push({ ...line, entryDate: new Date(entry.date) });
     }
@@ -262,6 +263,9 @@ export async function getCashFlowHistory(
   // Filter posted entries only
   const postedEntries = journalEntries.filter((e) => e.status === 'posted');
 
+  // Batch-fetch all journal lines for posted entries in a single query
+  const historyLinesMap = await storage.getJournalLinesByEntryIds(postedEntries.map(e => e.id));
+
   // Build month buckets
   const history: MonthlyCashHistory[] = [];
   const monthNames = [
@@ -283,7 +287,7 @@ export async function getCashFlowHistory(
     let totalOutflows = 0;
 
     for (const entry of monthEntries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = historyLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accountMap.get(line.accountId);
         if (!account) continue;

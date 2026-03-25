@@ -229,7 +229,7 @@ export default function ClientTasks() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/admin/clients">
-            <Button variant="ghost" size="icon" data-testid="button-back">
+            <Button variant="ghost" size="icon" data-testid="button-back" aria-label="Back to clients">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
@@ -409,7 +409,7 @@ export default function ClientTasks() {
 
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost">
+                          <Button size="icon" variant="ghost" aria-label="More actions">
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>

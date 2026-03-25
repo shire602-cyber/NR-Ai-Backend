@@ -391,10 +391,11 @@ export default function IntegrationsHub() {
                               )}
                               Sync Now
                             </Button>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               data-testid={`button-settings-${platform.id}`}
+                              aria-label="Integration settings"
                             >
                               <Settings className="w-4 h-4" />
                             </Button>
@@ -522,7 +523,7 @@ export default function IntegrationsHub() {
                               )}
                             </div>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="View details">
                             <ChevronRight className="w-4 h-4" />
                           </Button>
                         </div>

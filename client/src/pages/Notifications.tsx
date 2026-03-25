@@ -187,7 +187,7 @@ export default function Notifications() {
                       </div>
                       <div className="flex items-center gap-2">
                         {notification.actionUrl && (
-                          <Button variant="ghost" size="sm" asChild>
+                          <Button variant="ghost" size="sm" asChild aria-label="View notification action">
                             <a href={notification.actionUrl}>
                               <ChevronRight className="w-4 h-4" />
                             </a>
@@ -199,6 +199,7 @@ export default function Notifications() {
                             size="sm"
                             onClick={() => markAsReadMutation.mutate(notification.id)}
                             data-testid={`button-read-${notification.id}`}
+                            aria-label="Mark as read"
                           >
                             <Check className="w-4 h-4" />
                           </Button>
@@ -208,6 +209,7 @@ export default function Notifications() {
                           size="sm"
                           onClick={() => dismissMutation.mutate(notification.id)}
                           data-testid={`button-dismiss-${notification.id}`}
+                          aria-label="Dismiss notification"
                         >
                           <XCircle className="w-4 h-4" />
                         </Button>

@@ -101,6 +101,7 @@ export function InlineHelp({
             size="icon"
             className={cn("h-6 w-6 text-muted-foreground hover:text-foreground", className)}
             type="button"
+            aria-label="Help"
           >
             <HelpCircle className="w-4 h-4" />
           </Button>

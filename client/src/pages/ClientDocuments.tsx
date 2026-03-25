@@ -239,7 +239,7 @@ export default function ClientDocuments() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/admin/clients">
-            <Button variant="ghost" size="icon" data-testid="button-back">
+            <Button variant="ghost" size="icon" data-testid="button-back" aria-label="Back to clients">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
@@ -395,6 +395,7 @@ export default function ClientDocuments() {
                               variant="ghost"
                               onClick={() => window.open(doc.fileUrl, '_blank')}
                               data-testid={`button-view-${doc.id}`}
+                              aria-label="View document"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -408,6 +409,7 @@ export default function ClientDocuments() {
                                 link.click();
                               }}
                               data-testid={`button-download-${doc.id}`}
+                              aria-label="Download document"
                             >
                               <Download className="w-4 h-4" />
                             </Button>
@@ -417,6 +419,7 @@ export default function ClientDocuments() {
                               className="text-destructive hover:text-destructive"
                               onClick={() => setDeleteDocId(doc.id)}
                               data-testid={`button-delete-${doc.id}`}
+                              aria-label="Delete document"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>

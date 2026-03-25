@@ -147,6 +147,7 @@ export function DateRangeFilter({ dateRange, onDateRangeChange, className }: Dat
           onClick={clearDateRange}
           className="h-8 w-8"
           data-testid="button-clear-dates"
+          aria-label="Clear date filter"
         >
           <X className="h-4 w-4" />
         </Button>

@@ -122,7 +122,7 @@ import {
   creditNoteLines
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, lte, sql } from "drizzle-orm";
+import { eq, and, desc, lte, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -213,6 +213,7 @@ export interface IStorage {
   // Journal Lines
   createJournalLine(line: InsertJournalLine): Promise<JournalLine>;
   getJournalLinesByEntryId(entryId: string): Promise<JournalLine[]>;
+  getJournalLinesByEntryIds(entryIds: string[]): Promise<Map<string, any[]>>;
   deleteJournalLinesByEntryId(entryId: string): Promise<void>;
   
   // Invoices
@@ -987,6 +988,25 @@ export class DatabaseStorage implements IStorage {
 
   async getJournalLinesByEntryId(entryId: string): Promise<JournalLine[]> {
     return await db.select().from(journalLines).where(eq(journalLines.entryId, entryId));
+  }
+
+  async getJournalLinesByEntryIds(entryIds: string[]): Promise<Map<string, any[]>> {
+    if (entryIds.length === 0) return new Map();
+    const lines = await db.select({
+      line: journalLines,
+      account: accounts,
+    })
+    .from(journalLines)
+    .leftJoin(accounts, eq(journalLines.accountId, accounts.id))
+    .where(inArray(journalLines.entryId, entryIds));
+
+    const map = new Map<string, any[]>();
+    for (const row of lines) {
+      const entryId = row.line.entryId;
+      if (!map.has(entryId)) map.set(entryId, []);
+      map.get(entryId)!.push({ ...row.line, account: row.account });
+    }
+    return map;
   }
 
   async deleteJournalLinesByEntryId(entryId: string): Promise<void> {

@@ -299,6 +299,7 @@ export function SmartInput({
               size="icon"
               className="absolute right-0 top-0 h-full w-8 opacity-50 hover:opacity-100"
               type="button"
+              aria-label="Help"
             >
               <HelpCircle className="w-3 h-3" />
             </Button>

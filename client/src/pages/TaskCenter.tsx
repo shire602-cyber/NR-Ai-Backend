@@ -409,7 +409,7 @@ export default function TaskCenter() {
 
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost">
+                          <Button size="icon" variant="ghost" aria-label="More actions">
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>

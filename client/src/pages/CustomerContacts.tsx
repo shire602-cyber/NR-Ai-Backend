@@ -475,6 +475,7 @@ export default function CustomerContacts() {
                                 onClick={() => portalLinkMutation.mutate({ contactId: contact.id, contactName: contact.name })}
                                 disabled={portalLinkMutation.isPending}
                                 data-testid={`button-portal-link-${contact.id}`}
+                                aria-label="Generate portal link"
                               >
                                 <Link2 className="w-4 h-4" />
                               </Button>
@@ -483,6 +484,7 @@ export default function CustomerContacts() {
                                 variant="ghost"
                                 onClick={() => setEditContact(contact)}
                                 data-testid={`button-edit-contact-${contact.id}`}
+                                aria-label="Edit contact"
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
@@ -491,6 +493,7 @@ export default function CustomerContacts() {
                                 variant="ghost"
                                 onClick={() => setDeleteContactId(contact.id)}
                                 data-testid={`button-delete-contact-${contact.id}`}
+                                aria-label="Delete contact"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -730,6 +733,7 @@ export default function CustomerContacts() {
                   toast({ title: 'Link copied to clipboard' });
                 }}
                 data-testid="button-copy-portal-link"
+                aria-label="Copy portal link"
               >
                 <Copy className="w-4 h-4" />
               </Button>

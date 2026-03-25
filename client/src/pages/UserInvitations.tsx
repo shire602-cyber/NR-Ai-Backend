@@ -354,7 +354,7 @@ export default function UserInvitations() {
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" data-testid={`button-actions-invite-${invitation.id}`}>
+                            <Button variant="ghost" size="icon" data-testid={`button-actions-invite-${invitation.id}`} aria-label="More actions">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

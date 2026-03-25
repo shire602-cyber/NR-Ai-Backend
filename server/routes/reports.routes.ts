@@ -40,12 +40,15 @@ export function registerReportRoutes(app: Express) {
       });
     }
 
+    // Batch-fetch all journal lines in a single query
+    const linesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
+
     // Accumulate per-account debit and credit totals
     const debitTotals = new Map<string, number>();
     const creditTotals = new Map<string, number>();
 
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = linesMap.get(entry.id) || [];
       for (const line of lines) {
         debitTotals.set(line.accountId, (debitTotals.get(line.accountId) || 0) + Number(line.debit));
         creditTotals.set(line.accountId, (creditTotals.get(line.accountId) || 0) + Number(line.credit));
@@ -172,11 +175,14 @@ export function registerReportRoutes(app: Express) {
     const investing = { inflow: 0, outflow: 0, items: [] as { accountId: string; accountName: string; accountCode: string; amount: number }[] };
     const financing = { inflow: 0, outflow: 0, items: [] as { accountId: string; accountName: string; accountCode: string; amount: number }[] };
 
+    // Batch-fetch all journal lines for period entries
+    const cashFlowLinesMap = await storage.getJournalLinesByEntryIds(periodEntries.map(e => e.id));
+
     // Per-account net amounts (to build itemized breakdown)
     const accountNets = new Map<string, number>();
 
     for (const entry of periodEntries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = cashFlowLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accountMap.get(line.accountId);
         if (!account) continue;
@@ -522,6 +528,9 @@ export function registerReportRoutes(app: Express) {
       });
     }
 
+    // Batch-fetch all journal lines for GL entries
+    const glLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
+
     // Build per-account ledger with running balance
     const ledger = [];
     for (const account of accounts) {
@@ -529,7 +538,7 @@ export function registerReportRoutes(app: Express) {
       let runningBalance = 0;
 
       for (const entry of entries) {
-        const lines = await storage.getJournalLinesByEntryId(entry.id);
+        const lines = glLinesMap.get(entry.id) || [];
         for (const line of lines) {
           if (line.accountId === account.id) {
             const debit = Number(line.debit);
@@ -587,11 +596,14 @@ export function registerReportRoutes(app: Express) {
     const start = startDate ? new Date(startDate as string) : new Date(0);
     const end = endDate ? new Date(endDate as string) : new Date();
 
+    // Batch-fetch all journal lines for all posted entries at once
+    const allEquityLinesMap = await storage.getJournalLinesByEntryIds(postedEntries.map(e => e.id));
+
     // Opening equity: sum of equity accounts from entries BEFORE start date
     let openingEquity = 0;
     const beforeStartEntries = postedEntries.filter(e => new Date(e.date) < start);
     for (const entry of beforeStartEntries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = allEquityLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (account?.type === 'equity') {
@@ -611,7 +623,7 @@ export function registerReportRoutes(app: Express) {
     let periodEquityChanges = 0;
 
     for (const entry of periodEntries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = allEquityLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account) continue;

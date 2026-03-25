@@ -144,12 +144,15 @@ export async function autoReconcileTransactions(companyId: string): Promise<Auto
     accountMap.set(acc.id, acc);
   }
 
-  // Pre-compute journal entry totals
+  // Pre-compute journal entry totals using batch fetch
   const journalTotals = new Map<string, { totalDebit: number; totalCredit: number; description: string }>();
   const postedEntries = journalEntries.filter((e) => e.status === 'posted');
 
+  // Batch-fetch all journal lines for posted entries in a single query
+  const reconcileLinesMap = await storage.getJournalLinesByEntryIds(postedEntries.map(e => e.id));
+
   for (const entry of postedEntries) {
-    const lines = await storage.getJournalLinesByEntryId(entry.id);
+    const lines = reconcileLinesMap.get(entry.id) || [];
     let totalDebit = 0;
     let totalCredit = 0;
     for (const line of lines) {

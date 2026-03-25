@@ -2413,3 +2413,46 @@ export const insertCreditNoteLineSchema = createInsertSchema(creditNoteLines).om
 
 export type InsertCreditNoteLine = z.infer<typeof insertCreditNoteLineSchema>;
 export type CreditNoteLine = typeof creditNoteLines.$inferSelect;
+
+// ===========================
+// Purchase Orders
+// ===========================
+export const purchaseOrders = pgTable("purchase_orders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  poNumber: text("po_number").notNull(),
+  vendorName: text("vendor_name").notNull(),
+  vendorNameAr: text("vendor_name_ar"),
+  vendorEmail: text("vendor_email"),
+  vendorTrn: text("vendor_trn"),
+  date: timestamp("date").defaultNow().notNull(),
+  expectedDelivery: timestamp("expected_delivery"),
+  status: text("status").default("draft").notNull(), // draft, sent, partial, received, cancelled
+  subtotal: numeric("subtotal", { precision: 15, scale: 2 }).default("0").notNull(),
+  vatAmount: numeric("vat_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  total: numeric("total", { precision: 15, scale: 2 }).default("0").notNull(),
+  currency: text("currency").default("AED"),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const purchaseOrderLines = pgTable("purchase_order_lines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  purchaseOrderId: uuid("purchase_order_id").references(() => purchaseOrders.id, { onDelete: "cascade" }).notNull(),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  description: text("description").notNull(),
+  quantity: numeric("quantity", { precision: 15, scale: 4 }).default("1").notNull(),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).default("0").notNull(),
+  vatRate: numeric("vat_rate", { precision: 15, scale: 4 }).default("0.05"),
+  amount: numeric("amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  receivedQuantity: numeric("received_quantity", { precision: 15, scale: 4 }).default("0"),
+});
+
+export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders);
+export const insertPurchaseOrderLineSchema = createInsertSchema(purchaseOrderLines);
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type InsertPurchaseOrder = typeof purchaseOrders.$inferInsert;
+export type PurchaseOrderLine = typeof purchaseOrderLines.$inferSelect;
+export type InsertPurchaseOrderLine = typeof purchaseOrderLines.$inferInsert;

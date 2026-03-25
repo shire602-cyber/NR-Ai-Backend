@@ -361,6 +361,7 @@ export default function TaxReturnArchive() {
                                   variant="ghost"
                                   onClick={() => window.open(ret.fileUrl!, '_blank')}
                                   data-testid={`button-view-${ret.id}`}
+                                  aria-label="View tax return"
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
@@ -374,6 +375,7 @@ export default function TaxReturnArchive() {
                                     link.click();
                                   }}
                                   data-testid={`button-download-${ret.id}`}
+                                  aria-label="Download tax return"
                                 >
                                   <Download className="w-4 h-4" />
                                 </Button>
