@@ -60,7 +60,7 @@ export async function detectAnomalies(companyId: string): Promise<AnomalyDetecti
   const receiptsByDateAmount = new Map<string, typeof receipts>();
   for (const receipt of receipts) {
     if (!receipt.amount || !receipt.date) continue;
-    const key = `${receipt.date}-${Number(receipt.amount).toFixed(2)}`;
+    const key = `${receipt.date}|${Number(receipt.amount).toFixed(2)}`;
     if (!receiptsByDateAmount.has(key)) {
       receiptsByDateAmount.set(key, []);
     }
@@ -69,7 +69,7 @@ export async function detectAnomalies(companyId: string): Promise<AnomalyDetecti
 
   for (const [key, group] of receiptsByDateAmount) {
     if (group.length > 1) {
-      const [dateStr, amountStr] = key.split('-');
+      const [dateStr, amountStr] = key.split('|');
       anomalies.push({
         id: generateId(),
         type: 'duplicate_amount',
@@ -88,7 +88,7 @@ export async function detectAnomalies(companyId: string): Promise<AnomalyDetecti
   for (const inv of invoices) {
     if (!inv.total || !inv.date) continue;
     const dateStr = new Date(inv.date).toISOString().split('T')[0];
-    const key = `${dateStr}-${Number(inv.total).toFixed(2)}`;
+    const key = `${dateStr}|${Number(inv.total).toFixed(2)}`;
     if (!invoicesByDateAmount.has(key)) {
       invoicesByDateAmount.set(key, []);
     }
@@ -97,9 +97,7 @@ export async function detectAnomalies(companyId: string): Promise<AnomalyDetecti
 
   for (const [key, group] of invoicesByDateAmount) {
     if (group.length > 1) {
-      const parts = key.split('-');
-      const amountStr = parts[parts.length - 1];
-      const dateStr = parts.slice(0, -1).join('-');
+      const [dateStr, amountStr] = key.split('|');
       anomalies.push({
         id: generateId(),
         type: 'duplicate_amount',

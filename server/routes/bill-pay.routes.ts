@@ -152,8 +152,8 @@ export function registerBillPayRoutes(app: Express) {
     let vatAmount = 0;
 
     for (const line of line_items) {
-      const lineAmount = (Number(line.quantity) || 1) * Number(line.unit_price);
-      const lineVat = lineAmount * ((Number(line.vat_rate) || 5) / 100);
+      const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
+      const lineVat = lineAmount * ((Number(line.vat_rate) || 0) / 100);
       subtotal += lineAmount;
       vatAmount += lineVat;
     }
@@ -190,7 +190,7 @@ export function registerBillPayRoutes(app: Express) {
 
     // Create line items
     for (const line of line_items) {
-      const lineAmount = (Number(line.quantity) || 1) * Number(line.unit_price);
+      const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
       await pool.query(
         `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount, account_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -198,8 +198,8 @@ export function registerBillPayRoutes(app: Express) {
           bill.id,
           line.description,
           Number(line.quantity) || 1,
-          Number(line.unit_price),
-          Number(line.vat_rate) ?? 5,
+          Number(line.unit_price) || 0,
+          Number(line.vat_rate) || 0,
           lineAmount.toFixed(2),
           line.account_id || null,
         ]
@@ -273,8 +273,8 @@ export function registerBillPayRoutes(app: Express) {
       let vatAmount = 0;
 
       for (const line of line_items) {
-        const lineAmount = (Number(line.quantity) || 1) * Number(line.unit_price);
-        const lineVat = lineAmount * ((Number(line.vat_rate) || 5) / 100);
+        const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
+        const lineVat = lineAmount * ((Number(line.vat_rate) || 0) / 100);
         subtotal += lineAmount;
         vatAmount += lineVat;
       }
@@ -305,7 +305,7 @@ export function registerBillPayRoutes(app: Express) {
       await pool.query('DELETE FROM bill_line_items WHERE bill_id = $1', [id]);
 
       for (const line of line_items) {
-        const lineAmount = (Number(line.quantity) || 1) * Number(line.unit_price);
+        const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
         await pool.query(
           `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount, account_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -313,8 +313,8 @@ export function registerBillPayRoutes(app: Express) {
             id,
             line.description,
             Number(line.quantity) || 1,
-            Number(line.unit_price),
-            Number(line.vat_rate) ?? 5,
+            Number(line.unit_price) || 0,
+            Number(line.vat_rate) || 0,
             lineAmount.toFixed(2),
             line.account_id || null,
           ]

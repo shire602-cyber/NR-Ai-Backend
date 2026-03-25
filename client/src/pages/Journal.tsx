@@ -164,7 +164,7 @@ export default function Journal() {
       toast({
         variant: 'destructive',
         title: 'Failed to post entry',
-        description: error.message,
+        description: error?.message || 'An error occurred',
       });
     },
   });
@@ -183,7 +183,7 @@ export default function Journal() {
       toast({
         variant: 'destructive',
         title: 'Failed to reverse entry',
-        description: error.message,
+        description: error?.message || 'An error occurred',
       });
     },
   });
@@ -202,7 +202,7 @@ export default function Journal() {
       toast({
         variant: 'destructive',
         title: 'Failed to delete entry',
-        description: error.message,
+        description: error?.message || 'An error occurred',
       });
     },
   });

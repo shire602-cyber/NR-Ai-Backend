@@ -362,7 +362,7 @@ Date: ${txn.transaction_date}${txn.reference ? `\nReference: ${txn.reference}` :
     temperature: 0.2,
   });
 
-  const responseText = completion.choices[0].message.content || '{}';
+  const responseText = completion.choices[0]?.message?.content || '{}';
   const parsed = JSON.parse(responseText);
 
   // Validate the accountId exists in the chart of accounts
@@ -416,11 +416,14 @@ export async function autoPostHighConfidence(companyId: string): Promise<{
   const errors: string[] = [];
 
   for (const item of highConfItems) {
+    const client = await pool.connect();
     try {
-      const journalEntryId = await createJournalEntryForQueueItem(companyId, item);
+      await client.query('BEGIN');
+
+      const journalEntryId = await createJournalEntryForQueueItem(companyId, item, client);
 
       // Update queue item
-      await pool.query(
+      await client.query(
         `UPDATE ai_gl_queue
          SET journal_entry_id = $1, status = 'auto_posted'
          WHERE id = $2`,
@@ -429,7 +432,7 @@ export async function autoPostHighConfidence(companyId: string): Promise<{
 
       // Mark bank transaction as reconciled
       if (item.bank_transaction_id) {
-        await pool.query(
+        await client.query(
           `UPDATE bank_transactions
            SET is_reconciled = true, matched_journal_entry_id = $1
            WHERE id = $2`,
@@ -437,10 +440,14 @@ export async function autoPostHighConfidence(companyId: string): Promise<{
         );
       }
 
+      await client.query('COMMIT');
       posted++;
     } catch (err: any) {
+      await client.query('ROLLBACK');
       log.error({ err, queueItemId: item.id }, 'Failed to auto-post queue item');
       errors.push(`Failed to post item ${item.id}: ${err.message}`);
+    } finally {
+      client.release();
     }
   }
 
@@ -450,21 +457,24 @@ export async function autoPostHighConfidence(companyId: string): Promise<{
 /**
  * Create a journal entry from a queue item.
  * Debit/credit depends on the transaction direction.
+ * Accepts an optional pool client for running inside a transaction.
  */
 async function createJournalEntryForQueueItem(
   companyId: string,
-  item: AIGLQueueItem & { bank_account_id?: string | null }
+  item: AIGLQueueItem & { bank_account_id?: string | null },
+  client?: any
 ): Promise<string> {
+  const q = client || pool;
   const amount = parseFloat(item.amount);
   const txnDate = new Date(item.transaction_date);
 
-  // Generate entry number
+  // Generate entry number (FOR UPDATE to prevent duplicates in concurrent transactions)
   const dateStr = txnDate.toISOString().slice(0, 10).replace(/-/g, '');
   const prefix = `JE-${dateStr}`;
 
-  const { rows: existing } = await pool.query(
+  const { rows: existing } = await q.query(
     `SELECT COUNT(*) as count FROM journal_entries
-     WHERE company_id = $1 AND entry_number LIKE $2`,
+     WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
     [companyId, `${prefix}%`]
   );
   const nextNum = parseInt(existing[0].count, 10) + 1;
@@ -473,7 +483,7 @@ async function createJournalEntryForQueueItem(
   // Determine bank account (from bank_transaction or fallback to first bank/cash account)
   let bankAccountId = (item as any).bank_account_id;
   if (!bankAccountId) {
-    const { rows: bankAccounts } = await pool.query(
+    const { rows: bankAccounts } = await q.query(
       `SELECT id FROM accounts
        WHERE company_id = $1 AND type = 'asset' AND sub_type = 'current_asset'
          AND (lower(name_en) LIKE '%bank%' OR lower(name_en) LIKE '%cash%')
@@ -489,7 +499,7 @@ async function createJournalEntryForQueueItem(
   }
 
   // Create the journal entry (posted directly since it's auto-posted)
-  const { rows: [entry] } = await pool.query(
+  const { rows: [entry] } = await q.query(
     `INSERT INTO journal_entries
      (company_id, entry_number, date, memo, status, source, source_id, created_by, posted_by, posted_at)
      VALUES ($1, $2, $3, $4, 'posted', 'system', $5, $6, $6, now())
@@ -517,7 +527,7 @@ async function createJournalEntryForQueueItem(
   // Check the original bank transaction direction
   let isDebit = true; // default: payment out
   if (item.bank_transaction_id) {
-    const { rows: [bankTxn] } = await pool.query(
+    const { rows: [bankTxn] } = await q.query(
       `SELECT amount FROM bank_transactions WHERE id = $1`,
       [item.bank_transaction_id]
     );
@@ -528,24 +538,24 @@ async function createJournalEntryForQueueItem(
 
   if (isDebit) {
     // Payment: Debit expense account, Credit bank account
-    await pool.query(
+    await q.query(
       `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
        VALUES ($1, $2, $3, 0, $4)`,
       [journalEntryId, item.suggested_account_id, amount, item.description]
     );
-    await pool.query(
+    await q.query(
       `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
        VALUES ($1, $2, 0, $3, $4)`,
       [journalEntryId, bankAccountId, amount, item.description]
     );
   } else {
     // Deposit: Debit bank account, Credit income/suggested account
-    await pool.query(
+    await q.query(
       `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
        VALUES ($1, $2, $3, 0, $4)`,
       [journalEntryId, bankAccountId, amount, item.description]
     );
-    await pool.query(
+    await q.query(
       `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
        VALUES ($1, $2, 0, $3, $4)`,
       [journalEntryId, item.suggested_account_id, amount, item.description]
@@ -579,63 +589,77 @@ export async function processUserFeedback(
   }
 
   if (action === 'accept') {
-    // If not yet posted, create journal entry
-    let journalEntryId = item.journal_entry_id;
-    if (!journalEntryId) {
-      if (!item.suggested_account_id) {
-        return { success: false, message: 'Cannot accept — no suggested account' };
-      }
-      // Get bank_account_id from bank transaction
-      let bankAccountId: string | null = null;
-      if (item.bank_transaction_id) {
-        const { rows: [bt] } = await pool.query(
-          `SELECT bank_account_id FROM bank_transactions WHERE id = $1`,
-          [item.bank_transaction_id]
+    if (!item.journal_entry_id && !item.suggested_account_id) {
+      return { success: false, message: 'Cannot accept — no suggested account' };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // If not yet posted, create journal entry
+      let journalEntryId = item.journal_entry_id;
+      if (!journalEntryId) {
+        // Get bank_account_id from bank transaction
+        let bankAccountId: string | null = null;
+        if (item.bank_transaction_id) {
+          const { rows: [bt] } = await client.query(
+            `SELECT bank_account_id FROM bank_transactions WHERE id = $1`,
+            [item.bank_transaction_id]
+          );
+          bankAccountId = bt?.bank_account_id || null;
+        }
+        journalEntryId = await createJournalEntryForQueueItem(
+          item.company_id,
+          { ...item, bank_account_id: bankAccountId },
+          client
         );
-        bankAccountId = bt?.bank_account_id || null;
       }
-      journalEntryId = await createJournalEntryForQueueItem(
-        item.company_id,
-        { ...item, bank_account_id: bankAccountId }
+
+      await client.query(
+        `UPDATE ai_gl_queue
+         SET status = 'accepted', journal_entry_id = $1, reviewed_by = $2, reviewed_at = now()
+         WHERE id = $3`,
+        [journalEntryId, userId, queueId]
       );
-    }
 
-    await pool.query(
-      `UPDATE ai_gl_queue
-       SET status = 'accepted', journal_entry_id = $1, reviewed_by = $2, reviewed_at = now()
-       WHERE id = $3`,
-      [journalEntryId, userId, queueId]
-    );
+      // Mark bank transaction as reconciled
+      if (item.bank_transaction_id) {
+        await client.query(
+          `UPDATE bank_transactions
+           SET is_reconciled = true, matched_journal_entry_id = $1
+           WHERE id = $2`,
+          [journalEntryId, item.bank_transaction_id]
+        );
+      }
 
-    // Mark bank transaction as reconciled
-    if (item.bank_transaction_id) {
-      await pool.query(
-        `UPDATE bank_transactions
-         SET is_reconciled = true, matched_journal_entry_id = $1
-         WHERE id = $2`,
-        [journalEntryId, item.bank_transaction_id]
+      // Update ai_company_rules: increment times_accepted
+      await updateRuleFromFeedback(item, 'accepted');
+
+      // Also store in transaction_classifications for future few-shot learning
+      await client.query(
+        `INSERT INTO transaction_classifications
+         (company_id, description, amount, suggested_account_id, suggested_category,
+          ai_confidence, ai_reason, was_accepted, user_selected_account_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, $4)`,
+        [
+          item.company_id,
+          item.description,
+          parseFloat(item.amount),
+          item.suggested_account_id,
+          item.suggested_category,
+          parseFloat(item.ai_confidence),
+          item.ai_reason,
+        ]
       );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
-
-    // Update ai_company_rules: increment times_accepted
-    await updateRuleFromFeedback(item, 'accepted');
-
-    // Also store in transaction_classifications for future few-shot learning
-    await pool.query(
-      `INSERT INTO transaction_classifications
-       (company_id, description, amount, suggested_account_id, suggested_category,
-        ai_confidence, ai_reason, was_accepted, user_selected_account_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $4)`,
-      [
-        item.company_id,
-        item.description,
-        parseFloat(item.amount),
-        item.suggested_account_id,
-        item.suggested_category,
-        parseFloat(item.ai_confidence),
-        item.ai_reason,
-      ]
-    );
 
     return { success: true, message: 'Transaction accepted and posted to GL' };
   }
@@ -659,64 +683,77 @@ export async function processUserFeedback(
       return { success: false, message: 'userAccountId is required for correction' };
     }
 
-    // Create journal entry with user's chosen account
-    let bankAccountId: string | null = null;
-    if (item.bank_transaction_id) {
-      const { rows: [bt] } = await pool.query(
-        `SELECT bank_account_id FROM bank_transactions WHERE id = $1`,
-        [item.bank_transaction_id]
-      );
-      bankAccountId = bt?.bank_account_id || null;
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const correctedItem = {
-      ...item,
-      suggested_account_id: userAccountId,
-      bank_account_id: bankAccountId,
-    };
-    const journalEntryId = await createJournalEntryForQueueItem(
-      item.company_id,
-      correctedItem
-    );
+      // Create journal entry with user's chosen account
+      let bankAccountId: string | null = null;
+      if (item.bank_transaction_id) {
+        const { rows: [bt] } = await client.query(
+          `SELECT bank_account_id FROM bank_transactions WHERE id = $1`,
+          [item.bank_transaction_id]
+        );
+        bankAccountId = bt?.bank_account_id || null;
+      }
 
-    await pool.query(
-      `UPDATE ai_gl_queue
-       SET status = 'corrected', user_selected_account_id = $1,
-           journal_entry_id = $2, reviewed_by = $3, reviewed_at = now()
-       WHERE id = $4`,
-      [userAccountId, journalEntryId, userId, queueId]
-    );
-
-    // Mark bank transaction as reconciled
-    if (item.bank_transaction_id) {
-      await pool.query(
-        `UPDATE bank_transactions
-         SET is_reconciled = true, matched_journal_entry_id = $1
-         WHERE id = $2`,
-        [journalEntryId, item.bank_transaction_id]
-      );
-    }
-
-    // Create or update rule for this merchant/description pattern
-    await createOrUpdateRuleFromCorrection(item, userAccountId);
-
-    // Store in transaction_classifications for future few-shot learning
-    await pool.query(
-      `INSERT INTO transaction_classifications
-       (company_id, description, amount, suggested_account_id, suggested_category,
-        ai_confidence, ai_reason, was_accepted, user_selected_account_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
-      [
+      const correctedItem = {
+        ...item,
+        suggested_account_id: userAccountId,
+        bank_account_id: bankAccountId,
+      };
+      const journalEntryId = await createJournalEntryForQueueItem(
         item.company_id,
-        item.description,
-        parseFloat(item.amount),
-        item.suggested_account_id,
-        item.suggested_category,
-        parseFloat(item.ai_confidence),
-        item.ai_reason,
-        userAccountId,
-      ]
-    );
+        correctedItem,
+        client
+      );
+
+      await client.query(
+        `UPDATE ai_gl_queue
+         SET status = 'corrected', user_selected_account_id = $1,
+             journal_entry_id = $2, reviewed_by = $3, reviewed_at = now()
+         WHERE id = $4`,
+        [userAccountId, journalEntryId, userId, queueId]
+      );
+
+      // Mark bank transaction as reconciled
+      if (item.bank_transaction_id) {
+        await client.query(
+          `UPDATE bank_transactions
+           SET is_reconciled = true, matched_journal_entry_id = $1
+           WHERE id = $2`,
+          [journalEntryId, item.bank_transaction_id]
+        );
+      }
+
+      // Create or update rule for this merchant/description pattern
+      await createOrUpdateRuleFromCorrection(item, userAccountId);
+
+      // Store in transaction_classifications for future few-shot learning
+      await client.query(
+        `INSERT INTO transaction_classifications
+         (company_id, description, amount, suggested_account_id, suggested_category,
+          ai_confidence, ai_reason, was_accepted, user_selected_account_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
+        [
+          item.company_id,
+          item.description,
+          parseFloat(item.amount),
+          item.suggested_account_id,
+          item.suggested_category,
+          parseFloat(item.ai_confidence),
+          item.ai_reason,
+          userAccountId,
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     return { success: true, message: 'Transaction corrected and posted to GL' };
   }

@@ -65,10 +65,9 @@ export default function CustomerContacts() {
 
   const importMutation = useMutation({
     mutationFn: async (data: any[]) => {
-      const response = await apiRequest('POST', `/api/companies/${companyId}/customer-contacts/import`, { 
-        contacts: data 
+      return await apiRequest('POST', `/api/companies/${companyId}/customer-contacts/import`, {
+        contacts: data
       });
-      return response.json();
     },
     onSuccess: (result: ImportResult) => {
       setImportResults(result);
@@ -79,14 +78,13 @@ export default function CustomerContacts() {
       });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Import failed', description: error.message });
+      toast({ variant: 'destructive', title: 'Import failed', description: error?.message || 'An error occurred' });
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', `/api/companies/${companyId}/customer-contacts`, data);
-      return response.json();
+      return await apiRequest('POST', `/api/companies/${companyId}/customer-contacts`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'customer-contacts'] });
@@ -94,14 +92,13 @@ export default function CustomerContacts() {
       toast({ title: 'Contact created successfully' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create contact', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to create contact', description: error?.message || 'An error occurred' });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await apiRequest('PUT', `/api/companies/${companyId}/customer-contacts/${id}`, data);
-      return response.json();
+      return await apiRequest('PUT', `/api/companies/${companyId}/customer-contacts/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'customer-contacts'] });
@@ -109,21 +106,20 @@ export default function CustomerContacts() {
       toast({ title: 'Contact updated successfully' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update contact', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to update contact', description: error?.message || 'An error occurred' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest('DELETE', `/api/companies/${companyId}/customer-contacts/${id}`);
-      return response.json();
+      return await apiRequest('DELETE', `/api/companies/${companyId}/customer-contacts/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'customer-contacts'] });
       toast({ title: 'Contact deleted successfully' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete contact', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to delete contact', description: error?.message || 'An error occurred' });
     },
   });
 
@@ -137,7 +133,7 @@ export default function CustomerContacts() {
       setPortalLinkDialog({ open: true, url: fullUrl, contactName: result.contactName });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to generate portal link', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to generate portal link', description: error?.message || 'An error occurred' });
     },
   });
 
@@ -177,7 +173,7 @@ export default function CustomerContacts() {
         setPreviewData(mappedData);
         toast({ title: `Found ${mappedData.length} contacts in ${selectedFile.name}` });
       } catch (err: any) {
-        toast({ variant: 'destructive', title: 'Failed to parse file', description: err.message });
+        toast({ variant: 'destructive', title: 'Failed to parse file', description: err?.message || 'An error occurred' });
       }
     };
     reader.readAsBinaryString(selectedFile);

@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 
 import { storage } from '../storage';
+import { pool } from '../db';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { getEnv } from '../config/env';
@@ -101,7 +102,7 @@ Amount: ${validated.amount} ${validated.currency}`
         temperature: 0.3,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
       res.json({
         suggestedAccountCode: aiResponse.accountCode,
@@ -167,7 +168,7 @@ If no valid transactions can be found, return { "transactions": [] }`
         temperature: 0.2,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{"transactions": []}');
+      const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{"transactions": []}');
 
       // Validate and clean up transactions
       const validTransactions = (aiResponse.transactions || []).filter((t: any) => {
@@ -187,15 +188,22 @@ If no valid transactions can be found, return { "transactions": [] }`
   }));
 
   // AI CFO Advice Route
-  app.post("/api/ai/cfo-advice", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/ai/cfo-advice", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     if (!openai) {
       return res.status(503).json({ error: 'AI service unavailable — OPENAI_API_KEY not configured' });
     }
     try {
       const { companyId, question, context } = req.body;
+      const userId = (req as any).user.id;
 
       if (!companyId || !question) {
         return res.status(400).json({ message: 'Company ID and question are required' });
+      }
+
+      // Verify company access
+      const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
       }
 
       // Get additional company data for context
@@ -257,7 +265,7 @@ Keep your tone professional but friendly, like a trusted advisor.`
       });
 
       res.json({
-        advice: completion.choices[0].message.content,
+        advice: completion.choices[0]?.message?.content,
         context: financialContext,
       });
     } catch (error: any) {
@@ -352,7 +360,7 @@ Respond with a JSON object:
         temperature: 0.2,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
       // Store classifications for learning
       for (const classification of aiResponse.classifications || []) {
@@ -465,7 +473,7 @@ Respond with JSON:
         temperature: 0.1,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
       // Store detected anomalies
       for (const anomaly of aiResponse.anomalies || []) {
@@ -649,7 +657,7 @@ ${JSON.stringify(ledgerData, null, 2)}`
         temperature: 0.1,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
       res.json(aiResponse);
     } catch (error: any) {
       console.error('Reconciliation error:', error);
@@ -887,7 +895,7 @@ Respond with JSON:
         temperature: 0.3,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
       // Clear old forecasts and store new ones
       await storage.deleteCashFlowForecastsByCompanyId(companyId);
@@ -915,9 +923,17 @@ Respond with JSON:
   }));
 
   // Get stored forecasts
-  app.get("/api/companies/:companyId/forecasts", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/forecasts", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { companyId } = req.params;
+      const userId = (req as any).user.id;
+
+      // Verify company access
+      const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
       const forecasts = await storage.getCashFlowForecastsByCompanyId(companyId);
       res.json(forecasts);
     } catch (error: any) {
@@ -926,9 +942,28 @@ Respond with JSON:
   }));
 
   // Transaction Classification Feedback (for ML learning)
-  app.post("/api/ai/classification-feedback", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/ai/classification-feedback", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { classificationId, wasAccepted, userSelectedAccountId } = req.body;
+      const userId = (req as any).user.id;
+
+      if (!classificationId) {
+        return res.status(400).json({ message: 'classificationId is required' });
+      }
+
+      // Look up the classification's company to verify access
+      const { rows: [classRow] } = await pool.query(
+        `SELECT company_id FROM transaction_classifications WHERE id = $1`,
+        [classificationId]
+      );
+      if (!classRow) {
+        return res.status(404).json({ message: 'Classification not found' });
+      }
+
+      const hasAccess = await storage.hasCompanyAccess(userId, classRow.company_id);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
 
       const classification = await storage.updateTransactionClassification(classificationId, {
         wasAccepted,

@@ -49,8 +49,8 @@ export function registerReceiptRoutes(app: Express) {
     const similarTransactions = receipts.filter(receipt => {
       // Check if merchant name is similar (case-insensitive partial match)
       const merchantMatch = merchant && receipt.merchant &&
-        receipt.merchant.toLowerCase().includes(merchant.toLowerCase()) ||
-        merchant.toLowerCase().includes(receipt.merchant?.toLowerCase() || '');
+        ((receipt.merchant || '').toLowerCase().includes((merchant || '').toLowerCase()) ||
+        (merchant || '').toLowerCase().includes((receipt.merchant || '').toLowerCase()));
 
       // Check if amount is within 10% range
       const amountMatch = amount && receipt.amount &&

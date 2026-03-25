@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTable, type Column } from '@/components/shared/DataTable';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
@@ -79,6 +80,7 @@ export default function Invoices() {
   const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [isExporting, setIsExporting] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'invoices'],
@@ -659,7 +661,7 @@ export default function Invoices() {
                   toast({ title: 'E-Invoice generated', description: `UUID: ${result.uuid}` });
                   queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
                 } catch (error: any) {
-                  toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                  toast({ title: 'Error', description: error?.message || 'An error occurred', variant: 'destructive' });
                 }
               }}
               title="Generate E-Invoice"
@@ -671,11 +673,7 @@ export default function Invoices() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                if (window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
-                  deleteMutation.mutate(invoice.id);
-                }
-              }}
+              onClick={() => setDeleteConfirmId(invoice.id)}
               disabled={deleteMutation.isPending}
               aria-label="Delete invoice"
               data-testid={`button-delete-invoice-${invoice.id}`}
@@ -1408,6 +1406,21 @@ export default function Invoices() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteConfirmId}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}
+        title="Delete Invoice"
+        description="Are you sure you want to delete this invoice? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirmId) {
+            deleteMutation.mutate(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -170,9 +170,15 @@ export function registerFiscalYearRoutes(app: Express) {
       const totalExpenses = expenseAccounts.reduce((sum: number, row: any) => sum + Number(row.balance), 0);
       const netIncome = totalIncome - totalExpenses; // positive = profit, negative = loss
 
-      // Generate entry number for the closing entry
+      // Generate entry number for the closing entry inside the transaction
       const entryDate = new Date(fy.end_date);
-      const entryNumber = await storage.generateEntryNumber(companyId, entryDate);
+      const dateStr = entryDate.toISOString().slice(0, 10).replace(/-/g, '');
+      const entryNumResult = await client.query(
+        `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+        [companyId, `JE-${dateStr}%`]
+      );
+      const entryNumCount = Number(entryNumResult.rows[0]?.count || 0);
+      const entryNumber = `JE-${dateStr}-${String(entryNumCount + 1).padStart(3, '0')}`;
 
       // Create the closing journal entry
       const jeResult = await client.query(

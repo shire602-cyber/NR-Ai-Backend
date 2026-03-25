@@ -77,8 +77,8 @@ export function registerInvoiceRoutes(app: Express) {
     const similarInvoices = invoices.filter(invoice => {
       // Check if customer name is similar (case-insensitive partial match)
       const customerMatch = customerName && invoice.customerName &&
-        invoice.customerName.toLowerCase().includes(customerName.toLowerCase()) ||
-        customerName.toLowerCase().includes(invoice.customerName?.toLowerCase() || '');
+        ((invoice.customerName || '').toLowerCase().includes((customerName || '').toLowerCase()) ||
+        (customerName || '').toLowerCase().includes((invoice.customerName || '').toLowerCase()));
 
       // Check if total is within 10% range
       const amountMatch = total && invoice.total &&
@@ -121,6 +121,11 @@ export function registerInvoiceRoutes(app: Express) {
     const hasAccess = await storage.hasCompanyAccess(userId, companyId);
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Validate lines array
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return res.status(400).json({ error: "Invoice must have at least one line item" });
     }
 
     // Calculate totals
@@ -325,8 +330,10 @@ export function registerInvoiceRoutes(app: Express) {
                 });
 
                 // Update product stock
+                const currentProduct = await storage.getProduct(detail.productId);
+                if (!currentProduct) continue; // skip if product was deleted
                 await storage.updateProduct(detail.productId, {
-                  currentStock: (await storage.getProduct(detail.productId))!.currentStock - Math.abs(detail.quantity),
+                  currentStock: currentProduct.currentStock - Math.abs(detail.quantity),
                 });
               }
 
@@ -405,6 +412,11 @@ export function registerInvoiceRoutes(app: Express) {
     const postedJE = allEntries.find((e: any) => e.sourceId === id && e.status === 'posted');
     if (postedJE) {
       return res.status(400).json({ error: 'Cannot update invoice with a posted journal entry. Reverse the journal entry first.' });
+    }
+
+    // Validate lines array
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return res.status(400).json({ error: "Invoice must have at least one line item" });
     }
 
     // Calculate totals
@@ -508,10 +520,10 @@ export function registerInvoiceRoutes(app: Express) {
     }
 
     const oldStatus = invoice.status;
-    const updatedInvoice = await storage.updateInvoiceStatus(id, status);
 
     // Payment recording when invoice is marked as paid
     // Note: Revenue is already recognized when invoice is created
+    // Validate payment fields BEFORE updating status
     if (status === 'paid' && oldStatus !== 'paid') {
       // Validate payment account is provided
       if (!paymentAccountId) {
@@ -536,6 +548,9 @@ export function registerInvoiceRoutes(app: Express) {
 
       // Ensure fiscal year is open before recording payment
       await assertFiscalYearOpen(invoice.companyId, new Date());
+
+      // Update invoice status only after all validations pass
+      const updatedInvoice = await storage.updateInvoiceStatus(id, status);
 
       // Wrap payment journal entry in transaction
       await (db as any).transaction(async (tx: any) => {
@@ -574,9 +589,13 @@ export function registerInvoiceRoutes(app: Express) {
         });
 
       });
-    }
 
-    res.json(updatedInvoice);
+      res.json(updatedInvoice);
+    } else {
+      // For non-paid status transitions, just update
+      const updatedInvoice = await storage.updateInvoiceStatus(id, status);
+      res.json(updatedInvoice);
+    }
   }));
 
   // =====================================

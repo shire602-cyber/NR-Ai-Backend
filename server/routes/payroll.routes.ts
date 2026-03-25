@@ -476,8 +476,14 @@ export function registerPayrollRoutes(app: Express) {
         // Fiscal year guard
         await assertFiscalYearOpenPool(client, run.company_id, approvalDate);
 
-        // Generate entry number
-        const entryNumber = await storage.generateEntryNumber(run.company_id, approvalDate);
+        // Generate entry number inside transaction
+        const dateStr = new Date(approvalDate).toISOString().slice(0, 10).replace(/-/g, '');
+        const entryNumResult = await client.query(
+          `SELECT COUNT(*) as count FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+          [run.company_id, `JE-${dateStr}%`]
+        );
+        const entryNumCount = Number(entryNumResult.rows[0]?.count || 0);
+        const entryNumber = `JE-${dateStr}-${String(entryNumCount + 1).padStart(3, '0')}`;
 
         // Create journal entry: source "payroll", sourceId = run.id
         const jeResult = await client.query(

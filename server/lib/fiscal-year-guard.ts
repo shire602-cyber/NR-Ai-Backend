@@ -1,4 +1,5 @@
 import { pool } from '../db';
+import { AppError } from '../middleware/errorHandler';
 
 /**
  * Checks if a date falls within a closed fiscal year for the given company.
@@ -23,10 +24,7 @@ export async function assertFiscalYearOpen(companyId: string, date: Date | strin
 
   if (result.rows.length > 0) {
     const fy = result.rows[0];
-    throw Object.assign(
-      new Error(`Cannot create entries in closed fiscal year: ${fy.name}`),
-      { statusCode: 400 }
-    );
+    throw new AppError(`Cannot create entries in closed fiscal year: ${fy.name}`, 400);
   }
 }
 
@@ -58,9 +56,6 @@ export async function assertFiscalYearOpenPool(
 
   if (result.rows.length > 0) {
     const fy = result.rows[0];
-    throw Object.assign(
-      new Error(`Cannot create entries in closed fiscal year: ${fy.name}`),
-      { statusCode: 400 }
-    );
+    throw new AppError(`Cannot create entries in closed fiscal year: ${fy.name}`, 400);
   }
 }

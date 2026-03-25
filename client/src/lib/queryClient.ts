@@ -48,6 +48,13 @@ export async function apiRequest(
   });
 
   await throwIfResNotOk(res);
+
+  // Handle 204 No Content and other empty responses
+  const contentType = res.headers.get("content-type");
+  if (res.status === 204 || !contentType?.includes("application/json")) {
+    return null;
+  }
+
   return res.json();
 }
 

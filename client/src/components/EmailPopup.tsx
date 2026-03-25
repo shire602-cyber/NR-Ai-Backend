@@ -42,7 +42,7 @@ export function EmailPopup({ open, onClose, locale = 'en' }: EmailPopupProps) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message);
+        throw new Error(error?.message || 'Request failed');
       }
 
       toast({

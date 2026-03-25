@@ -45,6 +45,15 @@ export function registerExchangeRateRoutes(app: Express) {
       return res.status(403).json({ message: "Access denied" });
     }
 
+    // Verify the exchange rate exists and belongs to this company
+    const existingRate = await storage.getExchangeRate(id);
+    if (!existingRate) {
+      return res.status(404).json({ error: "Exchange rate not found" });
+    }
+    if (existingRate.companyId !== companyId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
     const rate = await storage.updateExchangeRate(id, req.body);
     res.json(rate);
   }));
@@ -57,6 +66,15 @@ export function registerExchangeRateRoutes(app: Express) {
     const hasAccess = await storage.hasCompanyAccess(userId, companyId);
     if (!hasAccess) {
       return res.status(403).json({ message: "Access denied" });
+    }
+
+    // Verify the exchange rate exists and belongs to this company
+    const existingRate = await storage.getExchangeRate(id);
+    if (!existingRate) {
+      return res.status(404).json({ error: "Exchange rate not found" });
+    }
+    if (existingRate.companyId !== companyId) {
+      return res.status(403).json({ error: "Access denied" });
     }
 
     await storage.deleteExchangeRate(id);

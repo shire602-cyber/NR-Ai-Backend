@@ -334,6 +334,9 @@ export function registerAdminRoutes(app: Express): void {
       const userId = (req as any).user.id;
 
       const company = await storage.updateCompany(clientId, req.body);
+      if (!company) {
+        return res.status(404).json({ message: 'Client not found' });
+      }
 
       // Log activity
       await storage.createActivityLog({
@@ -405,6 +408,9 @@ export function registerAdminRoutes(app: Express): void {
       if (typeof req.body.isAdmin === 'boolean') updates.isAdmin = req.body.isAdmin;
 
       const user = await storage.updateUser(targetUserId, updates);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
 
       // Log activity
       await storage.createActivityLog({
@@ -516,6 +522,9 @@ export function registerAdminRoutes(app: Express): void {
       const adminUserId = (req as any).user.id;
 
       const invitation = await storage.updateInvitation(invitationId, { status: 'revoked' });
+      if (!invitation) {
+        return res.status(404).json({ message: 'Invitation not found' });
+      }
 
       // Log activity
       await storage.createActivityLog({
@@ -547,6 +556,9 @@ export function registerAdminRoutes(app: Express): void {
         expiresAt,
         status: 'pending',
       });
+      if (!invitation) {
+        return res.status(404).json({ message: 'Invitation not found' });
+      }
 
       // Log activity
       await storage.createActivityLog({
