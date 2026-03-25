@@ -29,7 +29,7 @@ export function AdminOverview({ stats, auditLogs }: AdminOverviewProps) {
           <CardContent>
             <div className="text-2xl font-bold" data-testid="stat-total-users">{stats?.totalUsers || 0}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-success">+12%</span> from last month
+              Registered users
             </p>
           </CardContent>
         </Card>
@@ -42,7 +42,7 @@ export function AdminOverview({ stats, auditLogs }: AdminOverviewProps) {
           <CardContent>
             <div className="text-2xl font-bold" data-testid="stat-total-companies">{stats?.totalCompanies || 0}</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-success">+8%</span> from last month
+              Active companies
             </p>
           </CardContent>
         </Card>
@@ -57,7 +57,7 @@ export function AdminOverview({ stats, auditLogs }: AdminOverviewProps) {
               AED {(stats?.monthlyRevenue || 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-success">+15%</span> from last month
+              Current month
             </p>
           </CardContent>
         </Card>

@@ -160,54 +160,66 @@ export function registerBillPayRoutes(app: Express) {
 
     const totalAmount = subtotal + vatAmount;
 
-    const billResult = await pool.query(
-      `INSERT INTO vendor_bills (
-        company_id, vendor_name, vendor_trn, bill_number, bill_date, due_date,
-        currency, subtotal, vat_amount, total_amount, amount_paid, status,
-        category, notes, attachment_url
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *`,
-      [
-        companyId,
-        vendor_name,
-        vendor_trn || null,
-        bill_number || null,
-        bill_date,
-        due_date || null,
-        currency || 'AED',
-        subtotal.toFixed(2),
-        vatAmount.toFixed(2),
-        totalAmount.toFixed(2),
-        '0.00',
-        'pending',
-        category || null,
-        notes || null,
-        attachment_url || null,
-      ]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const bill = billResult.rows[0];
-
-    // Create line items
-    for (const line of line_items) {
-      const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
-      await pool.query(
-        `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount, account_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      const billResult = await client.query(
+        `INSERT INTO vendor_bills (
+          company_id, vendor_name, vendor_trn, bill_number, bill_date, due_date,
+          currency, subtotal, vat_amount, total_amount, amount_paid, status,
+          category, notes, attachment_url
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        RETURNING *`,
         [
-          bill.id,
-          line.description,
-          Number(line.quantity) || 1,
-          Number(line.unit_price) || 0,
-          Number(line.vat_rate) || 0,
-          lineAmount.toFixed(2),
-          line.account_id || null,
+          companyId,
+          vendor_name,
+          vendor_trn || null,
+          bill_number || null,
+          bill_date,
+          due_date || null,
+          currency || 'AED',
+          subtotal.toFixed(2),
+          vatAmount.toFixed(2),
+          totalAmount.toFixed(2),
+          '0.00',
+          'pending',
+          category || null,
+          notes || null,
+          attachment_url || null,
         ]
       );
-    }
 
-    log.info({ billId: bill.id, companyId }, 'Vendor bill created');
-    res.json(bill);
+      const bill = billResult.rows[0];
+
+      // Create line items
+      for (const line of line_items) {
+        const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
+        await client.query(
+          `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount, account_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            bill.id,
+            line.description,
+            Number(line.quantity) || 1,
+            Number(line.unit_price) || 0,
+            Number(line.vat_rate) || 0,
+            lineAmount.toFixed(2),
+            line.account_id || null,
+          ]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      log.info({ billId: bill.id, companyId }, 'Vendor bill created');
+      res.json(bill);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }));
 
   // Update bill
@@ -290,40 +302,52 @@ export function registerBillPayRoutes(app: Express) {
       return res.status(400).json({ message: 'No fields to update' });
     }
 
-    let updatedBill = bill;
-    if (updates.length > 0) {
-      values.push(id);
-      const updateResult = await pool.query(
-        `UPDATE vendor_bills SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING *`,
-        values
-      );
-      updatedBill = updateResult.rows[0];
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // Replace line items if provided
-    if (line_items && Array.isArray(line_items) && line_items.length > 0) {
-      await pool.query('DELETE FROM bill_line_items WHERE bill_id = $1', [id]);
-
-      for (const line of line_items) {
-        const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
-        await pool.query(
-          `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount, account_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            id,
-            line.description,
-            Number(line.quantity) || 1,
-            Number(line.unit_price) || 0,
-            Number(line.vat_rate) || 0,
-            lineAmount.toFixed(2),
-            line.account_id || null,
-          ]
+      let updatedBill = bill;
+      if (updates.length > 0) {
+        values.push(id);
+        const updateResult = await client.query(
+          `UPDATE vendor_bills SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING *`,
+          values
         );
+        updatedBill = updateResult.rows[0];
       }
-    }
 
-    log.info({ billId: id }, 'Vendor bill updated');
-    res.json(updatedBill);
+      // Replace line items if provided
+      if (line_items && Array.isArray(line_items) && line_items.length > 0) {
+        await client.query('DELETE FROM bill_line_items WHERE bill_id = $1', [id]);
+
+        for (const line of line_items) {
+          const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
+          await client.query(
+            `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount, account_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              id,
+              line.description,
+              Number(line.quantity) || 1,
+              Number(line.unit_price) || 0,
+              Number(line.vat_rate) || 0,
+              lineAmount.toFixed(2),
+              line.account_id || null,
+            ]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+
+      log.info({ billId: id }, 'Vendor bill updated');
+      res.json(updatedBill);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }));
 
   // Delete bill

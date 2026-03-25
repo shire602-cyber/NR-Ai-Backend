@@ -135,6 +135,11 @@ export default function AccountLedger() {
     }));
   }, [ledger]);
 
+  function handleReverseEntry(entry: LedgerEntry) {
+    setSelectedEntry(entry);
+    setReversalDialogOpen(true);
+  }
+
   const ledgerColumns: Column<Record<string, unknown>>[] = useMemo(() => [
     { key: 'date', label: locale === 'ar' ? 'التاريخ' : 'Date', type: 'date' as const, sortable: true },
     {
@@ -305,11 +310,6 @@ export default function AccountLedger() {
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handleReverseEntry = (entry: LedgerEntry) => {
-    setSelectedEntry(entry);
-    setReversalDialogOpen(true);
   };
 
   const confirmReversal = () => {

@@ -226,7 +226,12 @@ export default function ReceiptsPage() {
   const filteredReceiptsForExport = (() => {
     if (!receipts || receipts.length === 0) return [];
     if (!dateRange.from && !dateRange.to) return receipts;
-    return receipts;
+    return receipts.filter((r: any) => {
+      const receiptDate = new Date(r.date);
+      if (dateRange.from && receiptDate < dateRange.from) return false;
+      if (dateRange.to && receiptDate > dateRange.to) return false;
+      return true;
+    });
   })();
 
   const handleExportExcel = useCallback(() => {
@@ -289,11 +294,11 @@ export default function ReceiptsPage() {
   const handleSaveAnyway = useCallback(async () => {
     setSimilarWarningOpen(false);
     if (pendingSaveData) {
-      // Re-trigger save logic
+      mutations.saveReceiptMutation.mutate(pendingSaveData);
     }
     setPendingSaveData(null);
     setSimilarTransactions([]);
-  }, [pendingSaveData]);
+  }, [pendingSaveData, mutations.saveReceiptMutation]);
 
   const handleResetForm = useCallback(() => {
     resetForm();

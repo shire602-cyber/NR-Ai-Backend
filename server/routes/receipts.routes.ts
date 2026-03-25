@@ -52,9 +52,10 @@ export function registerReceiptRoutes(app: Express) {
         ((receipt.merchant || '').toLowerCase().includes((merchant || '').toLowerCase()) ||
         (merchant || '').toLowerCase().includes((receipt.merchant || '').toLowerCase()));
 
-      // Check if amount is within 10% range
-      const amountMatch = amount && receipt.amount &&
-        Math.abs(Number(receipt.amount) - amount) / amount < 0.1;
+      // Check if amount is within 10% range (handle zero to avoid division by zero)
+      const amountMatch = amount != null && receipt.amount != null && (
+        amount === 0 ? Number(receipt.amount) === 0 : Math.abs(Number(receipt.amount) - amount) / amount < 0.1
+      );
 
       // Check if date is within 7 days
       let dateMatch = false;
@@ -92,11 +93,12 @@ export function registerReceiptRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const receiptData = req.body;
+    const { merchant, date, amount, vatAmount, category, description, currency, paymentMethod, imageUrl } = req.body;
 
     const receipt = await storage.createReceipt({
-      ...receiptData,
-      companyId, // Add companyId from URL params
+      merchant, date, amount: String(amount), vatAmount: String(vatAmount || 0),
+      category, description, currency, paymentMethod, imageUrl,
+      companyId,
       uploadedBy: userId,
     });
 

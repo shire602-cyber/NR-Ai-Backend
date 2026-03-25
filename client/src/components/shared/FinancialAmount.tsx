@@ -15,7 +15,8 @@ export function FinancialAmount({
   showSign = false,
   colorize = false,
 }: FinancialAmountProps) {
-  const numericAmount = typeof amount === "string" ? parseFloat(amount) : amount;
+  const parsedAmount = typeof amount === "number" ? amount : parseFloat(String(amount));
+  const numericAmount = isNaN(parsedAmount) ? 0 : parsedAmount;
   const isNegative = numericAmount < 0;
 
   const formatted = new Intl.NumberFormat("en-AE", {

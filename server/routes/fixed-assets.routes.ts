@@ -404,12 +404,7 @@ export function registerFixedAssetRoutes(app: Express) {
         const newAccDep = Math.round((currentAccDep + monthlyDepreciation) * 100) / 100;
         const newNBV = Math.round((cost - newAccDep) * 100) / 100;
 
-        await client.query(
-          `UPDATE fixed_assets SET accumulated_depreciation = $1, net_book_value = $2 WHERE id = $3`,
-          [newAccDep, newNBV, asset.id]
-        );
-
-        // Create depreciation journal entry with idempotency check
+        // Idempotency check BEFORE updating accumulated_depreciation to prevent double-counting
         const dupeCheck = await client.query(
           `SELECT id FROM journal_entries
            WHERE source = 'depreciation' AND source_id = $1
@@ -418,7 +413,20 @@ export function registerFixedAssetRoutes(app: Express) {
           [asset.id, monthKey]
         );
 
-        if (dupeCheck.rows.length === 0) {
+        if (dupeCheck.rows.length > 0) {
+          log.info({ assetId: asset.id, monthKey }, 'Depreciation JE already exists — skipped');
+          results.push({ assetId: asset.id, assetName: asset.asset_name, monthlyDepreciation: 0, skipped: true, reason: `Depreciation already recorded for ${monthKey}` });
+          continue;
+        }
+
+        // Update asset depreciation (only reached if no duplicate found)
+        await client.query(
+          `UPDATE fixed_assets SET accumulated_depreciation = $1, net_book_value = $2 WHERE id = $3`,
+          [newAccDep, newNBV, asset.id]
+        );
+
+        // Create depreciation journal entry
+        {
           // Generate entry number inside the transaction (inline SQL to avoid Drizzle/pool mismatch)
           const batchDateStr = new Date(depreciationDate).toISOString().slice(0, 10).replace(/-/g, '');
           const batchEntryNumResult = await client.query(
@@ -451,8 +459,6 @@ export function registerFixedAssetRoutes(app: Express) {
           );
 
           log.info({ assetId: asset.id, entryId, monthlyDepreciation, monthKey }, 'Batch depreciation JE created');
-        } else {
-          log.info({ assetId: asset.id, monthKey }, 'Depreciation JE already exists — skipped');
         }
 
         results.push({
@@ -539,6 +545,20 @@ export function registerFixedAssetRoutes(app: Express) {
 
       // Fiscal year guard
       await assertFiscalYearOpenPool(client, asset.company_id, new Date(disposalDate));
+
+      // Fail-fast: validate disposal-specific accounts exist before creating JE
+      if (dispAmount > 0 && !bankAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Bank account (1020) not found. Cannot record disposal proceeds.' });
+      }
+      if (gainLoss > 0 && !gainOnDisposalAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Gain on Disposal account (4080) not found.' });
+      }
+      if (gainLoss < 0 && !lossOnDisposalAccount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Loss on Disposal account (5140) not found.' });
+      }
 
       // Update asset status
       await client.query(

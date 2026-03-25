@@ -47,9 +47,11 @@ export function registerCorporateTaxRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    const { period, startDate, endDate, notes } = req.body;
     const taxReturn = await storage.createCorporateTaxReturn({
-      ...req.body,
+      period, startDate, endDate, notes,
       companyId,
+      status: 'draft',
     });
 
     res.status(201).json(taxReturn);
@@ -67,7 +69,17 @@ export function registerCorporateTaxRoutes(app: Express) {
     const hasAccess = await storage.hasCompanyAccess((req as any).user!.id, existing.companyId);
     if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
-    const taxReturn = await storage.updateCorporateTaxReturn(id, req.body);
+    // Whitelist allowed fields — don't allow companyId, taxPayable, totalRevenue, totalExpenses to be manually overridden
+    const { period, startDate, endDate, notes, status, totalDeductions } = req.body;
+    const updates: any = {};
+    if (period !== undefined) updates.period = period;
+    if (startDate !== undefined) updates.startDate = startDate;
+    if (endDate !== undefined) updates.endDate = endDate;
+    if (notes !== undefined) updates.notes = notes;
+    if (status !== undefined) updates.status = status;
+    if (totalDeductions !== undefined) updates.totalDeductions = totalDeductions;
+
+    const taxReturn = await storage.updateCorporateTaxReturn(id, updates);
     res.json(taxReturn);
   }));
 

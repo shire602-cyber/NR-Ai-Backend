@@ -49,7 +49,6 @@ export function registerFxRevaluationRoutes(app: Express) {
 
         if (openItems.length === 0) {
           await client.query('ROLLBACK');
-          client.release();
           return res.json({ message: 'No foreign currency items to revalue', adjustments: [] });
         }
 
@@ -117,7 +116,6 @@ export function registerFxRevaluationRoutes(app: Express) {
 
         if (jeLines.length === 0) {
           await client.query('ROLLBACK');
-          client.release();
           return res.json({ message: 'No material exchange differences', adjustments: [] });
         }
 
@@ -130,10 +128,9 @@ export function registerFxRevaluationRoutes(app: Express) {
         const fxGainAccount = await storage.getAccountByCode(companyId, ACCOUNT_CODES.UNREALIZED_FX_GAIN);
         const fxLossAccount = await storage.getAccountByCode(companyId, ACCOUNT_CODES.UNREALIZED_FX_LOSS);
 
-        if (!fxGainAccount && !fxLossAccount) {
+        if (!fxGainAccount || !fxLossAccount) {
           await client.query('ROLLBACK');
-          client.release();
-          return res.status(400).json({ error: 'FX gain/loss accounts not found. Please add accounts 4090 and 5160.' });
+          return res.status(400).json({ error: 'Both FX gain (4090) and FX loss (5160) accounts are required.' });
         }
 
         // Add the offsetting FX gain/loss line to balance the JE

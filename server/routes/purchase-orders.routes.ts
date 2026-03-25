@@ -14,7 +14,7 @@ async function generatePONumber(client: any, companyId: string): Promise<string>
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const prefix = `PO-${dateStr}`;
   const countResult = await client.query(
-    `SELECT COUNT(*) as count FROM purchase_orders WHERE company_id = $1 AND po_number LIKE $2`,
+    `SELECT COUNT(*) as count FROM purchase_orders WHERE company_id = $1 AND po_number LIKE $2 FOR UPDATE`,
     [companyId, `${prefix}%`]
   );
   const count = Number(countResult.rows[0]?.count || 0);
@@ -32,7 +32,8 @@ function calculateTotals(lines: any[]): { subtotal: number; vatAmount: number; t
     const qty = Number(line.quantity) || 1;
     const price = Number(line.unit_price) || 0;
     const lineAmount = qty * price;
-    const lineVat = lineAmount * (Number(line.vat_rate) || 0.05);
+    const vatRate = line.vat_rate != null ? Number(line.vat_rate) : 0.05;
+    const lineVat = lineAmount * vatRate;
     subtotal += lineAmount;
     vatAmount += lineVat;
   }
@@ -203,7 +204,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
             line.description,
             qty,
             price.toFixed(2),
-            Number(line.vat_rate) || 0.05,
+            line.vat_rate != null ? Number(line.vat_rate) : 0.05,
             lineAmount.toFixed(2),
           ]
         );
@@ -324,7 +325,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
               line.description,
               qty,
               price.toFixed(2),
-              Number(line.vat_rate) || 0.05,
+              line.vat_rate != null ? Number(line.vat_rate) : 0.05,
               lineAmount.toFixed(2),
             ]
           );
@@ -615,7 +616,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
       for (const line of poLines) {
         const lineAmount = (Number(line.quantity) || 1) * (Number(line.unit_price) || 0);
         // Convert vat_rate from decimal (0.05) to percentage (5) for bill_line_items
-        const vatRatePercent = (Number(line.vat_rate) || 0.05) * 100;
+        const vatRatePercent = (line.vat_rate != null ? Number(line.vat_rate) : 0.05) * 100;
 
         await client.query(
           `INSERT INTO bill_line_items (bill_id, description, quantity, unit_price, vat_rate, amount)

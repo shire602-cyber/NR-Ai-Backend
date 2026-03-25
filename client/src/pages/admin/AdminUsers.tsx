@@ -130,7 +130,7 @@ export function AdminUsers({
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {companies.filter(c => c.id).length} companies
+                        —
                       </Badge>
                     </TableCell>
                     <TableCell>

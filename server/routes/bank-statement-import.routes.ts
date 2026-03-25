@@ -18,6 +18,7 @@ import {
 } from '../services/bank-statement-parser.service';
 import { autoReconcileTransactions } from '../services/auto-reconcile.service';
 import { db } from '../db';
+import { bankTransactions } from '@shared/schema';
 import { createLogger } from '../config/logger';
 
 const log = createLogger('bank-statement-import');
@@ -205,7 +206,7 @@ export function registerBankStatementImportRoutes(app: Express) {
             }
           }
 
-          await storage.createBankTransaction({
+          await tx.insert(bankTransactions).values({
             companyId,
             bankAccountId,
             transactionDate: new Date(txn.date),

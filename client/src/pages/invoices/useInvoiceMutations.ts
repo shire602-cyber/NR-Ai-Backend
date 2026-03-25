@@ -21,6 +21,7 @@ export function useInvoiceMutations(
       apiRequest('POST', `/api/companies/${selectedCompanyId}/invoices`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Invoice created',
         description: 'Your invoice has been created with VAT calculation.',
@@ -41,6 +42,7 @@ export function useInvoiceMutations(
       apiRequest('PUT', `/api/invoices/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Invoice updated successfully',
         description: 'Your invoice has been updated.',
@@ -61,6 +63,7 @@ export function useInvoiceMutations(
       apiRequest('PATCH', `/api/invoices/${id}/status`, { status, paymentAccountId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Status updated',
         description: 'Invoice status has been updated successfully.',
@@ -80,6 +83,7 @@ export function useInvoiceMutations(
     mutationFn: (id: string) => apiRequest('DELETE', `/api/invoices/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: t.invoiceDeleted,
         description: t.invoiceDeletedDesc,

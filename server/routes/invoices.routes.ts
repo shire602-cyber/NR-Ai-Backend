@@ -1,7 +1,7 @@
 import { Router, type Express, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { storage } from '../storage';
-import { db } from '../db';
+import { db, pool } from '../db';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
@@ -80,9 +80,10 @@ export function registerInvoiceRoutes(app: Express) {
         ((invoice.customerName || '').toLowerCase().includes((customerName || '').toLowerCase()) ||
         (customerName || '').toLowerCase().includes((invoice.customerName || '').toLowerCase()));
 
-      // Check if total is within 10% range
-      const amountMatch = total && invoice.total &&
-        Math.abs(Number(invoice.total) - total) / total < 0.1;
+      // Check if total is within 10% range (handle zero to avoid division by zero)
+      const amountMatch = total != null && invoice.total != null && (
+        total === 0 ? Number(invoice.total) === 0 : Math.abs(Number(invoice.total) - total) / total < 0.1
+      );
 
       // Check if date is within 7 days
       let dateMatch = false;
@@ -329,12 +330,11 @@ export function registerInvoiceRoutes(app: Express) {
                   totalCost: String(detail.cogsAmount),
                 });
 
-                // Update product stock
-                const currentProduct = await storage.getProduct(detail.productId);
-                if (!currentProduct) continue; // skip if product was deleted
-                await storage.updateProduct(detail.productId, {
-                  currentStock: currentProduct.currentStock - Math.abs(detail.quantity),
-                });
+                // Update product stock atomically to prevent race conditions
+                await pool.query(
+                  'UPDATE products SET current_stock = current_stock - $1 WHERE id = $2',
+                  [Math.abs(detail.quantity), detail.productId]
+                );
               }
 
               log.info({ invoiceId: invoice.id, cogsEntryId: cogsEntry.id, totalCOGS, productCount: cogsDetails.length }, 'COGS journal entry and inventory movements created');

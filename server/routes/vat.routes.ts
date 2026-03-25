@@ -268,6 +268,10 @@ export function registerVATRoutes(app: Express) {
     const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
     if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
+    if (existing.status === 'submitted' || existing.status === 'filed') {
+      return res.status(400).json({ error: 'Cannot modify a submitted or filed VAT return' });
+    }
+
     const vatReturn = await storage.updateVatReturn(id, {
       ...updateData,
       updatedAt: new Date(),

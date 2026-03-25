@@ -96,47 +96,59 @@ export function registerExpenseClaimRoutes(app: Express) {
       }, 0);
     }
 
-    // Generate claim number
-    const countResult = await pool.query(
-      'SELECT COUNT(*) as count FROM expense_claims WHERE company_id = $1',
-      [companyId]
-    );
-    const claimNumber = `EXP-${String(parseInt(countResult.rows[0].count) + 1).padStart(4, '0')}`;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const claimResult = await pool.query(
-      `INSERT INTO expense_claims (company_id, submitted_by, claim_number, title, description, total_amount, currency, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft')
-       RETURNING *`,
-      [companyId, userId, claimNumber, title, description || null, totalAmount, currency || 'AED']
-    );
+      // Generate claim number with FOR UPDATE to prevent race conditions
+      const countResult = await client.query(
+        'SELECT COUNT(*) as count FROM expense_claims WHERE company_id = $1 FOR UPDATE',
+        [companyId]
+      );
+      const claimNumber = `EXP-${String(parseInt(countResult.rows[0].count) + 1).padStart(4, '0')}`;
 
-    const claim = claimResult.rows[0];
+      const claimResult = await client.query(
+        `INSERT INTO expense_claims (company_id, submitted_by, claim_number, title, description, total_amount, currency, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft')
+         RETURNING *`,
+        [companyId, userId, claimNumber, title, description || null, totalAmount, currency || 'AED']
+      );
 
-    // Insert items if provided
-    const insertedItems: any[] = [];
-    if (items && Array.isArray(items)) {
-      for (const item of items) {
-        const itemResult = await pool.query(
-          `INSERT INTO expense_claim_items (claim_id, expense_date, category, description, amount, vat_amount, receipt_url, merchant_name)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING *`,
-          [
-            claim.id,
-            item.expense_date,
-            item.category,
-            item.description,
-            item.amount,
-            item.vat_amount || 0,
-            item.receipt_url || null,
-            item.merchant_name || null,
-          ]
-        );
-        insertedItems.push(itemResult.rows[0]);
+      const claim = claimResult.rows[0];
+
+      // Insert items if provided
+      const insertedItems: any[] = [];
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          const itemResult = await client.query(
+            `INSERT INTO expense_claim_items (claim_id, expense_date, category, description, amount, vat_amount, receipt_url, merchant_name)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING *`,
+            [
+              claim.id,
+              item.expense_date,
+              item.category,
+              item.description,
+              item.amount,
+              item.vat_amount || 0,
+              item.receipt_url || null,
+              item.merchant_name || null,
+            ]
+          );
+          insertedItems.push(itemResult.rows[0]);
+        }
       }
-    }
 
-    log.info({ claimId: claim.id, companyId, claimNumber }, 'Expense claim created');
-    res.json({ ...claim, items: insertedItems });
+      await client.query('COMMIT');
+
+      log.info({ claimId: claim.id, companyId, claimNumber }, 'Expense claim created');
+      res.json({ ...claim, items: insertedItems });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }));
 
   // Update an expense claim (only if draft)

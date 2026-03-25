@@ -31,6 +31,7 @@ export function useReceiptMutations({
       apiRequest('PUT', `/api/receipts/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Receipt updated successfully',
         description: 'Your receipt has been updated.',
@@ -52,6 +53,7 @@ export function useReceiptMutations({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'journal-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Expense posted successfully',
         description: 'Journal entry has been created.',
@@ -81,6 +83,7 @@ export function useReceiptMutations({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Expense created successfully',
         description: 'The expense has been added. You can now post it to the journal.',
@@ -128,6 +131,7 @@ export function useReceiptMutations({
       apiRequest('DELETE', `/api/receipts/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Expense deleted',
         description: 'The expense has been deleted successfully.',

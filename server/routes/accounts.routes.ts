@@ -58,7 +58,8 @@ export function registerAccountRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const updatedAccount = await storage.updateAccount(id, req.body);
+    const { nameEn, nameAr, type, subType, description, isActive, isArchived } = req.body;
+    const updatedAccount = await storage.updateAccount(id, { nameEn, nameAr, type, subType, description, isActive, isArchived });
     res.json(updatedAccount);
   }));
 

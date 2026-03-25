@@ -95,6 +95,7 @@ export default function Journal() {
       apiRequest('POST', `/api/companies/${selectedCompanyId}/journal`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'journal'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Journal entry posted',
         description: 'Your double-entry journal has been recorded.',
@@ -125,6 +126,7 @@ export default function Journal() {
       apiRequest('PUT', `/api/journal/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'journal'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Draft entry updated',
         description: 'Your journal entry has been updated.',
@@ -155,6 +157,7 @@ export default function Journal() {
       apiRequest('POST', `/api/journal/${id}/post`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'journal'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Entry posted',
         description: 'Journal entry has been posted and is now immutable.',
@@ -174,6 +177,7 @@ export default function Journal() {
       apiRequest('POST', `/api/journal/${id}/reverse`, { reason }),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'journal'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Entry reversed',
         description: `Reversal entry ${data.reversalNumber} created. Original entry marked as void.`,
@@ -193,6 +197,7 @@ export default function Journal() {
       apiRequest('DELETE', `/api/journal/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'journal'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       toast({
         title: 'Draft entry deleted',
         description: 'The draft journal entry has been deleted.',

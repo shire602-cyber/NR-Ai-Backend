@@ -334,8 +334,8 @@ export function registerStripeRoutes(app: Express) {
 
       if (!integration || !integration.webhookSecret) {
         return res
-          .status(404)
-          .json({ message: 'Stripe integration not found or no webhook secret configured' });
+          .status(400)
+          .json({ error: 'Webhook processing failed' });
       }
 
       // Verify the webhook signature using the raw body buffer
