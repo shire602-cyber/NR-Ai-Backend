@@ -2,18 +2,15 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useRoute, useLocation, Link } from 'wouter';
 import { format } from 'date-fns';
-import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
+import { DataTable, type Column } from '@/components/shared/DataTable';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { useToast } from '@/hooks/use-toast';
@@ -22,18 +19,14 @@ import { queryClient, apiRequest } from '@/lib/queryClient';
 import { getAuthHeaders } from '@/lib/auth';
 import type { Account } from '@shared/schema';
 import jsPDF from 'jspdf';
-import { 
-  ArrowLeft, 
-  Search, 
-  Download, 
+import {
+  ArrowLeft,
+  Download,
   FileText,
   FileSpreadsheet,
   RotateCcw,
   BookOpen,
-  Calendar,
   Filter,
-  ChevronLeft,
-  ChevronRight,
   RefreshCw
 } from 'lucide-react';
 
@@ -71,28 +64,25 @@ export default function AccountLedger() {
   const accountId = params?.id;
   const { companyId: selectedCompanyId } = useDefaultCompany();
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [isExporting, setIsExporting] = useState(false);
   const [reversalDialogOpen, setReversalDialogOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
   const [reversalReason, setReversalReason] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const entriesPerPage = 25;
 
   const { data: ledger, isLoading, refetch } = useQuery<LedgerResponse>({
-    queryKey: ['/api/accounts', accountId, 'ledger', { dateRange, searchQuery, currentPage }],
+    queryKey: ['/api/accounts', accountId, 'ledger', { dateRange }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (dateRange.from) params.set('dateStart', format(dateRange.from, 'yyyy-MM-dd'));
       if (dateRange.to) params.set('dateEnd', format(dateRange.to, 'yyyy-MM-dd'));
-      if (searchQuery) params.set('search', searchQuery);
-      params.set('limit', String(entriesPerPage));
-      params.set('offset', String((currentPage - 1) * entriesPerPage));
-      
+      // Load all entries — DataTable handles client-side pagination & search
+      params.set('limit', '10000');
+      params.set('offset', '0');
+
       const url = `/api/accounts/${accountId}/ledger?${params.toString()}`;
       const response = await fetch(url, {
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
@@ -129,9 +119,67 @@ export default function AccountLedger() {
     },
   });
 
-  const totalPages = Math.ceil((ledger?.totalCount || 0) / entriesPerPage);
-  
-  const paginatedEntries = ledger?.entries || [];
+  // Flatten entries for DataTable
+  const ledgerTableData = useMemo(() => {
+    const entries = ledger?.allEntries || ledger?.entries || [];
+    return entries.map((entry) => ({
+      ...entry,
+      id: entry.id,
+      date: entry.date,
+      entryNumber: entry.entryNumber,
+      memo: entry.description || entry.memo || '',
+      debit: entry.debit,
+      credit: entry.credit,
+      runningBalance: entry.runningBalance,
+      journalEntryId: entry.journalEntryId,
+    }));
+  }, [ledger]);
+
+  const ledgerColumns: Column<Record<string, unknown>>[] = useMemo(() => [
+    { key: 'date', label: locale === 'ar' ? 'التاريخ' : 'Date', type: 'date' as const, sortable: true },
+    {
+      key: 'entryNumber',
+      label: locale === 'ar' ? 'رقم القيد' : 'Entry #',
+      sortable: true,
+      render: (row: Record<string, unknown>) => {
+        const entry = row as any;
+        return (
+          <Link
+            href={`/journal/${entry.journalEntryId}`}
+            className="text-primary hover:underline"
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            {String(entry.entryNumber).slice(-12)}
+          </Link>
+        );
+      },
+    },
+    { key: 'memo', label: locale === 'ar' ? 'الوصف' : 'Description', sortable: true },
+    { key: 'debit', label: locale === 'ar' ? 'مدين' : 'Debit', type: 'financial' as const, sortable: true },
+    { key: 'credit', label: locale === 'ar' ? 'دائن' : 'Credit', type: 'financial' as const, sortable: true },
+    { key: 'runningBalance', label: locale === 'ar' ? 'الرصيد' : 'Balance', type: 'financial' as const, sortable: true },
+    {
+      key: 'actions',
+      label: '',
+      render: (row: Record<string, unknown>) => {
+        const entry = row as any;
+        return (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => handleReverseEntry(entry)}
+              title={locale === 'ar' ? 'عكس القيد' : 'Reverse entry'}
+              data-testid={`button-reverse-${entry.id}`}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ], [locale, handleReverseEntry]);
 
   const handleExportCSV = () => {
     if (!ledger) return;
@@ -404,171 +452,27 @@ export default function AccountLedger() {
               <Filter className="h-5 w-5" />
               {locale === 'ar' ? 'الفلاتر' : 'Filters'}
             </CardTitle>
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              <div className="relative flex-1 sm:flex-none sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder={locale === 'ar' ? 'بحث...' : 'Search entries...'}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-search-ledger"
-                />
-              </div>
-              <DateRangeFilter
-                dateRange={dateRange}
-                onDateRangeChange={setDateRange}
-              />
-            </div>
+            <DateRangeFilter
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+            />
           </div>
         </CardHeader>
       </Card>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : !ledger?.entries?.length ? (
-            <div className="p-8 text-center">
-              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">
-                {locale === 'ar' ? 'لا توجد قيود' : 'No entries found'}
-              </h3>
-              <p className="text-muted-foreground">
-                {locale === 'ar' 
-                  ? 'لا توجد حركات لهذا الحساب بناءً على الفلاتر المحددة'
-                  : 'No transactions found for this account with the selected filters'
-                }
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[100px]">
-                        {locale === 'ar' ? 'التاريخ' : 'Date'}
-                      </TableHead>
-                      <TableHead className="w-[120px]">
-                        {locale === 'ar' ? 'رقم القيد' : 'Entry #'}
-                      </TableHead>
-                      <TableHead className="min-w-[200px]">
-                        {locale === 'ar' ? 'الوصف' : 'Description'}
-                      </TableHead>
-                      <TableHead className="text-right w-[100px]">
-                        {locale === 'ar' ? 'مدين' : 'Debit'}
-                      </TableHead>
-                      <TableHead className="text-right w-[100px]">
-                        {locale === 'ar' ? 'دائن' : 'Credit'}
-                      </TableHead>
-                      <TableHead className="text-right w-[120px]">
-                        {locale === 'ar' ? 'الرصيد' : 'Balance'}
-                      </TableHead>
-                      <TableHead className="w-[80px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedEntries.map((entry, index) => (
-                      <motion.tr
-                        key={entry.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.02 }}
-                        className="group hover-elevate"
-                        data-testid={`row-entry-${entry.id}`}
-                      >
-                        <TableCell className="font-medium">
-                          {format(new Date(entry.date), 'MMM dd, yyyy')}
-                        </TableCell>
-                        <TableCell>
-                          <Link 
-                            href={`/journal/${entry.journalEntryId}`}
-                            className="text-primary hover:underline"
-                          >
-                            {entry.entryNumber.slice(-12)}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="truncate max-w-[300px]">
-                              {entry.description || entry.memo || '-'}
-                            </span>
-                            <Badge variant="outline" className="shrink-0 text-xs">
-                              {entry.source}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-emerald-600">
-                          {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-rose-600">
-                          {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
-                        </TableCell>
-                        <TableCell className={`text-right font-mono font-medium ${
-                          entry.runningBalance >= 0 ? 'text-foreground' : 'text-destructive'
-                        }`}>
-                          {formatCurrency(Math.abs(entry.runningBalance))}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleReverseEntry(entry)}
-                            title={locale === 'ar' ? 'عكس القيد' : 'Reverse entry'}
-                            data-testid={`button-reverse-${entry.id}`}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    {locale === 'ar' 
-                      ? `عرض ${(currentPage - 1) * entriesPerPage + 1} - ${Math.min(currentPage * entriesPerPage, ledger.totalCount)} من ${ledger.totalCount}`
-                      : `Showing ${(currentPage - 1) * entriesPerPage + 1} - ${Math.min(currentPage * entriesPerPage, ledger.totalCount)} of ${ledger.totalCount}`
-                    }
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      data-testid="button-prev-page"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm">
-                      {currentPage} / {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      data-testid="button-next-page"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable<Record<string, unknown>>
+        data={ledgerTableData}
+        columns={ledgerColumns}
+        loading={isLoading}
+        searchable
+        searchPlaceholder={locale === 'ar' ? 'بحث...' : 'Search entries...'}
+        emptyTitle={locale === 'ar' ? 'لا توجد قيود' : 'No entries found'}
+        emptyDescription={locale === 'ar'
+          ? 'لا توجد حركات لهذا الحساب بناءً على الفلاتر المحددة'
+          : 'No transactions found for this account with the selected filters'
+        }
+        emptyIcon={BookOpen}
+      />
 
       <Dialog open={reversalDialogOpen} onOpenChange={setReversalDialogOpen}>
         <DialogContent>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Switch, Route, useLocation, Link } from 'wouter';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -8,11 +8,14 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { CommandPalette } from '@/components/CommandPalette';
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { useI18n } from '@/lib/i18n';
 import { getToken } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
-import { User } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { User, Search } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 // Pages
 import NotFound from '@/pages/not-found';
@@ -76,6 +79,8 @@ import { OnboardingWizard } from '@/components/Onboarding';
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const [commandOpen, setCommandOpen] = useState(false);
+  const openCommandPalette = useCallback(() => setCommandOpen(true), []);
   const style = {
     '--sidebar-width': '16rem',
     '--sidebar-width-icon': '3rem',
@@ -83,34 +88,44 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-4 focus:left-4 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md">Skip to main content</a>
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <motion.header 
-            className="flex items-center justify-between p-4 border-b bg-background sticky top-0 z-10"
-            initial={{ y: -100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
+          <header className="flex items-center justify-between p-4 border-b bg-background sticky top-0 z-10">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            </motion.div>
-            <Link href="/company-profile">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden sm:flex items-center gap-2 text-muted-foreground transition-colors duration-150 hover:bg-accent"
+                onClick={openCommandPalette}
+                data-testid="button-command-palette"
               >
-                <Button variant="ghost" size="sm" data-testid="button-profile" className="transition-all duration-200">
-                <User className="w-4 h-4 mr-2" />
-                Profile
+                <Search className="w-4 h-4" />
+                <span>Search...</span>
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                  Ctrl+K
+                </kbd>
               </Button>
-              </motion.div>
-            </Link>
-          </motion.header>
-          <main className="flex-1 overflow-auto p-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="sm:hidden transition-colors duration-150 hover:bg-accent"
+                onClick={openCommandPalette}
+                aria-label="Search"
+              >
+                <Search className="w-4 h-4" />
+              </Button>
+              <Link href="/company-profile">
+                <Button variant="ghost" size="sm" data-testid="button-profile" className="transition-colors duration-150 hover:bg-accent">
+                  <User className="w-4 h-4 mr-2" />
+                  Profile
+                </Button>
+              </Link>
+            </div>
+          </header>
+          <main id="main-content" className="flex-1 overflow-auto p-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location}
@@ -119,12 +134,14 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
               >
-            {children}
+                {children}
               </motion.div>
             </AnimatePresence>
           </main>
         </div>
       </div>
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+      <KeyboardShortcuts onOpenCommandPalette={openCommandPalette} />
       <OnboardingWizard />
     </SidebarProvider>
   );
@@ -261,12 +278,14 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Router />
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <Router />
+            <Toaster />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

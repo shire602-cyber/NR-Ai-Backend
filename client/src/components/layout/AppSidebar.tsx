@@ -1,37 +1,30 @@
 import { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  BookMarked, 
-  BarChart3, 
-  Sparkles,
+import {
+  LayoutDashboard,
+  FileText,
+  BookMarked,
+  BarChart3,
   Languages,
   LogOut,
   Receipt,
   Bot,
-  Plug,
-  MessageSquare,
   Building2,
   FileCheck,
   Users,
-  List,
-  Wallet,
-  ShoppingCart,
   FolderArchive,
   FileStack,
   CalendarDays,
   ListTodo,
-  Newspaper,
   Shield,
-  UserPlus,
-  Activity,
   Settings,
-  FileUp,
   History,
-  Database
+  Database,
+  ShoppingCart,
+  Plug,
+  Wallet,
+  ChevronRight,
 } from 'lucide-react';
 import { useLocation } from 'wouter';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sidebar,
   SidebarContent,
@@ -44,72 +37,75 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTranslation, useI18n } from '@/lib/i18n';
 import { removeToken, getToken } from '@/lib/auth';
 
-const coreItems = [
+// --- Accounting (5 items) ---
+const accountingItems = [
   { title: 'dashboard', icon: LayoutDashboard, url: '/dashboard' },
-  { title: 'chartOfAccounts', icon: List, url: '/chart-of-accounts' },
   { title: 'journal', icon: BookMarked, url: '/journal' },
   { title: 'invoices', icon: FileText, url: '/invoices' },
-  { title: 'recurringInvoices', icon: CalendarDays, url: '/recurring-invoices' },
   { title: 'receipts', icon: Receipt, url: '/receipts' },
-  { title: 'contacts', icon: Users, url: '/contacts' },
-  { title: 'inventory', icon: ShoppingCart, url: '/inventory' },
   { title: 'bankReconciliation', icon: Building2, url: '/bank-reconciliation' },
 ];
 
+// --- Reports (2 items) ---
 const reportsItems = [
   { title: 'reports', icon: BarChart3, url: '/reports' },
   { title: 'vatFiling', icon: FileCheck, url: '/vat-filing' },
-  { title: 'corporateTax', icon: FileCheck, url: '/corporate-tax' },
 ];
 
+// --- AI (1 item) ---
 const aiItems = [
   { title: 'aiCfo', icon: Bot, url: '/ai-cfo' },
-  { title: 'aiFeatures', icon: Sparkles, url: '/ai-features' },
-  { title: 'aiChat', icon: MessageSquare, url: '/ai-chat' },
 ];
 
-const clientPortalItems = [
+// --- Portal sub-items ---
+const portalSubItems = [
   { title: 'documentVault', icon: FolderArchive, url: '/document-vault' },
   { title: 'taxReturnArchive', icon: FileStack, url: '/tax-return-archive' },
   { title: 'complianceCalendar', icon: CalendarDays, url: '/compliance-calendar' },
   { title: 'taskCenter', icon: ListTodo, url: '/task-center' },
-  { title: 'newsFeed', icon: Newspaper, url: '/news-feed' },
 ];
 
-const settingsItems = [
+// --- Settings sub-items ---
+const settingsSubItems = [
   { title: 'teamManagement', icon: Users, url: '/team' },
+  { title: 'integrationsHub', icon: Plug, url: '/integrations-hub' },
   { title: 'history', icon: History, url: '/history' },
   { title: 'backupRestore', icon: Database, url: '/backup-restore' },
-  { title: 'integrationsHub', icon: ShoppingCart, url: '/integrations-hub' },
-  { title: 'integrations', icon: Plug, url: '/integrations' },
-  { title: 'whatsappInbox', icon: MessageSquare, url: '/whatsapp' },
 ];
 
+// --- Admin (1 item) ---
 const adminItems = [
   { title: 'adminDashboard', icon: Shield, url: '/admin/dashboard' },
-  { title: 'clientManagement', icon: Building2, url: '/admin/clients' },
-  { title: 'clientDocuments', icon: FolderArchive, url: '/admin/documents' },
-  { title: 'userInvitations', icon: UserPlus, url: '/admin/invitations' },
-  { title: 'clientImport', icon: FileUp, url: '/admin/import' },
-  { title: 'userManagement', icon: Users, url: '/admin/users' },
-  { title: 'activityLogs', icon: Activity, url: '/admin/activity-logs' },
-  { title: 'systemSettings', icon: Settings, url: '/admin' },
 ];
+
+// --- Client-portal-only items (for userType === 'client') ---
+const clientPortalViewItems = [
+  { title: 'documentVault', icon: FolderArchive, url: '/document-vault' },
+  { title: 'taxReturnArchive', icon: FileStack, url: '/tax-return-archive' },
+  { title: 'complianceCalendar', icon: CalendarDays, url: '/compliance-calendar' },
+  { title: 'taskCenter', icon: ListTodo, url: '/task-center' },
+];
+
+type SidebarItem = { title: string; icon: React.ComponentType<{ className?: string }>; url: string };
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { t, locale } = useTranslation();
   const { setLocale } = useI18n();
+  const [portalOpen, setPortalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Check user status directly from token - no state needed
-  const checkUserStatus = (): { 
-    isAdmin: boolean; 
+  const checkUserStatus = (): {
+    isAdmin: boolean;
     userType: 'admin' | 'client' | 'customer';
-    needsRelogin: boolean 
+    needsRelogin: boolean
   } => {
     try {
       const token = getToken();
@@ -121,16 +117,16 @@ export function AppSidebar() {
         return { isAdmin: false, userType: 'customer', needsRelogin: false };
       }
       const payload = JSON.parse(atob(parts[1]));
-      
+
       // If token doesn't have isAdmin field, it's an old token - needs re-login
       if (payload.isAdmin === undefined) {
         return { isAdmin: false, userType: 'customer', needsRelogin: true };
       }
-      
-      return { 
-        isAdmin: payload.isAdmin === true, 
+
+      return {
+        isAdmin: payload.isAdmin === true,
         userType: payload.userType || 'customer',
-        needsRelogin: false 
+        needsRelogin: false
       };
     } catch (error) {
       return { isAdmin: false, userType: 'customer', needsRelogin: false };
@@ -139,7 +135,7 @@ export function AppSidebar() {
 
   // Check user status on every render
   const { isAdmin, userType, needsRelogin } = checkUserStatus();
-  
+
   // Handle old token logout in useEffect (can't update state during render)
   useEffect(() => {
     if (needsRelogin) {
@@ -148,6 +144,16 @@ export function AppSidebar() {
       setLocation('/');
     }
   }, [needsRelogin, setLocation]);
+
+  // Auto-expand collapsibles when a sub-item is active
+  useEffect(() => {
+    if (portalSubItems.some(item => location === item.url || location.startsWith(item.url + '/'))) {
+      setPortalOpen(true);
+    }
+    if (settingsSubItems.some(item => location === item.url || location.startsWith(item.url + '/'))) {
+      setSettingsOpen(true);
+    }
+  }, [location]);
 
   const handleLogout = () => {
     removeToken();
@@ -158,90 +164,83 @@ export function AppSidebar() {
     setLocale(locale === 'en' ? 'ar' : 'en');
   };
 
-  const renderMenuItem = (item: typeof coreItems[0]) => {
+  const isActive = (url: string) => location === url || location.startsWith(url + '/');
+
+  const renderMenuItem = (item: SidebarItem) => {
     const Icon = item.icon;
-    const isActive = location === item.url || location.startsWith(item.url + '/');
+    const active = isActive(item.url);
     const label = (t as any)[item.title] || item.title;
-    
+
     return (
       <SidebarMenuItem key={item.url}>
-        <motion.div
-          whileHover={{ x: 4 }}
-          transition={{ duration: 0.2 }}
-        >
-        <SidebarMenuButton 
-          isActive={isActive}
+        <SidebarMenuButton
+          isActive={active}
           onClick={() => setLocation(item.url)}
           data-testid={`link-${item.title}`}
-            className="relative group transition-all duration-200"
-          >
-            <motion.div
-              className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"
-              initial={{ scaleY: 0 }}
-              animate={{ scaleY: isActive ? 1 : 0 }}
-              transition={{ duration: 0.2 }}
-            />
-            <motion.div
-              whileHover={{ scale: 1.1 }}
-              transition={{ duration: 0.2 }}
+          className="transition-colors duration-150 hover:bg-accent"
         >
           <Icon className="w-4 h-4" />
-            </motion.div>
-            <motion.span
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {label}
-            </motion.span>
+          <span>{label}</span>
         </SidebarMenuButton>
-        </motion.div>
       </SidebarMenuItem>
+    );
+  };
+
+  const renderCollapsibleGroup = (
+    label: string,
+    icon: React.ComponentType<{ className?: string }>,
+    parentUrl: string,
+    subItems: SidebarItem[],
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+  ) => {
+    const Icon = icon;
+    const anyChildActive = subItems.some(item => isActive(item.url));
+    return (
+      <Collapsible open={open} onOpenChange={onOpenChange}>
+        <SidebarMenuItem>
+          <CollapsibleTrigger asChild>
+            <SidebarMenuButton
+              isActive={anyChildActive}
+              onClick={() => {
+                onOpenChange(!open);
+                setLocation(parentUrl);
+              }}
+              className="transition-colors duration-150 hover:bg-accent"
+            >
+              <Icon className="w-4 h-4" />
+              <span>{label}</span>
+              <ChevronRight
+                className={`ml-auto w-4 h-4 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+              />
+            </SidebarMenuButton>
+          </CollapsibleTrigger>
+        </SidebarMenuItem>
+        <CollapsibleContent>
+          <SidebarMenu className="ml-4 border-l pl-2">
+            {subItems.map(renderMenuItem)}
+          </SidebarMenu>
+        </CollapsibleContent>
+      </Collapsible>
     );
   };
 
   return (
     <Sidebar>
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4 }}
-      >
       <SidebarHeader className="p-4">
-          <motion.div 
-            className="flex items-center gap-2"
-            whileHover={{ scale: 1.02 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div 
-              className="w-8 h-8 rounded-md bg-primary flex items-center justify-center"
-              whileHover={{ rotate: [0, -10, 10, -10, 0] }}
-              transition={{ duration: 0.5 }}
-            >
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
             <Wallet className="w-5 h-5 text-primary-foreground" />
-            </motion.div>
+          </div>
           <div>
-              <motion.div 
-                className="font-semibold text-sm"
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-              >
-                Muhasib.ai
-              </motion.div>
-              <motion.div 
-                className="text-xs text-muted-foreground"
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
-              >
+            <div className="font-semibold text-sm">Muhasib.ai</div>
+            <div className="text-xs text-muted-foreground">
               {t.smartAccounting || 'Smart Accounting'}
-              </motion.div>
             </div>
-          </motion.div>
+          </div>
+        </div>
       </SidebarHeader>
-      </motion.div>
-      
+
       <SidebarContent>
         {/* Client Portal View - Simplified view for NR-managed clients */}
         {userType === 'client' && (
@@ -263,7 +262,7 @@ export function AppSidebar() {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {clientPortalItems.map(renderMenuItem)}
+                  {clientPortalViewItems.map(renderMenuItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -281,20 +280,22 @@ export function AppSidebar() {
           </>
         )}
 
-        {/* Customer/Admin View - Full bookkeeping features for self-service SaaS customers */}
+        {/* Customer/Admin View - Collapsed ~12 items */}
         {(userType === 'customer' || userType === 'admin') && (
           <>
+            {/* Accounting (5) */}
             <SidebarGroup>
               <SidebarGroupLabel>
                 {t.accounting || 'Accounting'}
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {coreItems.map(renderMenuItem)}
+                  {accountingItems.map(renderMenuItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-            
+
+            {/* Reports (2) */}
             <SidebarGroup>
               <SidebarGroupLabel>
                 {t.reportsSection || 'Reports'}
@@ -306,6 +307,7 @@ export function AppSidebar() {
               </SidebarGroupContent>
             </SidebarGroup>
 
+            {/* AI (1) */}
             <SidebarGroup>
               <SidebarGroupLabel>
                 {t.aiTools || 'AI Tools'}
@@ -317,24 +319,40 @@ export function AppSidebar() {
               </SidebarGroupContent>
             </SidebarGroup>
 
+            {/* Portal (1 with expandable sub-items) */}
             <SidebarGroup>
               <SidebarGroupLabel>
                 {t.clientPortal || 'Client Portal'}
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {clientPortalItems.map(renderMenuItem)}
+                  {renderCollapsibleGroup(
+                    t.clientPortal || 'Client Portal',
+                    FolderArchive,
+                    '/document-vault',
+                    portalSubItems,
+                    portalOpen,
+                    setPortalOpen,
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
 
+            {/* Settings (1 with expandable sub-items) */}
             <SidebarGroup>
               <SidebarGroupLabel>
                 {t.settings || 'Settings'}
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {settingsItems.map(renderMenuItem)}
+                  {renderCollapsibleGroup(
+                    t.settings || 'Settings',
+                    Settings,
+                    '/team',
+                    settingsSubItems,
+                    settingsOpen,
+                    setSettingsOpen,
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -358,45 +376,28 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4 space-y-2">
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-        <Button
-          variant="outline"
-            className="w-full justify-start transition-all duration-200"
-          onClick={toggleLanguage}
-          data-testid="button-language-toggle"
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 justify-start transition-colors duration-150 hover:bg-accent"
+            onClick={toggleLanguage}
+            data-testid="button-language-toggle"
           >
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <Languages className="w-4 h-4 mr-2" />
-            </motion.div>
-          {locale === 'en' ? 'Arabic' : 'English'}
-        </Button>
-        </motion.div>
-        
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
+            <Languages className="w-4 h-4 mr-2" />
+            {locale === 'en' ? 'Arabic' : 'English'}
+          </Button>
+          <ThemeToggle />
+        </div>
+
         <Button
           variant="ghost"
-            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors duration-150"
           onClick={handleLogout}
           data-testid="button-logout"
-          >
-            <motion.div
-              whileHover={{ x: -2 }}
-              transition={{ duration: 0.2 }}
         >
           <LogOut className="w-4 h-4 mr-2" />
-            </motion.div>
           {t.logout || 'Logout'}
         </Button>
-        </motion.div>
       </SidebarFooter>
     </Sidebar>
   );

@@ -1,4 +1,4 @@
-import { motion, useInView, useAnimation, Variants } from 'framer-motion';
+import { motion, useInView, Variants } from 'framer-motion';
 import { useEffect, useRef, useState, ReactNode } from 'react';
 
 // Reusable animation variants
@@ -67,104 +67,6 @@ export const staggerItem: Variants = {
   }
 };
 
-// Hover animations
-export const hoverScale = {
-  scale: 1.05,
-  transition: { duration: 0.2, ease: "easeOut" }
-};
-
-export const hoverLift = {
-  y: -4,
-  transition: { duration: 0.2, ease: "easeOut" }
-};
-
-// Scroll-triggered animation component
-export function ScrollReveal({ 
-  children, 
-  delay = 0, 
-  direction = 'up',
-  className = '',
-  ...props
-}: { 
-  children: ReactNode; 
-  delay?: number;
-  direction?: 'up' | 'down' | 'left' | 'right';
-  className?: string;
-} & React.HTMLAttributes<HTMLDivElement>) {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-100px" });
-  const controls = useAnimation();
-
-  useEffect(() => {
-    if (isInView) {
-      controls.start('visible');
-    }
-  }, [isInView, controls]);
-
-  const variants = {
-    up: fadeInUp,
-    down: fadeInDown,
-    left: fadeInLeft,
-    right: fadeInRight,
-  }[direction];
-
-  return (
-    <motion.div
-      ref={ref}
-      initial="hidden"
-      animate={controls}
-      variants={variants}
-      className={className}
-      transition={{ delay }}
-      {...props}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-// Stagger children animation wrapper
-export function StaggerContainer({ 
-  children, 
-  className = '',
-  ...props
-}: { 
-  children: ReactNode; 
-  className?: string;
-} & React.HTMLAttributes<HTMLDivElement>) {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
-
-  return (
-    <motion.div
-      ref={ref}
-      initial="hidden"
-      animate={isInView ? "visible" : "hidden"}
-      variants={staggerContainer}
-      className={className}
-      {...props}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-// Stagger item component
-export function StaggerItem({ 
-  children, 
-  className = '',
-  ...props
-}: { 
-  children: ReactNode; 
-  className?: string;
-} & React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <motion.div variants={staggerItem} className={className} {...props}>
-      {children}
-    </motion.div>
-  );
-}
-
 // Number counter animation
 export function AnimatedNumber({ 
   value, 
@@ -210,66 +112,6 @@ export function AnimatedNumber({
     <span ref={ref} className={className}>
       {displayValue.toLocaleString()}
     </span>
-  );
-}
-
-// Floating animation component
-export function Floating({ 
-  children, 
-  intensity = 10,
-  duration = 3,
-  className = ''
-}: { 
-  children: ReactNode; 
-  intensity?: number;
-  duration?: number;
-  className?: string;
-}) {
-  return (
-    <motion.div
-      animate={{
-        y: [0, -intensity, 0],
-      }}
-      transition={{
-        duration,
-        repeat: Infinity,
-        ease: "easeInOut"
-      }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-// Pulse glow animation
-export function PulseGlow({ 
-  children, 
-  className = '',
-  color = 'primary'
-}: { 
-  children: ReactNode; 
-  className?: string;
-  color?: 'primary' | 'accent' | 'success' | 'warning';
-}) {
-  return (
-    <motion.div
-      animate={{
-        boxShadow: [
-          `0 0 0px hsl(var(--${color}))`,
-          `0 0 20px hsl(var(--${color}) / 0.5)`,
-          `0 0 0px hsl(var(--${color}))`,
-        ],
-      }}
-      transition={{
-        duration: 2,
-        repeat: Infinity,
-        ease: "easeInOut"
-      }}
-      className={className}
-    >
-      {children}
-    </motion.div>
   );
 }
 

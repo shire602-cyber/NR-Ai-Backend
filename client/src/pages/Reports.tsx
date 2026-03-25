@@ -1,19 +1,20 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DataTable, type Column } from '@/components/shared/DataTable';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/format';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
-import { 
-  exportToExcel, 
+import {
+  exportToExcel,
   exportToGoogleSheets,
   prepareProfitLossForExport,
   prepareBalanceSheetForExport,
@@ -23,9 +24,12 @@ import { Download, TrendingUp, TrendingDown, DollarSign, FileSpreadsheet, FileTe
 import { SiGooglesheets } from 'react-icons/si';
 
 interface AccountLineItem {
+  id?: string;
+  accountId?: string;
   accountCode?: string;
   accountName: string;
   amount: number;
+  [key: string]: unknown;
 }
 
 interface ProfitLossReport {
@@ -59,6 +63,7 @@ export default function Reports() {
   const { toast } = useToast();
   const { companyId: selectedCompanyId } = useDefaultCompany();
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState('pl');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -80,6 +85,12 @@ export default function Reports() {
     queryKey: ['/api/companies', selectedCompanyId, 'reports', 'vat-summary', dateParams],
     enabled: !!selectedCompanyId,
   });
+
+  const plColumns: Column<AccountLineItem>[] = useMemo(() => [
+    { key: 'accountCode', label: 'Account Code', sortable: true },
+    { key: 'accountName', label: 'Account Name', sortable: true },
+    { key: 'amount', label: 'Amount', type: 'financial' as const, sortable: true },
+  ], []);
 
   const handleExportExcel = () => {
     const dateRangeStr = dateRange.from && dateRange.to 
@@ -253,7 +264,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle>{t.profitLoss} Statement</CardTitle>
               <CardDescription>
-                {dateRange.from && dateRange.to 
+                {dateRange.from && dateRange.to
                   ? `${format(dateRange.from, 'MMM dd, yyyy')} - ${format(dateRange.to, 'MMM dd, yyyy')}`
                   : 'All time'}
               </CardDescription>
@@ -265,48 +276,44 @@ export default function Reports() {
                 <div className="space-y-6">
                   <div>
                     <h3 className="font-semibold mb-3 text-green-600 dark:text-green-400">Revenue</h3>
-                    <Table>
-                      <TableBody>
-                        {profitLoss?.revenue?.map((item, index) => (
-                          <TableRow key={item.accountCode || `revenue-${index}`}>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{item.accountCode || '-'}</TableCell>
-                            <TableCell>{item.accountName || 'Unknown Account'}</TableCell>
-                            <TableCell className="text-right font-mono font-medium">
-                              {formatCurrency(item.amount ?? 0, 'AED', locale)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        <TableRow className="border-t-2">
-                          <TableCell colSpan={2} className="font-semibold">Total Revenue</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">
-                            {formatCurrency(profitLoss?.totalRevenue || 0, 'AED', locale)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                    <DataTable<AccountLineItem>
+                      data={profitLoss?.revenue ?? []}
+                      columns={plColumns}
+                      onRowClick={(row) => {
+                        const aid = row.accountId || row.id;
+                        if (aid) navigate(`/accounts/${aid}/ledger`);
+                      }}
+                      emptyTitle="No revenue accounts"
+                      emptyDescription="No revenue data for this period."
+                      emptyIcon={TrendingUp}
+                    />
+                    <div className="flex justify-between items-center mt-2 px-2 py-2 border-t-2 font-semibold">
+                      <span>Total Revenue</span>
+                      <span className="font-mono">
+                        {formatCurrency(profitLoss?.totalRevenue || 0, 'AED', locale)}
+                      </span>
+                    </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold mb-3 text-red-600 dark:text-red-400">Expenses</h3>
-                    <Table>
-                      <TableBody>
-                        {profitLoss?.expenses?.map((item, index) => (
-                          <TableRow key={item.accountCode || `expense-${index}`}>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{item.accountCode || '-'}</TableCell>
-                            <TableCell>{item.accountName || 'Unknown Account'}</TableCell>
-                            <TableCell className="text-right font-mono font-medium">
-                              {formatCurrency(item.amount ?? 0, 'AED', locale)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        <TableRow className="border-t-2">
-                          <TableCell colSpan={2} className="font-semibold">Total Expenses</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">
-                            {formatCurrency(profitLoss?.totalExpenses || 0, 'AED', locale)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                    <DataTable<AccountLineItem>
+                      data={profitLoss?.expenses ?? []}
+                      columns={plColumns}
+                      onRowClick={(row) => {
+                        const aid = row.accountId || row.id;
+                        if (aid) navigate(`/accounts/${aid}/ledger`);
+                      }}
+                      emptyTitle="No expense accounts"
+                      emptyDescription="No expense data for this period."
+                      emptyIcon={TrendingDown}
+                    />
+                    <div className="flex justify-between items-center mt-2 px-2 py-2 border-t-2 font-semibold">
+                      <span>Total Expenses</span>
+                      <span className="font-mono">
+                        {formatCurrency(profitLoss?.totalExpenses || 0, 'AED', locale)}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="border-t-4 pt-4">
@@ -328,7 +335,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle>{t.balanceSheet}</CardTitle>
               <CardDescription>
-                {dateRange.from && dateRange.to 
+                {dateRange.from && dateRange.to
                   ? `As of ${format(dateRange.to, 'MMM dd, yyyy')}`
                   : 'Assets, liabilities, and equity as of today'}
               </CardDescription>
@@ -340,71 +347,62 @@ export default function Reports() {
                 <div className="space-y-6">
                   <div>
                     <h3 className="font-semibold mb-3 text-blue-600 dark:text-blue-400">Assets</h3>
-                    <Table>
-                      <TableBody>
-                        {balanceSheet?.assets?.map((item, index) => (
-                          <TableRow key={item.accountCode || `asset-${index}`}>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{item.accountCode || '-'}</TableCell>
-                            <TableCell>{item.accountName || 'Unknown Account'}</TableCell>
-                            <TableCell className="text-right font-mono font-medium">
-                              {formatCurrency(item.amount ?? 0, 'AED', locale)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        <TableRow className="border-t-2">
-                          <TableCell colSpan={2} className="font-semibold">Total Assets</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">
-                            {formatCurrency(balanceSheet?.totalAssets || 0, 'AED', locale)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                    <DataTable<AccountLineItem>
+                      data={balanceSheet?.assets ?? []}
+                      columns={plColumns}
+                      onRowClick={(row) => {
+                        const aid = row.accountId || row.id;
+                        if (aid) navigate(`/accounts/${aid}/ledger`);
+                      }}
+                      emptyTitle="No assets"
+                      emptyDescription="No asset data available."
+                    />
+                    <div className="flex justify-between items-center mt-2 px-2 py-2 border-t-2 font-semibold">
+                      <span>Total Assets</span>
+                      <span className="font-mono">
+                        {formatCurrency(balanceSheet?.totalAssets || 0, 'AED', locale)}
+                      </span>
+                    </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold mb-3 text-red-600 dark:text-red-400">Liabilities</h3>
-                    <Table>
-                      <TableBody>
-                        {balanceSheet?.liabilities?.map((item, index) => (
-                          <TableRow key={item.accountCode || `liability-${index}`}>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{item.accountCode || '-'}</TableCell>
-                            <TableCell>{item.accountName || 'Unknown Account'}</TableCell>
-                            <TableCell className="text-right font-mono font-medium">
-                              {formatCurrency(item.amount ?? 0, 'AED', locale)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        <TableRow className="border-t-2">
-                          <TableCell colSpan={2} className="font-semibold">Total Liabilities</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">
-                            {formatCurrency(balanceSheet?.totalLiabilities || 0, 'AED', locale)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                    <DataTable<AccountLineItem>
+                      data={balanceSheet?.liabilities ?? []}
+                      columns={plColumns}
+                      onRowClick={(row) => {
+                        const aid = row.accountId || row.id;
+                        if (aid) navigate(`/accounts/${aid}/ledger`);
+                      }}
+                      emptyTitle="No liabilities"
+                      emptyDescription="No liability data available."
+                    />
+                    <div className="flex justify-between items-center mt-2 px-2 py-2 border-t-2 font-semibold">
+                      <span>Total Liabilities</span>
+                      <span className="font-mono">
+                        {formatCurrency(balanceSheet?.totalLiabilities || 0, 'AED', locale)}
+                      </span>
+                    </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold mb-3 text-purple-600 dark:text-purple-400">Equity</h3>
-                    <Table>
-                      <TableBody>
-                        {balanceSheet?.equity?.map((item, index) => (
-                          <TableRow key={item.accountCode || `equity-${index}`}>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{item.accountCode || '-'}</TableCell>
-                            <TableCell>{item.accountName || 'Unknown Account'}</TableCell>
-                            <TableCell className="text-right font-mono font-medium">
-                              {formatCurrency(item.amount ?? 0, 'AED', locale)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        <TableRow className="border-t-2">
-                          <TableCell colSpan={2} className="font-semibold">Total Equity</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">
-                            {formatCurrency(balanceSheet?.totalEquity || 0, 'AED', locale)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                    <DataTable<AccountLineItem>
+                      data={balanceSheet?.equity ?? []}
+                      columns={plColumns}
+                      onRowClick={(row) => {
+                        const aid = row.accountId || row.id;
+                        if (aid) navigate(`/accounts/${aid}/ledger`);
+                      }}
+                      emptyTitle="No equity"
+                      emptyDescription="No equity data available."
+                    />
+                    <div className="flex justify-between items-center mt-2 px-2 py-2 border-t-2 font-semibold">
+                      <span>Total Equity</span>
+                      <span className="font-mono">
+                        {formatCurrency(balanceSheet?.totalEquity || 0, 'AED', locale)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}

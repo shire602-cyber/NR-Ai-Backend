@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,6 +15,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DataTable, type Column } from '@/components/shared/DataTable';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
@@ -266,6 +268,152 @@ export default function Journal() {
   const totalCredit = watchLines.reduce((sum, line) => sum + (Number(line.credit) || 0), 0);
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
+  // Flatten entries for DataTable
+  const entriesTableData = useMemo(() => {
+    if (!entries) return [];
+    return entries.map((entry: any) => ({
+      ...entry,
+      id: entry.id,
+      entryNumber: entry.entryNumber || '',
+      date: entry.date,
+      memo: entry.memo || '',
+      status: entry.status || 'draft',
+      source: entry.source || 'manual',
+      totalDebit: entry.lines?.reduce((sum: number, l: any) => sum + (Number(l.debit) || 0), 0) ?? 0,
+      totalCredit: entry.lines?.reduce((sum: number, l: any) => sum + (Number(l.credit) || 0), 0) ?? 0,
+    }));
+  }, [entries]);
+
+  const journalColumns: Column<Record<string, unknown>>[] = useMemo(() => [
+    { key: 'entryNumber', label: 'Entry Number', sortable: true },
+    { key: 'date', label: t.date, type: 'date' as const, sortable: true },
+    { key: 'memo', label: t.memo, sortable: true },
+    {
+      key: 'status',
+      label: t.status,
+      type: 'status' as const,
+      sortable: true,
+    },
+    {
+      key: 'source',
+      label: 'Source',
+      sortable: true,
+      render: (row: Record<string, unknown>) => {
+        const source = String(row.source || 'manual');
+        if (source === 'manual') return <span className="text-muted-foreground">Manual</span>;
+        const sourceColors: Record<string, string> = {
+          invoice: 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400',
+          receipt: 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400',
+          payment: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400',
+          reversal: 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400',
+        };
+        return (
+          <Badge variant="outline" className={sourceColors[source] || ''}>
+            {source.charAt(0).toUpperCase() + source.slice(1)}
+          </Badge>
+        );
+      },
+    },
+    { key: 'totalDebit', label: t.debit, type: 'financial' as const, sortable: true },
+    { key: 'totalCredit', label: t.credit, type: 'financial' as const, sortable: true },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (row: Record<string, unknown>) => {
+        const entry = row as any;
+        const isDraft = entry.status === 'draft';
+        const isPosted = entry.status === 'posted';
+        return (
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {isDraft && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => postMutation.mutate(entry.id)}
+                  disabled={postMutation.isPending}
+                  data-testid={`button-post-journal-${entry.id}`}
+                >
+                  <Send className="w-3 h-3 mr-1" />
+                  Post
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEditEntry(entry)}
+                  aria-label="Edit journal entry"
+                  data-testid={`button-edit-journal-${entry.id}`}
+                >
+                  <Edit className="w-3 h-3" />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Delete journal entry"
+                      data-testid={`button-delete-journal-${entry.id}`}
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Draft Entry?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete this draft entry. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteMutation.mutate(entry.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
+            {isPosted && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid={`button-reverse-journal-${entry.id}`}
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    Reverse
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reverse Journal Entry?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will create a new reversing entry that offsets this posted entry,
+                      and mark the original as void. Posted entries cannot be edited or deleted.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => reverseMutation.mutate({ id: entry.id, reason: 'User requested reversal' })}
+                    >
+                      Reverse Entry
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        );
+      },
+    },
+  ], [t, locale, postMutation, deleteMutation, reverseMutation, handleEditEntry]);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -513,196 +661,16 @@ export default function Journal() {
         </Dialog>
       </div>
 
-      {isLoading ? (
-        <Skeleton className="h-96" />
-      ) : entries && entries.length > 0 ? (
-        <div className="space-y-4">
-          {entries.map((entry: any) => {
-            const isPosted = entry.status === 'posted';
-            const isDraft = entry.status === 'draft';
-            const isVoid = entry.status === 'void';
-            
-            const getStatusBadge = () => {
-              if (isPosted) {
-                return (
-                  <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-                    <Lock className="w-3 h-3 mr-1" />
-                    Posted
-                  </Badge>
-                );
-              } else if (isVoid) {
-                return (
-                  <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">
-                    <XCircle className="w-3 h-3 mr-1" />
-                    Void
-                  </Badge>
-                );
-              } else {
-                return (
-                  <Badge variant="outline" className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
-                    <FileText className="w-3 h-3 mr-1" />
-                    Draft
-                  </Badge>
-                );
-              }
-            };
-
-            const getSourceBadge = () => {
-              if (!entry.source || entry.source === 'manual') return null;
-              const sources: Record<string, { label: string; className: string }> = {
-                invoice: { label: 'Invoice', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' },
-                receipt: { label: 'Receipt', className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400' },
-                payment: { label: 'Payment', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' },
-                reversal: { label: 'Reversal', className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' },
-              };
-              const source = sources[entry.source];
-              if (!source) return null;
-              return (
-                <Badge variant="outline" className={source.className}>
-                  {source.label}
-                </Badge>
-              );
-            };
-            
-            return (
-              <Card key={entry.id} className={cn(isVoid && 'opacity-60')}>
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                        {entry.entryNumber && (
-                          <span className="font-mono font-medium">{entry.entryNumber}</span>
-                        )}
-                        <span>{formatDate(entry.date, locale)}</span>
-                      </div>
-                      {entry.memo && <div className="font-medium">{entry.memo}</div>}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {getStatusBadge()}
-                      {getSourceBadge()}
-                      
-                      {isDraft && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => postMutation.mutate(entry.id)}
-                            disabled={postMutation.isPending}
-                            data-testid={`button-post-journal-${entry.id}`}
-                          >
-                            <Send className="w-4 h-4 mr-2" />
-                            Post
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditEntry(entry)}
-                            data-testid={`button-edit-journal-${entry.id}`}
-                          >
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                aria-label="Delete journal entry"
-                                data-testid={`button-delete-journal-${entry.id}`}
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Draft Entry?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete this draft entry. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => deleteMutation.mutate(entry.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
-                      )}
-                      
-                      {isPosted && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              data-testid={`button-reverse-journal-${entry.id}`}
-                            >
-                              <RotateCcw className="w-4 h-4 mr-2" />
-                              Reverse
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Reverse Journal Entry?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will create a new reversing entry that offsets this posted entry, 
-                                and mark the original as void. Posted entries cannot be edited or deleted.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => reverseMutation.mutate({ id: entry.id, reason: 'User requested reversal' })}
-                              >
-                                Reverse Entry
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {entry.lines?.map((line: any, idx: number) => (
-                      <div key={idx} className="grid grid-cols-12 gap-4 text-sm py-2 border-b last:border-0">
-                        <div className="col-span-6 flex items-center gap-2">
-                          <span className="font-mono text-xs text-muted-foreground">{line.account?.code}</span>
-                          <span>{line.account?.nameEn}</span>
-                        </div>
-                        <div className="col-span-3 text-right font-mono">
-                          {line.debit > 0 ? formatNumber(line.debit, locale) : '-'}
-                        </div>
-                        <div className="col-span-3 text-right font-mono">
-                          {line.credit > 0 ? formatNumber(line.credit, locale) : '-'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <BookMarked className="w-16 h-16 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium mb-2">No journal entries yet</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Create your first double-entry journal
-            </p>
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t.newEntry}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      <DataTable<Record<string, unknown>>
+        data={entriesTableData}
+        columns={journalColumns}
+        loading={isLoading}
+        searchable
+        searchPlaceholder="Search by memo or entry number..."
+        emptyTitle="No journal entries yet"
+        emptyDescription="Create your first double-entry journal"
+        emptyIcon={BookMarked}
+      />
     </div>
   );
 }

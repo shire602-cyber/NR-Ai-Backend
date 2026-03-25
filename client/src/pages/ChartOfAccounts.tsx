@@ -1,21 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DataTable, type Column } from '@/components/shared/DataTable';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { formatCurrency } from '@/lib/format';
 import type { Account } from '@shared/schema';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  Search, 
+import {
   Plus,
   Wallet,
   CreditCard,
@@ -23,7 +17,6 @@ import {
   TrendingUp,
   Receipt,
   BookOpen,
-  ArrowRight
 } from 'lucide-react';
 
 interface AccountWithBalance {
@@ -83,58 +76,66 @@ export default function ChartOfAccounts() {
   const { t, locale } = useTranslation();
   const [, navigate] = useLocation();
   const { companyId: selectedCompanyId } = useDefaultCompany();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(ACCOUNT_TYPE_ORDER));
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const { data: accountsWithBalances, isLoading } = useQuery<AccountWithBalance[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'accounts-with-balances'],
     enabled: !!selectedCompanyId,
   });
 
-  const groupedAccounts = useMemo(() => {
-    if (!accountsWithBalances) return {};
-    
-    const filtered = accountsWithBalances.filter(item => {
-      if (!searchQuery) return true;
-      const query = searchQuery.toLowerCase();
-      return (
-        item.account.nameEn.toLowerCase().includes(query) ||
-        item.account.nameAr?.toLowerCase().includes(query)
-      );
-    });
+  // Flatten data for DataTable and apply type filter
+  const tableData = useMemo(() => {
+    if (!accountsWithBalances) return [];
+    const filtered = typeFilter === 'all'
+      ? accountsWithBalances
+      : accountsWithBalances.filter(item => item.account.type === typeFilter);
 
-    const grouped: Record<string, AccountWithBalance[]> = {};
-    ACCOUNT_TYPE_ORDER.forEach(type => {
-      const accounts = filtered.filter(item => item.account.type === type);
-      if (accounts.length > 0) {
-        grouped[type] = accounts;
-      }
-    });
-    
-    return grouped;
-  }, [accountsWithBalances, searchQuery]);
+    return filtered.map(item => ({
+      id: item.account.id,
+      code: (item.account as any).code || '',
+      nameEn: item.account.nameEn,
+      nameAr: item.account.nameAr || '',
+      type: item.account.type,
+      subType: (item.account as any).subType || '',
+      balance: item.balance,
+      isActive: item.account.isActive,
+    }));
+  }, [accountsWithBalances, typeFilter]);
 
+  // Totals for summary card
   const typeTotals = useMemo(() => {
+    if (!accountsWithBalances) return {} as Record<string, number>;
     const totals: Record<string, number> = {};
-    Object.entries(groupedAccounts).forEach(([type, accounts]) => {
-      totals[type] = accounts.reduce((sum, item) => sum + item.balance, 0);
+    ACCOUNT_TYPE_ORDER.forEach(type => {
+      totals[type] = accountsWithBalances
+        .filter(item => item.account.type === type)
+        .reduce((sum, item) => sum + item.balance, 0);
     });
     return totals;
-  }, [groupedAccounts]);
+  }, [accountsWithBalances]);
 
-  const toggleType = (type: string) => {
-    const newExpanded = new Set(expandedTypes);
-    if (newExpanded.has(type)) {
-      newExpanded.delete(type);
-    } else {
-      newExpanded.add(type);
-    }
-    setExpandedTypes(newExpanded);
-  };
-
-  const handleAccountClick = (accountId: string) => {
-    navigate(`/accounts/${accountId}/ledger`);
-  };
+  const coaColumns: Column<Record<string, unknown>>[] = useMemo(() => [
+    { key: 'code', label: 'Code', sortable: true },
+    { key: 'nameEn', label: 'Name (English)', sortable: true },
+    { key: 'nameAr', label: 'Name (Arabic)', sortable: true },
+    {
+      key: 'type',
+      label: 'Type',
+      sortable: true,
+      render: (row: Record<string, unknown>) => {
+        const type = String(row.type || '');
+        const config = ACCOUNT_TYPE_CONFIG[type];
+        if (!config) return type;
+        return (
+          <span className={config.colorClass}>
+            {locale === 'ar' ? config.labelAr : config.label}
+          </span>
+        );
+      },
+    },
+    { key: 'subType', label: 'Sub-Type', sortable: true },
+    { key: 'balance', label: 'Balance', type: 'financial' as const, sortable: true },
+  ], [locale]);
 
   if (!selectedCompanyId) {
     return (
@@ -159,7 +160,7 @@ export default function ChartOfAccounts() {
             {t.chartOfAccountsDescription}
           </p>
         </div>
-        <Button 
+        <Button
           size="default"
           data-testid="button-add-account"
           onClick={() => navigate('/journal')}
@@ -169,166 +170,35 @@ export default function ChartOfAccounts() {
         </Button>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder={t.searchAccounts}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-          data-testid="input-search-accounts"
-        />
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Card key={i}>
-              <CardHeader className="py-4">
-                <Skeleton className="h-6 w-32" />
-              </CardHeader>
-              <CardContent className="py-2">
-                <div className="space-y-2">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : Object.keys(groupedAccounts).length === 0 ? (
-        <Card className="p-8 text-center">
-          <div className="flex flex-col items-center">
-            <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">
-              {searchQuery 
-                ? t.noResultsFound
-                : t.noAccountsYet
-              }
-            </h3>
-            <p className="text-muted-foreground">
-              {searchQuery
-                ? t.tryDifferentKeywords
-                : t.addAccountsToStart
-              }
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          <AnimatePresence>
-            {ACCOUNT_TYPE_ORDER.map((type) => {
-              const accounts = groupedAccounts[type];
-              if (!accounts || accounts.length === 0) return null;
-
-              const config = ACCOUNT_TYPE_CONFIG[type];
-              const Icon = config.icon;
-              const isExpanded = expandedTypes.has(type);
-
-              return (
-                <motion.div
-                  key={type}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Card className="overflow-hidden">
-                    <Collapsible open={isExpanded} onOpenChange={() => toggleType(type)}>
-                      <CollapsibleTrigger asChild>
-                        <CardHeader 
-                          className={`py-4 cursor-pointer hover-elevate ${config.bgClass}`}
-                          data-testid={`button-toggle-${type}`}
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${config.bgClass}`}>
-                                <Icon className={`h-5 w-5 ${config.colorClass}`} />
-                              </div>
-                              <div>
-                                <CardTitle className="text-lg font-semibold">
-                                  {locale === 'ar' ? config.labelAr : config.label}
-                                </CardTitle>
-                                <CardDescription>
-                                  {accounts.length} {t.accountsCount}
-                                </CardDescription>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <p className="text-sm text-muted-foreground">
-                                  {t.total}
-                                </p>
-                                <p className={`text-lg font-mono font-semibold ${
-                                  typeTotals[type] >= 0 ? 'text-foreground' : 'text-destructive'
-                                }`}>
-                                  {formatCurrency(Math.abs(typeTotals[type]))}
-                                </p>
-                              </div>
-                              {isExpanded ? (
-                                <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                              ) : (
-                                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                              )}
-                            </div>
-                          </div>
-                        </CardHeader>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <CardContent className="p-0">
-                          <div className="divide-y">
-                            {accounts.map((item, index) => (
-                              <motion.div
-                                key={item.account.id}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: index * 0.05 }}
-                                className="flex items-center justify-between p-4 hover-elevate cursor-pointer group"
-                                onClick={() => handleAccountClick(item.account.id)}
-                                data-testid={`row-account-${item.account.id}`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <div className="min-w-0">
-                                    <p className="font-medium truncate">
-                                      {locale === 'ar' && item.account.nameAr 
-                                        ? item.account.nameAr 
-                                        : item.account.nameEn}
-                                    </p>
-                                  </div>
-                                  {!item.account.isActive && (
-                                    <Badge variant="secondary" className="shrink-0">
-                                      {t.inactive}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <div className="text-right">
-                                    <p className={`font-mono font-medium ${
-                                      item.balance >= 0 ? 'text-foreground' : 'text-destructive'
-                                    }`}>
-                                      {formatCurrency(Math.abs(item.balance))}
-                                    </p>
-                                    <div className="flex gap-2 text-xs text-muted-foreground">
-                                      <span>Dr: {formatCurrency(item.debitTotal)}</span>
-                                      <span>Cr: {formatCurrency(item.creditTotal)}</span>
-                                    </div>
-                                  </div>
-                                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
-      )}
+      <DataTable<Record<string, unknown>>
+        data={tableData}
+        columns={coaColumns}
+        loading={isLoading}
+        searchable
+        searchPlaceholder={t.searchAccounts}
+        onRowClick={(row) => navigate(`/accounts/${row.id}/ledger`)}
+        emptyTitle={t.noAccountsYet || 'No accounts yet'}
+        emptyDescription={t.addAccountsToStart || 'Add accounts to get started'}
+        emptyIcon={BookOpen}
+        actions={
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-40" data-testid="select-type-filter">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {ACCOUNT_TYPE_ORDER.map((type) => {
+                const config = ACCOUNT_TYPE_CONFIG[type];
+                return (
+                  <SelectItem key={type} value={type}>
+                    {locale === 'ar' ? config.labelAr : config.label}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       <Card className="mt-6">
         <CardHeader className="py-4">
@@ -344,8 +214,8 @@ export default function ChartOfAccounts() {
               const total = typeTotals[type] || 0;
 
               return (
-                <div 
-                  key={type} 
+                <div
+                  key={type}
                   className={`p-4 rounded-lg ${config.bgClass}`}
                   data-testid={`summary-${type}`}
                 >

@@ -416,6 +416,7 @@ export default function Inventory() {
                                   size="sm"
                                   onClick={() => handleOpenEditDialog(product)}
                                   title="Edit"
+                                  aria-label="Edit product"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -424,6 +425,7 @@ export default function Inventory() {
                                   size="sm"
                                   onClick={() => handleOpenAddStockDialog(product)}
                                   title="Add Stock"
+                                  aria-label="Add stock"
                                 >
                                   <PackagePlus className="w-4 h-4" />
                                 </Button>
@@ -432,6 +434,7 @@ export default function Inventory() {
                                   size="sm"
                                   onClick={() => deleteProductMutation.mutate(product.id)}
                                   title="Delete"
+                                  aria-label="Delete product"
                                   className="text-destructive hover:text-destructive"
                                 >
                                   <Trash2 className="w-4 h-4" />

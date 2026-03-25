@@ -721,9 +721,10 @@ export default function Admin() {
                         </TableCell>
                         <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Edit user"
                             data-testid={`button-view-user-${user.id}`}
                             onClick={() => setEditingUser(user)}
                           >
@@ -818,9 +819,10 @@ export default function Admin() {
                         <TableCell>{company.baseCurrency}</TableCell>
                         <TableCell>{new Date(company.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Edit company"
                             data-testid={`button-view-company-${company.id}`}
                             onClick={() => setEditingCompany(company)}
                           >

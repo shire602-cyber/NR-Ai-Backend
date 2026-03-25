@@ -683,6 +683,7 @@ export default function VATFiling() {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleViewReturn(vatReturn)}
+                            aria-label="View VAT return"
                             data-testid={`button-view-${vatReturn.id}`}
                           >
                             <Eye className="w-4 h-4" />
@@ -702,6 +703,7 @@ export default function VATFiling() {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleExportPDF(vatReturn)}
+                            aria-label="Download PDF"
                             data-testid={`button-export-${vatReturn.id}`}
                           >
                             <Download className="w-4 h-4" />

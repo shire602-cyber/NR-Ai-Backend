@@ -17,6 +17,7 @@ import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { 
   UserPlus, 
   Users, 
@@ -89,6 +90,7 @@ export default function TeamManagement() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('accountant');
   const [newRole, setNewRole] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const { data: teamMembers, isLoading: isLoadingTeam } = useQuery<TeamMember[]>({
     queryKey: ['/api/companies', companyId, 'team'],
@@ -217,11 +219,11 @@ export default function TeamManagement() {
       });
       return;
     }
-    
-    if (window.confirm(`Are you sure you want to remove ${member.user.name} from the team?`)) {
-      removeMemberMutation.mutate(member.id);
-    }
+
+    setConfirmDelete(member.id);
   };
+
+  const memberToDelete = teamMembers?.find(m => m.id === confirmDelete);
 
   if (isLoadingCompany) {
     return (
@@ -359,6 +361,7 @@ export default function TeamManagement() {
                         variant="ghost"
                         onClick={() => handleEditMember(member)}
                         disabled={member.role === 'owner'}
+                        aria-label="Edit member role"
                         data-testid={`button-edit-${member.id}`}
                       >
                         <Edit className="w-4 h-4" />
@@ -369,6 +372,7 @@ export default function TeamManagement() {
                         onClick={() => handleRemoveMember(member)}
                         disabled={member.role === 'owner'}
                         className="text-destructive hover:text-destructive"
+                        aria-label="Remove team member"
                         data-testid={`button-remove-${member.id}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -542,6 +546,28 @@ export default function TeamManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}
+        title={locale === 'ar' ? 'إزالة العضو' : 'Remove Team Member'}
+        description={
+          memberToDelete
+            ? (locale === 'ar'
+              ? `هل أنت متأكد من إزالة ${memberToDelete.user.name} من الفريق؟`
+              : `Are you sure you want to remove ${memberToDelete.user.name} from the team? This action cannot be undone.`)
+            : ''
+        }
+        confirmLabel={locale === 'ar' ? 'إزالة' : 'Remove'}
+        cancelLabel={locale === 'ar' ? 'إلغاء' : 'Cancel'}
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmDelete) {
+            removeMemberMutation.mutate(confirmDelete);
+            setConfirmDelete(null);
+          }
+        }}
+      />
     </div>
   );
 }

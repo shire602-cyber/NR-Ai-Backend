@@ -2,8 +2,6 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO, subMonths, startOfMonth, endOfMonth, subQuarters, startOfQuarter, endOfQuarter, subYears, startOfYear, endOfYear, differenceInDays } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { useTranslation } from '@/lib/i18n';
-import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { formatCurrency } from '@/lib/format';
 import { 
@@ -31,9 +28,8 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { 
-  Download, 
-  TrendingUp, 
+import {
+  TrendingUp,
   TrendingDown,
   Calendar,
   Clock,
@@ -46,7 +42,6 @@ import {
   RefreshCw,
   ArrowRightLeft
 } from 'lucide-react';
-import jsPDF from 'jspdf';
 
 interface CashFlowData {
   period: string;
@@ -84,7 +79,6 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 export default function AdvancedReports() {
   const { t, locale } = useTranslation();
-  const { toast } = useToast();
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
   const [selectedPeriod, setSelectedPeriod] = useState('quarter');
   const [comparisonPeriod, setComparisonPeriod] = useState('previous');
@@ -175,24 +169,6 @@ export default function AdvancedReports() {
       { name: '>90', receivables: agingData?.filter(a => a.type === 'receivable').reduce((s, a) => s + a.over90, 0) || 0, payables: agingData?.filter(a => a.type === 'payable').reduce((s, a) => s + a.over90, 0) || 0 },
     ];
   }, [agingData, agingSummary, locale]);
-
-  const handleExportPDF = (reportType: string) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    doc.setFontSize(20);
-    doc.text(`${reportType} Report`, pageWidth / 2, 20, { align: 'center' });
-    doc.setFontSize(12);
-    doc.text(`Period: ${format(periodDates.current.start, 'MMM yyyy')} - ${format(periodDates.current.end, 'MMM yyyy')}`, 14, 35);
-    doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}`, 14, 42);
-    
-    doc.save(`${reportType.toLowerCase().replace(' ', '-')}-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-    
-    toast({
-      title: 'Report Exported',
-      description: `${reportType} report has been downloaded.`,
-    });
-  };
 
   if (isLoadingCompany) {
     return (
@@ -302,17 +278,11 @@ export default function AdvancedReports() {
           </div>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>{locale === 'ar' ? 'تحليل التدفق النقدي' : 'Cash Flow Analysis'}</CardTitle>
-                <CardDescription>
-                  {locale === 'ar' ? 'التدفقات النقدية الداخلة والخارجة' : 'Inflows and outflows over time'}
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => handleExportPDF('Cash Flow')}>
-                <Download className="w-4 h-4 mr-2" />
-                {locale === 'ar' ? 'تصدير' : 'Export'}
-              </Button>
+            <CardHeader>
+              <CardTitle>{locale === 'ar' ? 'تحليل التدفق النقدي' : 'Cash Flow Analysis'}</CardTitle>
+              <CardDescription>
+                {locale === 'ar' ? 'التدفقات النقدية الداخلة والخارجة' : 'Inflows and outflows over time'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingCashFlow ? (
@@ -414,17 +384,11 @@ export default function AdvancedReports() {
           </div>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>{locale === 'ar' ? 'تقادم الأرصدة' : 'Aging Analysis'}</CardTitle>
-                <CardDescription>
-                  {locale === 'ar' ? 'توزيع الأرصدة حسب العمر' : 'Distribution of balances by age'}
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => handleExportPDF('Aging')}>
-                <Download className="w-4 h-4 mr-2" />
-                {locale === 'ar' ? 'تصدير' : 'Export'}
-              </Button>
+            <CardHeader>
+              <CardTitle>{locale === 'ar' ? 'تقادم الأرصدة' : 'Aging Analysis'}</CardTitle>
+              <CardDescription>
+                {locale === 'ar' ? 'توزيع الأرصدة حسب العمر' : 'Distribution of balances by age'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingAging ? (
@@ -502,17 +466,11 @@ export default function AdvancedReports() {
 
         <TabsContent value="comparison" className="space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>{locale === 'ar' ? 'مقارنة الفترات' : 'Period Comparison'}</CardTitle>
-                <CardDescription>
-                  {format(periodDates.current.start, 'MMM yyyy')} vs {format(periodDates.previous.start, 'MMM yyyy')}
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => handleExportPDF('Comparison')}>
-                <Download className="w-4 h-4 mr-2" />
-                {locale === 'ar' ? 'تصدير' : 'Export'}
-              </Button>
+            <CardHeader>
+              <CardTitle>{locale === 'ar' ? 'مقارنة الفترات' : 'Period Comparison'}</CardTitle>
+              <CardDescription>
+                {format(periodDates.current.start, 'MMM yyyy')} vs {format(periodDates.previous.start, 'MMM yyyy')}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingComparison ? (

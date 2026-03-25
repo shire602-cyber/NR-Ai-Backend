@@ -2,24 +2,20 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'wouter';
-import { 
-  Sparkles, 
-  Zap, 
-  Shield, 
-  BarChart3, 
-  Receipt, 
+import {
+  Sparkles,
+  Zap,
+  Shield,
+  BarChart3,
   FileText,
   CheckCircle2,
   ArrowRight,
   Globe,
-  Brain,
-  Clock,
   Star,
   Building2,
   Check,
   Briefcase,
   TrendingUp,
-  ChevronRight,
   Lock,
   Bot,
   Award,
@@ -45,8 +41,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
-import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
-import { ScrollReveal, StaggerContainer, StaggerItem, Floating, hoverScale, hoverLift } from '@/lib/animations';
+import { motion } from 'framer-motion';
 
 export default function Landing() {
   const { locale, setLocale } = useI18n();
@@ -268,57 +263,13 @@ export default function Landing() {
     },
   ];
 
-  const logos = [
-    'Emirates NBD', 'ADNOC', 'Etisalat', 'Dubai Holding', 'Majid Al Futtaim', 'Emaar'
-  ];
-
   return (
     <div className={`min-h-screen bg-background ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* Premium Animated Background */}
+      {/* Subtle Background */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <motion.div 
-          className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[128px]"
-          animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.3, 0.5, 0.3],
-            x: [0, 50, 0],
-            y: [0, 30, 0],
-          }}
-          transition={{
-            duration: 8,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-        <motion.div 
-          className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-violet-500/15 rounded-full blur-[128px]"
-          animate={{
-            scale: [1, 1.3, 1],
-            opacity: [0.2, 0.4, 0.2],
-            x: [0, -40, 0],
-            y: [0, -50, 0],
-          }}
-          transition={{
-            duration: 10,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 1
-          }}
-        />
-        <motion.div 
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-cyan-500/10 rounded-full blur-[128px]"
-          animate={{
-            scale: [1, 1.1, 1],
-            opacity: [0.1, 0.3, 0.1],
-            rotate: [0, 180, 360],
-          }}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-        />
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[128px]" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-violet-500/8 rounded-full blur-[128px]" />
       </div>
 
       {/* NAVBAR */}
@@ -330,47 +281,20 @@ export default function Landing() {
       >
         <div className="container max-w-7xl mx-auto px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group" data-testid="link-logo">
-            <motion.div 
-              className="relative"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <motion.div 
-                className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-violet-600 flex items-center justify-center shadow-lg shadow-primary/25"
-                whileHover={{ 
-                  boxShadow: "0 10px 40px -10px hsl(var(--primary) / 0.5)",
-                  rotate: [0, -5, 5, -5, 0]
-                }}
-                transition={{ duration: 0.5 }}
-              >
+            <div className="relative">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-violet-600 flex items-center justify-center shadow-lg shadow-primary/25">
                 <Briefcase className="w-5 h-5 text-white" />
-              </motion.div>
-              <motion.div 
-                className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [1, 0.7, 1],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              />
-            </motion.div>
-            <motion.div 
-              className="flex flex-col"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              <span className="font-bold text-xl leading-none tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+              </div>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-xl leading-none tracking-tight">
                 Muhasib.ai
               </span>
               <span className="text-[10px] text-muted-foreground font-medium tracking-wider uppercase">
                 {locale === 'en' ? 'by NR Accounting Services' : 'من NR Accounting Services'}
               </span>
-            </motion.div>
+            </div>
           </Link>
           
           {/* Desktop Navigation */}
@@ -387,62 +311,39 @@ export default function Landing() {
           </nav>
 
           {/* Desktop Actions */}
-          <motion.div 
-            className="hidden lg:flex items-center gap-4"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button 
-              variant="ghost" 
+          <div className="hidden lg:flex items-center gap-4">
+            <Button
+              variant="ghost"
               size="sm"
               onClick={toggleLanguage}
-                className="font-semibold transition-all duration-200"
+              className="font-semibold transition-all duration-200"
               data-testid="button-language-toggle"
-              >
-                <motion.div
-                  animate={{ rotate: [0, 360] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
             >
               <Globe className="w-4 h-4 mr-2" />
-                </motion.div>
               {t.nav.languageToggle}
             </Button>
-            </motion.div>
             <Link href="/login">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button variant="ghost" size="sm" data-testid="button-login" className="transition-all duration-200">
+              <Button variant="ghost" size="sm" data-testid="button-login" className="transition-all duration-200">
                 {t.nav.login}
               </Button>
-              </motion.div>
             </Link>
             <Link href="/register">
-              <motion.div 
-                whileHover={{ scale: 1.05, boxShadow: "0 10px 40px -10px hsl(var(--primary) / 0.4)" }}
-                whileTap={{ scale: 0.95 }}
+              <Button
+                size="sm"
+                className="bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-lg shadow-primary/25 transition-all duration-200"
+                data-testid="button-get-started"
               >
-                <Button 
-                  size="sm" 
-                  className="bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-lg shadow-primary/25 transition-all duration-200" 
-                  data-testid="button-get-started"
-                >
                 {t.nav.getStarted}
-                  <motion.div
-                    animate={{ x: [0, 4, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  >
                 <ArrowRight className="w-4 h-4 ml-2" />
-                  </motion.div>
               </Button>
-              </motion.div>
             </Link>
-          </motion.div>
+          </div>
 
           {/* Mobile Menu Button */}
           <button
             className="lg:hidden p-2 hover-elevate active-elevate-2 rounded-lg"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             data-testid="button-mobile-menu"
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -489,16 +390,16 @@ export default function Landing() {
         <div className="container max-w-7xl mx-auto px-6 lg:px-8 relative">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
             {/* Text Content */}
-            <ScrollReveal direction="up" delay={0.2}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
               <div className="max-w-2xl">
               {/* Trust Badge */}
-                <motion.div 
+                <div
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-violet-500/10 border border-primary/20 mb-8"
                   data-testid="badge-trust"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5 }}
-                  whileHover={{ scale: 1.05 }}
                 >
                 <div className="flex -space-x-2">
                   {[1, 2, 3, 4].map((i) => (
@@ -513,96 +414,51 @@ export default function Landing() {
                     <Star key={i} className="w-3 h-3 fill-yellow-500 text-yellow-500" />
                   ))}
                 </div>
-              </motion.div>
-              
-              <motion.h1 
-                className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-4 leading-[1.1]" 
+              </div>
+
+              <h1
+                className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-4 leading-[1.1]"
                 data-testid="hero-headline"
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
               >
-                <motion.span 
-                  className="bg-gradient-to-r from-foreground via-foreground to-foreground/50 bg-clip-text text-transparent"
-                  animate={{
-                    backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'],
-                  }}
-                  transition={{
-                    duration: 5,
-                    repeat: Infinity,
-                    ease: "linear"
-                  }}
-                  style={{ backgroundSize: '200% 200%' }}
-                >
+                <span className="text-foreground">
                   {t.hero.headline}
-                </motion.span>
-              </motion.h1>
-              <motion.p 
-                className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-6 bg-gradient-to-r from-primary via-violet-500 to-cyan-500 bg-clip-text text-transparent animate-gradient" 
+                </span>
+              </h1>
+              <p
+                className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-6 bg-gradient-to-r from-primary via-violet-500 to-cyan-500 bg-clip-text text-transparent"
                 data-testid="hero-headline-accent"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
               >
                 {t.hero.headlineAccent}
-              </motion.p>
-              
-              <motion.p 
-                className="text-lg lg:text-xl text-muted-foreground leading-relaxed mb-10 max-w-xl" 
+              </p>
+
+              <p
+                className="text-lg lg:text-xl text-muted-foreground leading-relaxed mb-10 max-w-xl"
                 data-testid="hero-subheadline"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.5 }}
               >
                 {t.hero.subheadline}
-              </motion.p>
+              </p>
 
-              <motion.div 
-                className="flex flex-col sm:flex-row gap-4 mb-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.6 }}
-              >
+              <div className="flex flex-col sm:flex-row gap-4 mb-8">
                 <Link href="/register">
-                  <motion.div
-                    whileHover={{ scale: 1.05, boxShadow: "0 20px 60px -10px hsl(var(--primary) / 0.5)" }}
-                    whileTap={{ scale: 0.95 }}
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto px-8 py-7 text-base font-semibold bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-2xl shadow-primary/30 transition-all hover:scale-105"
+                    data-testid="hero-button-start-trial"
                   >
-                    <Button 
-                      size="lg" 
-                      className="w-full sm:w-auto px-8 py-7 text-base font-semibold bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-2xl shadow-primary/30 transition-all" 
-                      data-testid="hero-button-start-trial"
-                    >
                     {t.hero.ctaPrimary}
-                      <motion.div
-                        animate={{ x: [0, 5, 0] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                      >
                     <ArrowRight className="w-5 h-5 ml-2" />
-                      </motion.div>
                   </Button>
-                  </motion.div>
                 </Link>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto px-8 py-7 text-base font-semibold border-2 hover:bg-white/5 transition-all"
+                  data-testid="hero-button-watch-demo"
                 >
-                  <Button 
-                    size="lg" 
-                    variant="outline" 
-                    className="w-full sm:w-auto px-8 py-7 text-base font-semibold border-2 hover:bg-white/5 transition-all" 
-                    data-testid="hero-button-watch-demo"
-                  >
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    >
                   <Play className="w-5 h-5 mr-2" />
-                    </motion.div>
                   {t.hero.ctaSecondary}
                 </Button>
-                </motion.div>
-              </motion.div>
+              </div>
 
               <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
@@ -615,31 +471,19 @@ export default function Landing() {
                 </div>
               </div>
               </div>
-            </ScrollReveal>
+            </motion.div>
 
-            {/* Hero Visual - Premium 3D Dashboard Preview */}
-            <ScrollReveal direction="right" delay={0.4}>
-              <div className="relative lg:block" data-testid="hero-visual">
-                {/* Main Dashboard Card */}
-                <Floating intensity={15} duration={4}>
-                  <div className="relative">
-                    <motion.div 
-                      className="absolute inset-0 bg-gradient-to-r from-primary/30 to-violet-500/30 rounded-3xl blur-2xl transform rotate-2"
-                      animate={{
-                        rotate: [2, 4, 2],
-                        scale: [1, 1.05, 1],
-                      }}
-                      transition={{
-                        duration: 6,
-                        repeat: Infinity,
-                        ease: "easeInOut"
-                      }}
-                    />
-                    <motion.div 
-                      className="relative rounded-2xl border border-white/20 bg-gradient-to-br from-card/90 to-card/50 backdrop-blur-xl p-6 shadow-2xl"
-                      whileHover={{ scale: 1.02, rotate: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
+            {/* Hero Visual - Dashboard Preview */}
+            <motion.div
+              className="relative lg:block"
+              data-testid="hero-visual"
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-violet-500/20 rounded-3xl blur-2xl transform rotate-2" />
+                <div className="relative rounded-2xl border border-white/20 bg-gradient-to-br from-card/90 to-card/50 backdrop-blur-xl p-6 shadow-2xl">
                   {/* Dashboard Header */}
                   <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
                     <div className="flex items-center gap-3">
@@ -647,9 +491,9 @@ export default function Landing() {
                       <div className="w-3 h-3 rounded-full bg-yellow-500" />
                       <div className="w-3 h-3 rounded-full bg-green-500" />
                     </div>
-                    <div className="text-xs text-muted-foreground font-mono">dashboard.bookkeep.ai</div>
+                    <div className="text-xs text-muted-foreground font-mono">dashboard.muhasib.ai</div>
                   </div>
-                  
+
                   {/* Stats Row */}
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     {[
@@ -701,59 +545,41 @@ export default function Landing() {
                       </div>
                     ))}
                   </div>
-                  </motion.div>
-                  </div>
-                </Floating>
-              
-              {/* Floating Elements */}
-              <Floating intensity={20} duration={3}>
-                <motion.div 
-                  className="absolute -top-6 -right-6 w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-xl shadow-green-500/30 flex items-center justify-center"
-                  whileHover={{ scale: 1.1, rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                <TrendingUp className="w-8 h-8 text-white" />
-                </motion.div>
-              </Floating>
-              <Floating intensity={15} duration={2}>
-                <motion.div 
-                  className="absolute -bottom-4 -left-4 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 shadow-xl shadow-violet-500/30 flex items-center gap-2"
-                  animate={{
-                    boxShadow: [
-                      "0 10px 40px -10px hsl(262 83% 58% / 0.3)",
-                      "0 20px 60px -10px hsl(262 83% 58% / 0.5)",
-                      "0 10px 40px -10px hsl(262 83% 58% / 0.3)",
-                    ],
-                    scale: [1, 1.05, 1],
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                >
-                  <Zap className="w-4 h-4 text-white" />
-                  <span className="text-white text-sm font-medium">99.8% Accurate</span>
-                </motion.div>
-              </Floating>
+                </div>
               </div>
-            </ScrollReveal>
+
+              {/* Accent Elements */}
+              <div className="absolute -top-6 -right-6 w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-xl shadow-green-500/30 flex items-center justify-center">
+                <TrendingUp className="w-8 h-8 text-white" />
+              </div>
+              <div className="absolute -bottom-4 -left-4 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 shadow-xl shadow-violet-500/30 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-white" />
+                <span className="text-white text-sm font-medium">99.8% Accurate</span>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* LOGOS / SOCIAL PROOF */}
-      <section className="py-12 border-y border-white/10 bg-white/[0.02]" data-testid="section-logos">
-        <div className="container max-w-7xl mx-auto px-6 lg:px-8">
-          <p className="text-center text-sm text-muted-foreground mb-8">
-            {locale === 'en' ? 'Trusted by leading UAE businesses' : 'موثوق من الشركات الإماراتية الرائدة'}
+      {/* SOCIAL PROOF */}
+      <section className="py-12 border-y border-border/50" data-testid="section-logos">
+        <div className="text-center py-12">
+          <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Trusted by businesses across the UAE
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-8 lg:gap-16 opacity-50">
-            {logos.map((logo, i) => (
-              <div key={i} className="text-lg font-bold text-muted-foreground tracking-wider">
-                {logo}
-              </div>
-            ))}
+          <div className="flex justify-center gap-12 mt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-foreground">500+</p>
+              <p className="text-sm text-muted-foreground">Businesses</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-foreground">50K+</p>
+              <p className="text-sm text-muted-foreground">Invoices Processed</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-foreground">7</p>
+              <p className="text-sm text-muted-foreground">Emirates Covered</p>
+            </div>
           </div>
         </div>
       </section>
@@ -761,47 +587,24 @@ export default function Landing() {
       {/* STATS SECTION */}
       <section className="py-20 lg:py-24" data-testid="section-stats">
         <div className="container max-w-7xl mx-auto px-6 lg:px-8">
-          <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
             {[
               { value: '50,000+', label: t.stats.invoices, icon: FileText, color: 'from-blue-500 to-cyan-500' },
               { value: '99.8%', label: t.stats.accuracy, icon: Target, color: 'from-green-500 to-emerald-500' },
               { value: '87%', label: t.stats.timeSaved, icon: Timer, color: 'from-orange-500 to-amber-500' },
               { value: '500+', label: t.stats.businesses, icon: Building2, color: 'from-violet-500 to-purple-500' },
             ].map((stat, i) => (
-              <StaggerItem key={i} data-testid={`stat-${i}`}>
-                <motion.div 
-                  className="text-center group"
-                  whileHover={hoverLift}
-              >
-                  <motion.div 
-                    className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg`}
-                    whileHover={hoverScale}
-                    animate={{
-                      boxShadow: [
-                        `0 10px 30px -10px hsl(var(--primary) / 0.2)`,
-                        `0 20px 50px -10px hsl(var(--primary) / 0.4)`,
-                        `0 10px 30px -10px hsl(var(--primary) / 0.2)`,
-                      ]
-                    }}
-                    transition={{
-                      boxShadow: { duration: 2, repeat: Infinity, ease: 'easeInOut' }
-                    }}
-                  >
+              <div key={i} className="text-center group" data-testid={`stat-${i}`}>
+                <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg`}>
                   <stat.icon className="w-7 h-7 text-white" />
-                  </motion.div>
-                  <motion.div 
-                    className="text-4xl lg:text-5xl font-bold font-mono mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.5, delay: i * 0.1 + 0.3, type: "spring" }}
-                  >
+                </div>
+                <div className="text-4xl lg:text-5xl font-bold font-mono mb-2 text-foreground">
                   {stat.value}
-                  </motion.div>
+                </div>
                 <div className="text-sm text-muted-foreground">{stat.label}</div>
-                </motion.div>
-              </StaggerItem>
+              </div>
             ))}
-          </StaggerContainer>
+          </div>
         </div>
       </section>
 
@@ -821,51 +624,24 @@ export default function Landing() {
             </p>
           </div>
 
-          <StaggerContainer className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
             {features.map((feature, index) => (
-              <StaggerItem key={index} data-testid={`feature-card-${index}`}>
-                <motion.div
-                  whileHover={hoverLift}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card className="group relative overflow-hidden p-8 border border-white/10 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.05] hover:border-white/20 transition-all duration-500">
-                    <motion.div 
-                      className={`absolute inset-0 bg-gradient-to-br ${feature.color}`}
-                      initial={{ opacity: 0 }}
-                      whileHover={{ opacity: 0.05 }}
-                      transition={{ duration: 0.5 }}
-                    />
-                    <motion.div 
-                      className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-6 shadow-lg`}
-                      whileHover={hoverScale}
-                      animate={{
-                        boxShadow: [
-                          `0 10px 30px -10px hsl(var(--primary) / 0.2)`,
-                          `0 20px 50px -10px hsl(var(--primary) / 0.4)`,
-                          `0 10px 30px -10px hsl(var(--primary) / 0.2)`,
-                        ]
-                      }}
-                      transition={{
-                        boxShadow: { duration: 2, repeat: Infinity, ease: 'easeInOut' }
-                      }}
-                    >
+              <Card
+                key={index}
+                className="group relative overflow-hidden p-8 border border-white/10 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.05] hover:border-white/20 hover:-translate-y-1 transition-all duration-300"
+                data-testid={`feature-card-${index}`}
+              >
+                <div className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-6 shadow-lg`}>
                   <feature.icon className="w-7 h-7 text-white" />
-                    </motion.div>
+                </div>
                 <h3 className="text-xl font-semibold mb-3 group-hover:text-primary transition-colors">{feature.title}</h3>
                 <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-                    <motion.div 
-                      className="absolute bottom-6 right-6"
-                      initial={{ opacity: 0, scale: 0 }}
-                      whileHover={{ opacity: 1, scale: 1, rotate: 45 }}
-                      transition={{ duration: 0.3 }}
-                    >
+                <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                   <ArrowUpRight className="w-5 h-5 text-primary" />
-                    </motion.div>
+                </div>
               </Card>
-                </motion.div>
-              </StaggerItem>
             ))}
-          </StaggerContainer>
+          </div>
         </div>
       </section>
 
