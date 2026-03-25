@@ -107,24 +107,33 @@ export function registerFixedAssetRoutes(app: Express) {
       location, serialNumber, notes, status
     } = req.body;
 
+    // Build SET clause dynamically to allow setting nullable fields to null
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (assetName !== undefined) { setClauses.push(`asset_name = $${paramIndex++}`); values.push(assetName); }
+    if (assetNameAr !== undefined) { setClauses.push(`asset_name_ar = $${paramIndex++}`); values.push(assetNameAr); }
+    if (assetNumber !== undefined) { setClauses.push(`asset_number = $${paramIndex++}`); values.push(assetNumber); }
+    if (category !== undefined) { setClauses.push(`category = $${paramIndex++}`); values.push(category); }
+    if (purchaseDate !== undefined) { setClauses.push(`purchase_date = $${paramIndex++}`); values.push(purchaseDate); }
+    if (purchaseCost !== undefined) { setClauses.push(`purchase_cost = $${paramIndex++}`); values.push(purchaseCost); }
+    if (salvageValue !== undefined) { setClauses.push(`salvage_value = $${paramIndex++}`); values.push(salvageValue); }
+    if (usefulLifeYears !== undefined) { setClauses.push(`useful_life_years = $${paramIndex++}`); values.push(usefulLifeYears); }
+    if (depreciationMethod !== undefined) { setClauses.push(`depreciation_method = $${paramIndex++}`); values.push(depreciationMethod); }
+    if (location !== undefined) { setClauses.push(`location = $${paramIndex++}`); values.push(location); }
+    if (serialNumber !== undefined) { setClauses.push(`serial_number = $${paramIndex++}`); values.push(serialNumber); }
+    if (notes !== undefined) { setClauses.push(`notes = $${paramIndex++}`); values.push(notes); }
+    if (status !== undefined) { setClauses.push(`status = $${paramIndex++}`); values.push(status); }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    values.push(id);
     const result = await pool.query(
-      `UPDATE fixed_assets SET
-        asset_name = COALESCE($1, asset_name),
-        asset_name_ar = COALESCE($2, asset_name_ar),
-        asset_number = COALESCE($3, asset_number),
-        category = COALESCE($4, category),
-        purchase_date = COALESCE($5, purchase_date),
-        purchase_cost = COALESCE($6, purchase_cost),
-        salvage_value = COALESCE($7, salvage_value),
-        useful_life_years = COALESCE($8, useful_life_years),
-        depreciation_method = COALESCE($9, depreciation_method),
-        location = COALESCE($10, location),
-        serial_number = COALESCE($11, serial_number),
-        notes = COALESCE($12, notes),
-        status = COALESCE($13, status)
-       WHERE id = $14
-       RETURNING *`,
-      [assetName, assetNameAr, assetNumber, category, purchaseDate, purchaseCost, salvageValue, usefulLifeYears, depreciationMethod, location, serialNumber, notes, status, id]
+      `UPDATE fixed_assets SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
     );
 
     // Recalculate NBV after update

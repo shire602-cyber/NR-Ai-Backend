@@ -39,9 +39,10 @@ export function registerStripeRoutes(app: Express) {
       }
 
       // Build the redirect URI from the request origin
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-      const host = req.headers['x-forwarded-host'] || req.get('host');
-      const redirectUri = `${protocol}://${host}/api/integrations/stripe/callback`;
+      // Handle comma-separated values from multiple proxies
+      const proto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim();
+      const host = String(req.headers['x-forwarded-host'] || req.get('host')).split(',')[0].trim();
+      const redirectUri = `${proto}://${host}/api/integrations/stripe/callback`;
 
       const connectUrl = stripeService.getConnectUrl(companyId, redirectUri);
       res.json({ url: connectUrl });
@@ -361,15 +362,12 @@ export function registerStripeRoutes(app: Express) {
       try {
         switch (event.type) {
           case 'charge.succeeded':
-          case 'charge.failed':
-          case 'charge.refunded': {
+          case 'charge.failed': {
             const charge = event.data.object;
             await upsertTransactionFromWebhook(companyId, integration.id, {
               externalId: charge.id,
-              type: charge.refunded ? 'refund' : 'payment',
-              amount: charge.refunded
-                ? -(charge.amount_refunded / 100)
-                : charge.amount / 100,
+              type: 'payment',
+              amount: charge.amount / 100,
               currency: charge.currency.toUpperCase(),
               description:
                 charge.description ||
@@ -382,6 +380,31 @@ export function registerStripeRoutes(app: Express) {
               metadata: {
                 customerId: charge.customer,
                 receiptUrl: charge.receipt_url,
+              },
+            });
+            break;
+          }
+
+          case 'charge.refunded': {
+            // Create a SEPARATE refund transaction instead of overwriting the original charge
+            const charge = event.data.object;
+            const refundExternalId = `${charge.id}_refund_${charge.amount_refunded}`;
+            await upsertTransactionFromWebhook(companyId, integration.id, {
+              externalId: refundExternalId,
+              type: 'refund',
+              amount: -(charge.amount_refunded / 100),
+              currency: charge.currency.toUpperCase(),
+              description:
+                `Refund for: ${charge.description || `Payment from ${charge.billing_details?.name || 'customer'}`}`,
+              date: new Date().toISOString(),
+              status: 'succeeded',
+              fees: 0,
+              customerName: charge.billing_details?.name || null,
+              customerEmail: charge.billing_details?.email || null,
+              metadata: {
+                originalChargeId: charge.id,
+                customerId: charge.customer,
+                amountRefunded: charge.amount_refunded / 100,
               },
             });
             break;

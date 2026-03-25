@@ -1,6 +1,6 @@
 import { type Express, type Request, type Response } from 'express';
 import { storage } from '../storage';
-import { db } from '../db';
+import { db, pool } from '../db';
 import { eq } from 'drizzle-orm';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -80,9 +80,14 @@ export function registerCreditNoteRoutes(app: Express) {
     const total = subtotal + vatAmount;
     const noteDate = typeof date === 'string' ? new Date(date) : date;
 
-    // Generate credit note number
-    const existing = await storage.getCreditNotesByCompanyId(companyId);
-    const number = noteData.number || `CN-${String(existing.length + 1).padStart(4, '0')}`;
+    // Generate credit note number using MAX to avoid collision after deletion
+    const { rows } = await pool.query(
+      `SELECT MAX(CAST(SUBSTRING(number FROM 4) AS INTEGER)) as max_num
+       FROM credit_notes WHERE company_id = $1 AND number LIKE 'CN-%'`,
+      [companyId]
+    );
+    const nextNum = (rows[0]?.max_num || 0) + 1;
+    const number = noteData.number || `CN-${String(nextNum).padStart(4, '0')}`;
 
     const creditNote = await (db as any).transaction(async (tx: any) => {
       // Create credit note

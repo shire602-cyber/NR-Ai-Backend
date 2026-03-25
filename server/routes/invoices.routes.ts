@@ -246,6 +246,7 @@ export function registerInvoiceRoutes(app: Express) {
     // COGS: Create journal entry for cost of goods sold (separate transaction)
     // Only for invoice lines that reference products
     // =========================================
+    let cogsWarning: string | undefined;
     try {
       // Filter lines that have a productId
       const productLines = lines.filter((line: any) => line.productId);
@@ -346,10 +347,11 @@ export function registerInvoiceRoutes(app: Express) {
       }
     } catch (cogsError: any) {
       // COGS is supplementary — if it fails, the invoice is still valid
+      cogsWarning = 'Invoice created but COGS journal entry failed. Please create it manually.';
       log.error({ invoiceId: invoice.id, error: cogsError.message }, 'Failed to create COGS journal entry (invoice still valid)');
     }
 
-    res.json(invoice);
+    res.json({ ...invoice, ...(cogsWarning ? { warning: cogsWarning } : {}) });
   }));
 
   // Post invoice journal entries

@@ -33,7 +33,13 @@ export function AdminUsers({
 }: AdminUsersProps) {
   const { toast } = useToast();
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isAdminChecked, setIsAdminChecked] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+
+  const openEditUser = (user: User) => {
+    setEditingUser(user);
+    setIsAdminChecked(user.isAdmin || false);
+  };
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -143,7 +149,7 @@ export function AdminUsers({
                         size="icon"
                         aria-label="Edit user"
                         data-testid={`button-view-user-${user.id}`}
-                        onClick={() => setEditingUser(user)}
+                        onClick={() => openEditUser(user)}
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
@@ -172,7 +178,7 @@ export function AdminUsers({
                 data: {
                   name: formData.get('name') as string,
                   email: formData.get('email') as string,
-                  isAdmin: formData.get('isAdmin') === 'on',
+                  isAdmin: isAdminChecked,
                 }
               });
             }}>
@@ -186,7 +192,7 @@ export function AdminUsers({
                   <Input id="edit-user-email" name="email" type="email" defaultValue={editingUser.email} required />
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch id="edit-user-admin" name="isAdmin" defaultChecked={editingUser.isAdmin || false} />
+                  <Switch id="edit-user-admin" checked={isAdminChecked} onCheckedChange={setIsAdminChecked} />
                   <Label htmlFor="edit-user-admin">Admin User</Label>
                 </div>
               </div>

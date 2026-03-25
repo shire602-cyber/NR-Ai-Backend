@@ -22,10 +22,11 @@ export function registerDashboardRoutes(app: Express) {
     entries = entries.filter(e => e.status === 'posted');
     const accounts = await storage.getAccountsByCompanyId(companyId);
 
-    // Calculate from journal entries
+    // Calculate from journal entries (batch fetch to avoid N+1)
     const balances = new Map<string, number>();
+    const allLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = allLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account) continue;
@@ -65,8 +66,9 @@ export function registerDashboardRoutes(app: Express) {
     const expenseAccounts = accounts.filter(a => a.type === 'expense');
 
     const balances = new Map<string, number>();
+    const expLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = expLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account || account.type !== 'expense') continue;
@@ -110,7 +112,10 @@ export function registerDashboardRoutes(app: Express) {
       };
     });
 
-    const trends = await Promise.all(months.map(async ({ month, monthNum, yearNum }) => {
+    // Batch fetch all journal lines to avoid N+1
+    const trendLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
+
+    const trends = months.map(({ month, monthNum, yearNum }) => {
       // Calculate revenue from invoices
       const revenue = invoices
         .filter(inv => {
@@ -124,7 +129,7 @@ export function registerDashboardRoutes(app: Express) {
       for (const entry of entries) {
         const entryDate = new Date(entry.date);
         if (entryDate.getMonth() === monthNum && entryDate.getFullYear() === yearNum) {
-          const lines = await storage.getJournalLinesByEntryId(entry.id);
+          const lines = trendLinesMap.get(entry.id) || [];
           for (const line of lines) {
             const account = accounts.find(a => a.id === line.accountId);
             if (account && account.type === 'expense') {
@@ -135,7 +140,7 @@ export function registerDashboardRoutes(app: Express) {
       }
 
       return { month, revenue, expenses };
-    }));
+    });
 
     res.json(trends);
   }));
@@ -169,11 +174,12 @@ export function registerDashboardRoutes(app: Express) {
       });
     }
 
-    // Calculate balances for each account
+    // Calculate balances for each account (batch fetch to avoid N+1)
     const balances = new Map<string, number>();
+    const plLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
 
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = plLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account) continue;
@@ -241,11 +247,12 @@ export function registerDashboardRoutes(app: Express) {
       });
     }
 
-    // Calculate balances
+    // Calculate balances (batch fetch to avoid N+1)
     const balances = new Map<string, number>();
+    const bsLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
 
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = bsLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account) continue;
@@ -391,10 +398,11 @@ export function registerDashboardRoutes(app: Express) {
     let entries = await storage.getJournalEntriesByCompanyId(companyId as string);
     entries = entries.filter(e => e.status === 'posted');
 
-    // Calculate revenue and expenses from journal entries
+    // Calculate revenue and expenses from journal entries (batch fetch to avoid N+1)
     const balances = new Map<string, number>();
+    const dashLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = dashLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account) continue;
@@ -449,9 +457,10 @@ export function registerDashboardRoutes(app: Express) {
     entries = entries.filter(e => e.status === 'posted');
 
     const balances = new Map<string, { name: string; value: number }>();
+    const dashExpLinesMap = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
 
     for (const entry of entries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+      const lines = dashExpLinesMap.get(entry.id) || [];
       for (const line of lines) {
         const account = accounts.find(a => a.id === line.accountId);
         if (!account || account.type !== 'expense') continue;

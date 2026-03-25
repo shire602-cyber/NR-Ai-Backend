@@ -49,10 +49,13 @@ export async function apiRequest(
 
   await throwIfResNotOk(res);
 
-  // Handle 204 No Content and other empty responses
+  // Handle 204 No Content
+  if (res.status === 204) return null;
+
+  // Return raw text for non-JSON responses (XML, plain text, etc.)
   const contentType = res.headers.get("content-type");
-  if (res.status === 204 || !contentType?.includes("application/json")) {
-    return null;
+  if (!contentType?.includes("application/json")) {
+    return res.text();
   }
 
   return res.json();

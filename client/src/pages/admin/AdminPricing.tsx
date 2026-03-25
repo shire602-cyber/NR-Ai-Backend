@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Plus, Trash2, Edit2, Save, Loader2 } from 'lucide-react';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { SubscriptionPlan } from '@shared/schema';
 
 interface AdminPricingProps {
@@ -199,6 +200,7 @@ export function AdminPricing({ plans, plansLoading }: AdminPricingProps) {
   const { toast } = useToast();
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [newPlanDialogOpen, setNewPlanDialogOpen] = useState(false);
+  const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
 
   const createPlanMutation = useMutation({
     mutationFn: async (plan: Partial<SubscriptionPlan>) => {
@@ -326,7 +328,7 @@ export function AdminPricing({ plans, plansLoading }: AdminPricingProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => deletePlanMutation.mutate(plan.id)}
+                  onClick={() => setDeletePlanId(plan.id)}
                   data-testid={`button-delete-plan-${plan.id}`}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -353,6 +355,22 @@ export function AdminPricing({ plans, plansLoading }: AdminPricingProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Plan Confirmation */}
+      <ConfirmDialog
+        open={!!deletePlanId}
+        onOpenChange={(open) => { if (!open) setDeletePlanId(null); }}
+        title="Delete Plan"
+        description="Are you sure you want to delete this subscription plan? This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (deletePlanId) {
+            deletePlanMutation.mutate(deletePlanId);
+            setDeletePlanId(null);
+          }
+        }}
+      />
     </div>
   );
 }

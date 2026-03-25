@@ -104,15 +104,18 @@ Amount: ${validated.amount} ${validated.currency}`
 
       const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
-      res.json({
-        suggestedAccountCode: aiResponse.accountCode,
-        suggestedAccountName: aiResponse.accountName,
-        confidence: aiResponse.confidence,
-        reason: aiResponse.reason,
-      });
+      // Validate expected fields exist
+      const result = {
+        suggestedAccountCode: aiResponse.accountCode || aiResponse.suggestedAccountCode || null,
+        suggestedAccountName: aiResponse.accountName || aiResponse.suggestedAccountName || null,
+        confidence: Math.min(1, Math.max(0, Number(aiResponse.confidence) || 0)),
+        reason: aiResponse.reason || aiResponse.explanation || null,
+      };
+
+      res.json(result);
     } catch (error: any) {
       console.error('AI categorization error:', error);
-      res.status(500).json({ message: error.message || 'AI categorization failed' });
+      res.status(500).json({ message: 'AI categorization failed. Please try again.' });
     }
   }));
 
@@ -183,7 +186,7 @@ If no valid transactions can be found, return { "transactions": [] }`
       res.json({ transactions: validTransactions });
     } catch (error: any) {
       console.error('AI bank statement parsing error:', error);
-      res.status(500).json({ message: error.message || 'Failed to parse bank statement' });
+      res.status(500).json({ message: 'Failed to parse bank statement. Please try again.' });
     }
   }));
 
@@ -270,7 +273,7 @@ Keep your tone professional but friendly, like a trusted advisor.`
       });
     } catch (error: any) {
       console.error('AI CFO advice error:', error);
-      res.status(500).json({ message: error.message || 'Failed to get AI advice' });
+      res.status(500).json({ message: 'Failed to get AI advice. Please try again.' });
     }
   }));
 
@@ -362,8 +365,19 @@ Respond with a JSON object:
 
       const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
+      // Validate and normalize classifications
+      const validatedClassifications = (aiResponse.classifications || []).map((c: any) => ({
+        index: Number(c.index) || 0,
+        accountCode: c.accountCode || null,
+        accountName: c.accountName || null,
+        category: c.category || null,
+        confidence: Math.min(1, Math.max(0, Number(c.confidence) || 0)),
+        reason: c.reason || null,
+        flags: Array.isArray(c.flags) ? c.flags : [],
+      }));
+
       // Store classifications for learning
-      for (const classification of aiResponse.classifications || []) {
+      for (const classification of validatedClassifications) {
         const transaction = transactions[classification.index];
         if (transaction) {
           await storage.createTransactionClassification({
@@ -378,10 +392,10 @@ Respond with a JSON object:
         }
       }
 
-      res.json(aiResponse);
+      res.json({ classifications: validatedClassifications });
     } catch (error: any) {
       console.error('Batch categorization error:', error);
-      res.status(500).json({ message: error.message || 'Batch categorization failed' });
+      res.status(500).json({ message: 'Batch categorization failed. Please try again.' });
     }
   }));
 
@@ -475,8 +489,20 @@ Respond with JSON:
 
       const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
+      // Validate anomalies
+      const validatedAnomalies = (aiResponse.anomalies || []).map((a: any) => ({
+        type: a.type || 'unknown',
+        severity: ['low', 'medium', 'high', 'critical'].includes(a.severity) ? a.severity : 'low',
+        title: a.title || 'Untitled anomaly',
+        description: a.description || '',
+        entityType: a.entityType || null,
+        entityId: a.entityId || null,
+        duplicateOfId: a.duplicateOfId || null,
+        confidence: Math.min(1, Math.max(0, Number(a.confidence) || 0)),
+      }));
+
       // Store detected anomalies
-      for (const anomaly of aiResponse.anomalies || []) {
+      for (const anomaly of validatedAnomalies) {
         await storage.createAnomalyAlert({
           companyId,
           type: anomaly.type,
@@ -490,10 +516,18 @@ Respond with JSON:
         });
       }
 
-      res.json(aiResponse);
+      res.json({
+        anomalies: validatedAnomalies,
+        summary: {
+          totalAnomalies: validatedAnomalies.length,
+          criticalCount: validatedAnomalies.filter((a: any) => a.severity === 'critical').length,
+          potentialDuplicates: validatedAnomalies.filter((a: any) => a.type === 'duplicate').length,
+          unusualTransactions: validatedAnomalies.filter((a: any) => a.type === 'unusual_amount').length,
+        },
+      });
     } catch (error: any) {
       console.error('Anomaly detection error:', error);
-      res.status(500).json({ message: error.message || 'Anomaly detection failed' });
+      res.status(500).json({ message: 'Anomaly detection failed. Please try again.' });
     }
   }));
 
@@ -519,7 +553,8 @@ Respond with JSON:
 
       res.json(alerts);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Anomaly alerts fetch error:', error);
+      res.status(500).json({ message: 'Failed to fetch anomaly alerts.' });
     }
   }));
 
@@ -544,7 +579,8 @@ Respond with JSON:
       const resolvedAlert = await storage.resolveAnomalyAlert(id, userId, note);
       res.json(resolvedAlert);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Resolve anomaly alert error:', error);
+      res.status(500).json({ message: 'Failed to resolve anomaly alert.' });
     }
   }));
 
@@ -658,10 +694,27 @@ ${JSON.stringify(ledgerData, null, 2)}`
       });
 
       const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
-      res.json(aiResponse);
+
+      // Validate reconciliation matches
+      const validatedMatches = (aiResponse.matches || []).map((m: any) => ({
+        bankTransactionId: m.bankTransactionId || null,
+        matchedEntityId: m.matchedEntityId || null,
+        matchType: m.matchType || null,
+        confidence: Math.min(1, Math.max(0, Number(m.confidence) || 0)),
+        reason: m.reason || null,
+        suggestedAction: m.suggestedAction || 'Manual review needed',
+      }));
+
+      const validatedUnmatched = (aiResponse.unmatched || []).map((u: any) => ({
+        bankTransactionId: u.bankTransactionId || null,
+        suggestedCategory: u.suggestedCategory || null,
+        reason: u.reason || null,
+      }));
+
+      res.json({ matches: validatedMatches, unmatched: validatedUnmatched });
     } catch (error: any) {
       console.error('Reconciliation error:', error);
-      res.status(500).json({ message: error.message || 'Reconciliation failed' });
+      res.status(500).json({ message: 'Reconciliation failed. Please try again.' });
     }
   }));
 
@@ -692,7 +745,8 @@ ${JSON.stringify(ledgerData, null, 2)}`
       const transaction = await storage.reconcileBankTransaction(id, matchId, matchType);
       res.json(transaction);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Reconcile bank transaction error:', error);
+      res.status(500).json({ message: 'Failed to reconcile transaction.' });
     }
   }));
 
@@ -711,7 +765,8 @@ ${JSON.stringify(ledgerData, null, 2)}`
       const transactions = await storage.getBankTransactionsByCompanyId(companyId);
       res.json(transactions);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Bank transactions fetch error:', error);
+      res.status(500).json({ message: 'Failed to fetch bank transactions.' });
     }
   }));
 
@@ -732,7 +787,8 @@ ${JSON.stringify(ledgerData, null, 2)}`
       });
       res.json(transaction);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Create bank transaction error:', error);
+      res.status(500).json({ message: 'Failed to create bank transaction.' });
     }
   }));
 
@@ -768,7 +824,8 @@ ${JSON.stringify(ledgerData, null, 2)}`
 
       res.json({ imported: imported.length, transactions: imported });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Import bank transactions error:', error);
+      res.status(500).json({ message: 'Failed to import bank transactions.' });
     }
   }));
 
@@ -897,10 +954,19 @@ Respond with JSON:
 
       const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
 
+      // Validate forecast data
+      const validatedForecasts = (aiResponse.forecasts || []).map((f: any) => ({
+        month: f.month || '',
+        predictedInflow: Number(f.predictedInflow) || 0,
+        predictedOutflow: Number(f.predictedOutflow) || 0,
+        predictedBalance: Number(f.predictedBalance) || 0,
+        confidence: Math.min(1, Math.max(0, Number(f.confidence) || 0)),
+      }));
+
       // Clear old forecasts and store new ones
       await storage.deleteCashFlowForecastsByCompanyId(companyId);
 
-      for (const forecast of aiResponse.forecasts || []) {
+      for (const forecast of validatedForecasts) {
         await storage.createCashFlowForecast({
           companyId,
           forecastDate: new Date(forecast.month),
@@ -913,12 +979,15 @@ Respond with JSON:
       }
 
       res.json({
-        ...aiResponse,
+        forecasts: validatedForecasts,
+        trends: aiResponse.trends || [],
+        recommendations: aiResponse.recommendations || [],
+        riskFactors: aiResponse.riskFactors || [],
         historicalData,
       });
     } catch (error: any) {
       console.error('Cash flow forecast error:', error);
-      res.status(500).json({ message: error.message || 'Forecasting failed' });
+      res.status(500).json({ message: 'Cash flow forecasting failed. Please try again.' });
     }
   }));
 
@@ -937,7 +1006,8 @@ Respond with JSON:
       const forecasts = await storage.getCashFlowForecastsByCompanyId(companyId);
       res.json(forecasts);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Forecasts fetch error:', error);
+      res.status(500).json({ message: 'Failed to fetch forecasts.' });
     }
   }));
 
@@ -972,7 +1042,8 @@ Respond with JSON:
 
       res.json(classification);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Classification feedback error:', error);
+      res.status(500).json({ message: 'Failed to save classification feedback.' });
     }
   }));
 
@@ -1186,7 +1257,7 @@ Company: ${company.name}`;
       });
     } catch (error: any) {
       console.error('NL Gateway error:', error);
-      res.status(500).json({ message: error.message || 'Failed to process query' });
+      res.status(500).json({ message: 'Failed to process query. Please try again.' });
     }
   }));
 
@@ -1404,12 +1475,11 @@ IMPORTANT GUIDELINES:
       if (error.status) {
         const statusCode = error.status >= 400 && error.status < 600 ? error.status : 500;
         return res.status(statusCode).json({
-          message: error.message || 'OpenAI API error',
-          error: error.error?.message || error.message,
+          message: 'AI service error. Please try again.',
         });
       }
 
-      res.status(500).json({ message: error.message || 'Failed to process request' });
+      res.status(500).json({ message: 'Failed to process request. Please try again.' });
     }
   }));
 
@@ -1436,7 +1506,7 @@ IMPORTANT GUIDELINES:
       res.json(conversations);
     } catch (error: any) {
       console.error('/api/ask/history error:', error);
-      res.status(500).json({ message: error.message || 'Failed to fetch history' });
+      res.status(500).json({ message: 'Failed to fetch conversation history.' });
     }
   }));
 
@@ -1488,7 +1558,8 @@ IMPORTANT GUIDELINES:
         description: `${a.type.charAt(0).toUpperCase() + a.type.slice(1)} Account`,
       })));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Autocomplete accounts error:', error);
+      res.status(500).json({ message: 'Failed to fetch account suggestions.' });
     }
   }));
 
@@ -1545,7 +1616,8 @@ IMPORTANT GUIDELINES:
         invoiceCount: c.count,
       })));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Autocomplete customers error:', error);
+      res.status(500).json({ message: 'Failed to fetch customer suggestions.' });
     }
   }));
 
@@ -1604,7 +1676,8 @@ IMPORTANT GUIDELINES:
         lastAmount: m.lastAmount,
       })));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Autocomplete merchants error:', error);
+      res.status(500).json({ message: 'Failed to fetch merchant suggestions.' });
     }
   }));
 
@@ -1666,7 +1739,8 @@ IMPORTANT GUIDELINES:
         usageCount: d.count,
       })));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Autocomplete descriptions error:', error);
+      res.status(500).json({ message: 'Failed to fetch description suggestions.' });
     }
   }));
 
@@ -1805,7 +1879,7 @@ Respond with just the category name, nothing else.`;
       res.json({ suggestions });
     } catch (error: any) {
       console.error('Smart suggest error:', error);
-      res.status(500).json({ message: error.message || 'Failed to generate suggestions' });
+      res.status(500).json({ message: 'Failed to generate suggestions. Please try again.' });
     }
   }));
 }

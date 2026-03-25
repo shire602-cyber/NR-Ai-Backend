@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,6 +27,7 @@ export function InvoicePaymentDialog({
   onConfirm,
 }: InvoicePaymentDialogProps) {
   const { locale } = useTranslation();
+  const [, setLocation] = useLocation();
   const [selectedPaymentAccount, setSelectedPaymentAccount] = useState<string>('');
 
   const handleConfirm = () => {
@@ -92,7 +94,7 @@ export function InvoicePaymentDialog({
                 variant="outline"
                 onClick={() => {
                   onOpenChange(false);
-                  window.location.href = '/chart-of-accounts';
+                  setLocation('/chart-of-accounts');
                 }}
                 className="w-full"
                 data-testid="button-create-payment-account"

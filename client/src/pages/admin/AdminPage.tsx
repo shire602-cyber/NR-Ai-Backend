@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { queryClient } from '@/lib/queryClient';
 import { Settings, Users, DollarSign, Shield, Plug, Download, RefreshCw, BarChart3 } from 'lucide-react';
 import { useAdminData } from './useAdminData';
 import { AdminOverview } from './AdminOverview';
@@ -13,6 +15,7 @@ import { AdminAuditLog } from './AdminAuditLog';
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
+  const { toast } = useToast();
 
   const {
     settings,
@@ -28,6 +31,27 @@ export default function AdminPage() {
     stats,
   } = useAdminData();
 
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/admin'] });
+    toast({ title: 'Refreshing admin data...' });
+  }, [toast]);
+
+  const handleExport = useCallback(() => {
+    const rows: string[][] = [['Name', 'Email', 'Admin', 'Created']];
+    users.forEach((u) => {
+      rows.push([u.name, u.email, u.isAdmin ? 'Yes' : 'No', new Date(u.createdAt).toLocaleDateString()]);
+    });
+    const csvContent = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `admin-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Users exported to CSV' });
+  }, [users, toast]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -36,11 +60,11 @@ export default function AdminPage() {
           <p className="text-muted-foreground">Manage platform settings, users, and subscriptions</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" data-testid="button-export-data">
+          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-data">
             <Download className="w-4 h-4 mr-2" />
             Export Data
           </Button>
-          <Button variant="outline" size="sm" data-testid="button-refresh">
+          <Button variant="outline" size="sm" onClick={handleRefresh} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>

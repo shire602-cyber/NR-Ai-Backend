@@ -320,7 +320,7 @@ export function InvoiceFormDialog({
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {t.vat} ({watchLines.some(line => line.vatRate !== 0) ? `avg ${Math.round(watchLines.reduce((sum, line) => sum + line.vatRate, 0) / Math.max(1, watchLines.filter(l => l.vatRate > 0).length) * 100)}%` : '0%'})
+                  {t.vat} ({subtotal > 0 ? `${(vatAmount / subtotal * 100).toFixed(1)}%` : '0.0%'})
                 </span>
                 <span className="font-mono font-medium">{formatCurrency(vatAmount, 'AED', locale)}</span>
               </div>

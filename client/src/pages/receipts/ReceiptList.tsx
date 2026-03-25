@@ -147,6 +147,7 @@ export function ReceiptList({
                         variant="default"
                         size="sm"
                         onClick={() => onPostExpense(receipt)}
+                        aria-label="Post expense"
                         data-testid={`button-post-receipt-${receipt.id}`}
                       >
                         <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -157,6 +158,7 @@ export function ReceiptList({
                       variant="ghost"
                       size="sm"
                       onClick={() => onEditReceipt(receipt)}
+                      aria-label="Edit receipt"
                       data-testid={`button-edit-receipt-${receipt.id}`}
                     >
                       <Edit className="w-4 h-4 mr-2" />

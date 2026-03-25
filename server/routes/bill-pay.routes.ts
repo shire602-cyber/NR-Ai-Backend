@@ -418,7 +418,34 @@ export function registerBillPayRoutes(app: Express) {
       // Fiscal year guard
       await assertFiscalYearOpenPool(client, bill.company_id, billDate);
 
-      // Update bill status to approved
+      // Fetch bill line items FIRST to check for missing accounts (fail-fast)
+      const linesResult = await client.query(
+        'SELECT * FROM bill_line_items WHERE bill_id = $1',
+        [id]
+      );
+
+      const billLines = linesResult.rows;
+
+      const missingAccounts = billLines.filter((l: any) => !l.account_id);
+      if (missingAccounts.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `${missingAccounts.length} line item(s) have no account assigned. All lines must have an account before approval.`
+        });
+      }
+
+      // Look up required accounts
+      const apAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.ACCOUNTS_PAYABLE);
+      const vatReceivableAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.VAT_RECEIVABLE_INPUT);
+
+      if (!apAccount) {
+        throw Object.assign(
+          new Error(`Accounts Payable account (${ACCOUNT_CODES.ACCOUNTS_PAYABLE}) not found for company ${bill.company_id}`),
+          { statusCode: 500 }
+        );
+      }
+
+      // Update bill status to approved (AFTER all validations pass)
       const updateResult = await client.query(
         `UPDATE vendor_bills
          SET status = 'approved', approved_by = $1, approved_at = NOW()
@@ -435,17 +462,6 @@ export function registerBillPayRoutes(app: Express) {
       const entryCount = Number(entryNumResult.rows[0]?.count || 0);
       const entryNumber = `JE-${dateStr}-${String(entryCount + 1).padStart(3, '0')}`;
 
-      // Look up required accounts
-      const apAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.ACCOUNTS_PAYABLE);
-      const vatReceivableAccount = await storage.getAccountByCode(bill.company_id, ACCOUNT_CODES.VAT_RECEIVABLE_INPUT);
-
-      if (!apAccount) {
-        throw Object.assign(
-          new Error(`Accounts Payable account (${ACCOUNT_CODES.ACCOUNTS_PAYABLE}) not found for company ${bill.company_id}`),
-          { statusCode: 500 }
-        );
-      }
-
       // Create journal entry: source "bill", sourceId = bill.id
       const jeResult = await client.query(
         `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, source_id, created_by)
@@ -454,22 +470,6 @@ export function registerBillPayRoutes(app: Express) {
         [bill.company_id, entryNumber, billDate, `Vendor Bill ${bill.bill_number || ''} - ${bill.vendor_name}`, id, userId]
       );
       const jeId = jeResult.rows[0].id;
-
-      // Fetch bill line items for individual expense debits
-      const linesResult = await client.query(
-        'SELECT * FROM bill_line_items WHERE bill_id = $1',
-        [id]
-      );
-
-      const billLines = linesResult.rows;
-
-      const missingAccounts = billLines.filter((l: any) => !l.account_id);
-      if (missingAccounts.length > 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          error: `${missingAccounts.length} line item(s) have no account assigned. All lines must have an account before approval.`
-        });
-      }
 
       const subtotal = Number(bill.subtotal) || 0;
       const vatAmount = Number(bill.vat_amount) || 0;

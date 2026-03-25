@@ -182,15 +182,20 @@ export function registerExpenseClaimRoutes(app: Express) {
       }, 0);
     }
 
+    // Build SET clause dynamically to allow setting fields to null
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (title !== undefined) { setClauses.push(`title = $${paramIndex++}`); values.push(title); }
+    if (description !== undefined) { setClauses.push(`description = $${paramIndex++}`); values.push(description); }
+    if (currency !== undefined) { setClauses.push(`currency = $${paramIndex++}`); values.push(currency); }
+    setClauses.push(`total_amount = $${paramIndex++}`); values.push(totalAmount);
+
+    values.push(id);
     const updatedResult = await pool.query(
-      `UPDATE expense_claims
-       SET title = COALESCE($1, title),
-           description = COALESCE($2, description),
-           currency = COALESCE($3, currency),
-           total_amount = $4
-       WHERE id = $5
-       RETURNING *`,
-      [title || null, description !== undefined ? description : null, currency || null, totalAmount, id]
+      `UPDATE expense_claims SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
     );
 
     // Replace items if new items provided
