@@ -52,7 +52,7 @@ export default function JournalEntryDetail() {
     switch (status) {
       case 'posted':
         return (
-          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+          <Badge className="bg-success/10 text-success">
             <CheckCircle2 className="w-3 h-3 mr-1" />
             Posted
           </Badge>
@@ -184,7 +184,7 @@ export default function JournalEntryDetail() {
             <CardTitle className="text-sm font-medium">Total Debits</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600" data-testid="text-total-debits">
+            <div className="text-2xl font-bold text-success" data-testid="text-total-debits">
               {formatCurrency(totalDebit, 'AED', locale)}
             </div>
           </CardContent>
@@ -195,7 +195,7 @@ export default function JournalEntryDetail() {
             <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600" data-testid="text-total-credits">
+            <div className="text-2xl font-bold text-primary" data-testid="text-total-credits">
               {formatCurrency(totalCredit, 'AED', locale)}
             </div>
           </CardContent>
@@ -206,7 +206,7 @@ export default function JournalEntryDetail() {
             <CardTitle className="text-sm font-medium">Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${Math.abs(totalDebit - totalCredit) < 0.01 ? 'text-green-600' : 'text-red-600'}`} data-testid="text-balance">
+            <div className={`text-2xl font-bold ${Math.abs(totalDebit - totalCredit) < 0.01 ? 'text-success' : 'text-destructive'}`} data-testid="text-balance">
               {Math.abs(totalDebit - totalCredit) < 0.01 ? 'Balanced' : formatCurrency(Math.abs(totalDebit - totalCredit), 'AED', locale)}
             </div>
           </CardContent>

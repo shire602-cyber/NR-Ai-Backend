@@ -54,10 +54,10 @@ export default function ActivityLogs() {
 
   const getActionIcon = (action: string) => {
     switch (action) {
-      case 'create': return <Plus className="h-4 w-4 text-green-500" />;
-      case 'update': return <Edit className="h-4 w-4 text-blue-500" />;
-      case 'delete': return <Trash2 className="h-4 w-4 text-red-500" />;
-      case 'view': return <Eye className="h-4 w-4 text-gray-500" />;
+      case 'create': return <Plus className="h-4 w-4 text-success" />;
+      case 'update': return <Edit className="h-4 w-4 text-primary" />;
+      case 'delete': return <Trash2 className="h-4 w-4 text-destructive" />;
+      case 'view': return <Eye className="h-4 w-4 text-muted-foreground" />;
       case 'login': return <LogIn className="h-4 w-4 text-purple-500" />;
       case 'logout': return <LogOut className="h-4 w-4 text-orange-500" />;
       case 'invite': return <Mail className="h-4 w-4 text-indigo-500" />;
@@ -79,9 +79,9 @@ export default function ActivityLogs() {
   const getActionBadge = (action: string) => {
     switch (action) {
       case 'create':
-        return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Create</Badge>;
+        return <Badge className="bg-success/10 text-success border-success/20">Create</Badge>;
       case 'update':
-        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Update</Badge>;
+        return <Badge className="bg-primary/10 text-primary border-primary/20">Update</Badge>;
       case 'delete':
         return <Badge variant="destructive">Delete</Badge>;
       case 'view':

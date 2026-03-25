@@ -136,7 +136,7 @@ export default function Landing() {
         ? 'Create FTA-compliant invoices in seconds with auto VAT calculation and PDF export.'
         : 'أنشئ فواتير متوافقة مع الهيئة الاتحادية للضرائب في ثوانٍ مع حساب ضريبة تلقائي.',
       color: 'from-blue-500 to-cyan-600',
-      bgColor: 'bg-blue-500/10',
+      bgColor: 'bg-primary/10',
     },
     {
       icon: Scan,
@@ -285,7 +285,7 @@ export default function Landing() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-violet-600 flex items-center justify-center shadow-lg shadow-primary/25">
                 <Briefcase className="w-5 h-5 text-white" />
               </div>
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full border-2 border-background" />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-xl leading-none tracking-tight">
@@ -411,7 +411,7 @@ export default function Landing() {
                 <span className="text-sm font-medium">{t.hero.badge}</span>
                 <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((i) => (
-                    <Star key={i} className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                    <Star key={i} className="w-3 h-3 fill-warning text-warning" />
                   ))}
                 </div>
               </div>
@@ -462,11 +462,11 @@ export default function Landing() {
 
               <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
-                  <CircleCheck className="w-4 h-4 text-green-500" />
+                  <CircleCheck className="w-4 h-4 text-success" />
                   <span>{t.hero.noCreditCard}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CircleCheck className="w-4 h-4 text-green-500" />
+                  <CircleCheck className="w-4 h-4 text-success" />
                   <span>{t.hero.cancelAnytime}</span>
                 </div>
               </div>
@@ -487,9 +487,9 @@ export default function Landing() {
                   {/* Dashboard Header */}
                   <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
                     <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-red-500" />
-                      <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                      <div className="w-3 h-3 rounded-full bg-green-500" />
+                      <div className="w-3 h-3 rounded-full bg-destructive" />
+                      <div className="w-3 h-3 rounded-full bg-warning" />
+                      <div className="w-3 h-3 rounded-full bg-success" />
                     </div>
                     <div className="text-xs text-muted-foreground font-mono">dashboard.muhasib.ai</div>
                   </div>
@@ -497,7 +497,7 @@ export default function Landing() {
                   {/* Stats Row */}
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     {[
-                      { label: 'Revenue', value: 'AED 127,500', color: 'text-green-500', icon: TrendingUp },
+                      { label: 'Revenue', value: 'AED 127,500', color: 'text-success', icon: TrendingUp },
                       { label: 'Expenses', value: 'AED 43,200', color: 'text-orange-500', icon: Wallet },
                       { label: 'Profit', value: 'AED 84,300', color: 'text-primary', icon: BarChart3 },
                     ].map((stat, i) => (
@@ -521,7 +521,7 @@ export default function Landing() {
                         <div className="text-sm font-medium mb-1">AI just categorized 12 expenses</div>
                         <div className="text-xs text-muted-foreground">Saved you 15 minutes of manual work</div>
                       </div>
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <CheckCircle2 className="w-5 h-5 text-success" />
                     </div>
                   </div>
 
@@ -665,7 +665,7 @@ export default function Landing() {
               >
                 <div className="flex items-center gap-1 mb-6">
                   {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 fill-yellow-500 text-yellow-500" />
+                    <Star key={i} className="w-5 h-5 fill-warning text-warning" />
                   ))}
                 </div>
                 <p className="text-lg leading-relaxed mb-8 text-foreground/90">"{testimonial.quote}"</p>
@@ -738,7 +738,7 @@ export default function Landing() {
                 <ul className="space-y-4 mb-8">
                   {plan.features.map((feature, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
                       <span className="text-sm">{feature}</span>
                     </li>
                   ))}

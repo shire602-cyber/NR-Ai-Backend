@@ -131,7 +131,7 @@ export default function Services() {
         ? 'Complete VAT registration with FTA and ongoing quarterly/monthly filing support.'
         : 'تسجيل كامل لضريبة القيمة المضافة مع الهيئة الاتحادية للضرائب ودعم التقديم الربعي/الشهري.',
       color: 'from-blue-500 to-cyan-600',
-      bgColor: 'bg-blue-500/10',
+      bgColor: 'bg-primary/10',
     },
     {
       icon: Building2,
@@ -149,7 +149,7 @@ export default function Services() {
         ? 'Smooth VAT deregistration process when your business no longer meets thresholds.'
         : 'عملية إلغاء تسجيل سلسة عندما لم يعد نشاطك يستوفي الحدود.',
       color: 'from-red-500 to-rose-600',
-      bgColor: 'bg-red-500/10',
+      bgColor: 'bg-destructive/10',
     },
     {
       icon: FileCheck,
@@ -167,7 +167,7 @@ export default function Services() {
         ? 'Accurate and timely VAT and Corporate Tax return preparation and submission.'
         : 'إعداد وتقديم إقرارات ضريبة القيمة المضافة وضريبة الشركات بدقة وفي الوقت المحدد.',
       color: 'from-green-500 to-emerald-600',
-      bgColor: 'bg-green-500/10',
+      bgColor: 'bg-success/10',
     },
     {
       icon: BookOpen,
@@ -254,8 +254,8 @@ export default function Services() {
       description: locale === 'en'
         ? 'Instantly extract merchant, amount, date, and VAT from receipts using advanced OCR technology.'
         : 'استخراج فوري للتاجر والمبلغ والتاريخ وضريبة القيمة المضافة من الإيصالات باستخدام تقنية التعرف الضوئي المتقدمة.',
-      bgColor: 'bg-blue-500/10',
-      iconColor: 'text-blue-500',
+      bgColor: 'bg-primary/10',
+      iconColor: 'text-primary',
     },
     {
       icon: Brain,
@@ -272,8 +272,8 @@ export default function Services() {
       description: locale === 'en'
         ? 'Upload multiple receipts at once. Our AI processes them in parallel for maximum efficiency.'
         : 'ارفع عدة إيصالات دفعة واحدة. الذكاء الاصطناعي يعالجها بالتوازي لأقصى كفاءة.',
-      bgColor: 'bg-amber-500/10',
-      iconColor: 'text-amber-500',
+      bgColor: 'bg-warning/10',
+      iconColor: 'text-warning',
     },
     {
       icon: FileSearch,
@@ -281,8 +281,8 @@ export default function Services() {
       description: locale === 'en'
         ? 'Automatically extract and validate TRN numbers, invoice details, and payment terms.'
         : 'استخراج والتحقق تلقائياً من أرقام التسجيل الضريبي وتفاصيل الفواتير وشروط الدفع.',
-      bgColor: 'bg-green-500/10',
-      iconColor: 'text-green-500',
+      bgColor: 'bg-success/10',
+      iconColor: 'text-success',
     },
   ];
 
@@ -311,8 +311,8 @@ export default function Services() {
       description: locale === 'en'
         ? 'Automatically flag unusual transactions, duplicate payments, and potential fraud.'
         : 'تحديد تلقائي للمعاملات غير العادية والمدفوعات المكررة والاحتيال المحتمل.',
-      bgColor: 'bg-red-500/10',
-      iconColor: 'text-red-500',
+      bgColor: 'bg-destructive/10',
+      iconColor: 'text-destructive',
     },
     {
       icon: Mic,
@@ -440,10 +440,10 @@ export default function Services() {
                     {/* Service Icons Grid */}
                     <div className="grid grid-cols-3 gap-4">
                       {[
-                        { icon: FileText, color: 'bg-blue-500/20', iconColor: 'text-blue-500' },
-                        { icon: Calculator, color: 'bg-green-500/20', iconColor: 'text-green-500' },
+                        { icon: FileText, color: 'bg-primary/20', iconColor: 'text-primary' },
+                        { icon: Calculator, color: 'bg-success/20', iconColor: 'text-success' },
                         { icon: BarChart3, color: 'bg-purple-500/20', iconColor: 'text-purple-500' },
-                        { icon: Shield, color: 'bg-amber-500/20', iconColor: 'text-amber-500' },
+                        { icon: Shield, color: 'bg-warning/20', iconColor: 'text-warning' },
                         { icon: Sparkles, color: 'bg-violet-500/20', iconColor: 'text-violet-500' },
                         { icon: Building2, color: 'bg-teal-500/20', iconColor: 'text-teal-500' },
                       ].map((item, index) => (
@@ -460,19 +460,19 @@ export default function Services() {
                     {/* Trust Indicators */}
                     <div className="space-y-3">
                       <div className="flex items-center gap-3 text-sm" data-testid="hero-trust-1">
-                        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
                         <span className="text-foreground/80">
                           {locale === 'en' ? 'FTA Registered & Compliant' : 'مسجل ومتوافق مع الهيئة الاتحادية للضرائب'}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-sm" data-testid="hero-trust-2">
-                        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
                         <span className="text-foreground/80">
                           {locale === 'en' ? 'AI-Powered Automation' : 'أتمتة بالذكاء الاصطناعي'}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-sm" data-testid="hero-trust-3">
-                        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
                         <span className="text-foreground/80">
                           {locale === 'en' ? 'Bilingual Support (EN/AR)' : 'دعم ثنائي اللغة (EN/AR)'}
                         </span>
@@ -565,7 +565,7 @@ export default function Services() {
       <section className="py-20 lg:py-28 bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className={`text-center mb-16 ${mounted ? 'animate-in fade-in slide-in-from-bottom-4' : ''}`} style={{ animationDelay: '200ms', animationDuration: '600ms' }}>
-            <Badge className="mb-4 bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 px-4 py-1.5" data-testid="badge-why-choose">
+            <Badge className="mb-4 bg-success/10 text-success border-success/20 px-4 py-1.5" data-testid="badge-why-choose">
               <CheckCircle2 className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {t.whyChoose.badge}
             </Badge>
@@ -621,7 +621,7 @@ export default function Services() {
           {/* Current AI Capabilities */}
           <div className="mb-16">
             <div className={`flex items-center justify-center gap-3 mb-8 ${mounted ? 'animate-in fade-in slide-in-from-bottom-4' : ''}`} style={{ animationDelay: '300ms', animationDuration: '600ms' }}>
-              <Badge className="bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30 px-4 py-2 text-sm font-semibold" data-testid="badge-ai-current">
+              <Badge className="bg-success/20 text-success border-success/30 px-4 py-2 text-sm font-semibold" data-testid="badge-ai-current">
                 <CheckCircle2 className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
                 {t.ai.currentBadge}
               </Badge>
@@ -652,7 +652,7 @@ export default function Services() {
           {/* Future AI Capabilities */}
           <div>
             <div className={`flex items-center justify-center gap-3 mb-8 ${mounted ? 'animate-in fade-in slide-in-from-bottom-4' : ''}`} style={{ animationDelay: '500ms', animationDuration: '600ms' }}>
-              <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 px-4 py-2 text-sm font-semibold" data-testid="badge-ai-future">
+              <Badge className="bg-warning/20 text-warning border-warning/30 px-4 py-2 text-sm font-semibold" data-testid="badge-ai-future">
                 <Rocket className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
                 {t.ai.futureBadge}
               </Badge>
@@ -690,7 +690,7 @@ export default function Services() {
       <section className="py-20 lg:py-28 bg-muted/30">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className={`text-center mb-16 ${mounted ? 'animate-in fade-in slide-in-from-bottom-4' : ''}`} style={{ animationDelay: '300ms', animationDuration: '600ms' }}>
-            <Badge className="mb-4 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 px-4 py-1.5" data-testid="badge-clients">
+            <Badge className="mb-4 bg-primary/10 text-primary border-primary/20 px-4 py-1.5" data-testid="badge-clients">
               <Users className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {t.clients.badge}
             </Badge>
@@ -752,11 +752,11 @@ export default function Services() {
           
           <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
             <span className="flex items-center gap-2" data-testid="text-cta-free">
-              <CheckCircle2 className="w-4 h-4 text-green-500" />
+              <CheckCircle2 className="w-4 h-4 text-success" />
               {t.cta.freeConsult}
             </span>
             <span className="flex items-center gap-2" data-testid="text-cta-response">
-              <Clock className="w-4 h-4 text-blue-500" />
+              <Clock className="w-4 h-4 text-primary" />
               {t.cta.response}
             </span>
             <span className="flex items-center gap-2" data-testid="text-cta-commitment">

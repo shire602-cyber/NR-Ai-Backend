@@ -172,9 +172,9 @@ export default function BackupRestore() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Badge className="bg-green-500/10 text-green-600 border-green-500/20"><CheckCircle className="h-3 w-3 mr-1" />Completed</Badge>;
+        return <Badge className="bg-success/10 text-success border-success/20"><CheckCircle className="h-3 w-3 mr-1" />Completed</Badge>;
       case 'in_progress':
-        return <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />In Progress</Badge>;
+        return <Badge className="bg-primary/10 text-primary border-primary/20"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />In Progress</Badge>;
       case 'failed':
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
       default:
@@ -465,7 +465,7 @@ export default function BackupRestore() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <AlertTriangle className="h-5 w-5 text-warning" />
               Confirm Restore
             </DialogTitle>
             <DialogDescription>
@@ -474,8 +474,8 @@ export default function BackupRestore() {
           </DialogHeader>
           {restorePreview && (
             <div className="space-y-4 py-4">
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
+                <p className="text-sm text-warning">
                   {restorePreview.warning}
                 </p>
               </div>

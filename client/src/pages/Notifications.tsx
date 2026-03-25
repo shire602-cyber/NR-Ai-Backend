@@ -66,15 +66,15 @@ export default function Notifications() {
     switch (type) {
       case 'deadline':
       case 'payment_due':
-        return <Clock className="w-5 h-5 text-amber-500" />;
+        return <Clock className="w-5 h-5 text-warning" />;
       case 'overdue':
-        return <AlertTriangle className="w-5 h-5 text-red-500" />;
+        return <AlertTriangle className="w-5 h-5 text-destructive" />;
       case 'regulatory':
-        return <Newspaper className="w-5 h-5 text-blue-500" />;
+        return <Newspaper className="w-5 h-5 text-primary" />;
       case 'referral':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+        return <CheckCircle className="w-5 h-5 text-success" />;
       case 'system':
-        return <Bell className="w-5 h-5 text-gray-500" />;
+        return <Bell className="w-5 h-5 text-muted-foreground" />;
       default:
         return <Bell className="w-5 h-5" />;
     }
@@ -85,7 +85,7 @@ export default function Notifications() {
       case 'urgent':
         return <Badge variant="destructive">Urgent</Badge>;
       case 'high':
-        return <Badge className="bg-amber-500">High</Badge>;
+        return <Badge className="bg-warning">High</Badge>;
       case 'normal':
         return <Badge variant="secondary">Normal</Badge>;
       default:
@@ -95,13 +95,13 @@ export default function Notifications() {
 
   const getNewsBadge = (category: string) => {
     const colors: Record<string, string> = {
-      vat: 'bg-blue-500',
+      vat: 'bg-primary',
       corporate_tax: 'bg-purple-500',
-      customs: 'bg-green-500',
-      labor: 'bg-amber-500',
-      general: 'bg-gray-500',
+      customs: 'bg-success',
+      labor: 'bg-warning',
+      general: 'bg-muted0',
     };
-    return <Badge className={colors[category] || 'bg-gray-500'}>{category.replace('_', ' ').toUpperCase()}</Badge>;
+    return <Badge className={colors[category] || 'bg-muted0'}>{category.replace('_', ' ').toUpperCase()}</Badge>;
   };
 
   return (
@@ -177,7 +177,7 @@ export default function Notifications() {
                           <h4 className="font-medium">{notification.title}</h4>
                           {getPriorityBadge(notification.priority)}
                           {!notification.isRead && (
-                            <Badge variant="outline" className="bg-blue-50">New</Badge>
+                            <Badge variant="outline" className="bg-primary/10">New</Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">{notification.message}</p>
@@ -250,7 +250,7 @@ export default function Notifications() {
                             <Badge variant="destructive">Critical</Badge>
                           )}
                           {news.importance === 'high' && (
-                            <Badge className="bg-amber-500">Important</Badge>
+                            <Badge className="bg-warning">Important</Badge>
                           )}
                         </div>
                         <CardTitle>{news.title}</CardTitle>

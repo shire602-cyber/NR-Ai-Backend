@@ -338,10 +338,10 @@ export default function Invoices() {
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400';
-      case 'sent': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400';
-      case 'void': return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
-      default: return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400';
+      case 'paid': return 'bg-success/10 text-success';
+      case 'sent': return 'bg-primary/10 text-primary';
+      case 'void': return 'bg-muted text-foreground dark:text-muted-foreground';
+      default: return 'bg-warning/10 text-warning';
     }
   };
 
@@ -539,7 +539,7 @@ export default function Invoices() {
               </SelectContent>
             </Select>
             {(invoice as any).einvoiceStatus && (
-              <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0 bg-blue-50 text-blue-700 border-blue-200">
+              <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0 bg-primary/10 text-primary border-primary/20">
                 E
               </Badge>
             )}
@@ -610,7 +610,7 @@ export default function Invoices() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-green-600 hover:text-green-700"
+              className="text-success hover:text-success"
               onClick={async () => {
                 try {
                   const customer = customers.find(c => c.name === invoice.customerName);
@@ -666,7 +666,7 @@ export default function Invoices() {
               aria-label="Generate E-Invoice"
               data-testid={`button-einvoice-${invoice.id}`}
             >
-              <FileCode className="w-4 h-4 text-blue-500" />
+              <FileCode className="w-4 h-4 text-primary" />
             </Button>
             <Button
               variant="ghost"
@@ -1056,7 +1056,7 @@ export default function Invoices() {
                               <FormDescription>
                                 Display your company logo at the top of invoices
                                 {!company.logoUrl && (
-                                  <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                  <span className="block text-xs text-warning mt-1">
                                     Note: Set your logo in Company Profile first
                                   </span>
                                 )}
@@ -1084,7 +1084,7 @@ export default function Invoices() {
                               <FormDescription>
                                 Display your business address on invoices
                                 {!company.businessAddress && (
-                                  <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                  <span className="block text-xs text-warning mt-1">
                                     Note: Set your address in Company Profile first
                                   </span>
                                 )}
@@ -1112,7 +1112,7 @@ export default function Invoices() {
                               <FormDescription>
                                 Display your business phone number on invoices
                                 {!company.contactPhone && (
-                                  <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                  <span className="block text-xs text-warning mt-1">
                                     Note: Set your phone in Company Profile first
                                   </span>
                                 )}
@@ -1140,7 +1140,7 @@ export default function Invoices() {
                               <FormDescription>
                                 Display your business email on invoices
                                 {!company.contactEmail && (
-                                  <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                  <span className="block text-xs text-warning mt-1">
                                     Note: Set your email in Company Profile first
                                   </span>
                                 )}
@@ -1168,7 +1168,7 @@ export default function Invoices() {
                               <FormDescription>
                                 Display your website URL on invoices
                                 {!company.websiteUrl && (
-                                  <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                  <span className="block text-xs text-warning mt-1">
                                     Note: Set your website in Company Profile first
                                   </span>
                                 )}
@@ -1267,7 +1267,7 @@ export default function Invoices() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <XCircle className="w-5 h-5 text-yellow-500" />
+              <XCircle className="w-5 h-5 text-warning" />
               Similar Invoices Found
             </DialogTitle>
             <DialogDescription>

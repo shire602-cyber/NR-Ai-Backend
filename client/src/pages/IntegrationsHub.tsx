@@ -263,7 +263,7 @@ export default function IntegrationsHub() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Connected</CardTitle>
-                <Link2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <Link2 className="w-4 h-4 text-success" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">1</div>
@@ -274,7 +274,7 @@ export default function IntegrationsHub() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Synced Today</CardTitle>
-                <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <RefreshCw className="w-4 h-4 text-primary" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">24</div>
@@ -296,7 +296,7 @@ export default function IntegrationsHub() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Reconciled</CardTitle>
-                <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <Check className="w-4 h-4 text-success" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">89%</div>
@@ -330,7 +330,7 @@ export default function IntegrationsHub() {
                         <CardTitle className="text-lg flex items-center gap-2">
                           {platform.name}
                           {isConnected && (
-                            <Badge variant="secondary" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                            <Badge variant="secondary" className="bg-success/10 text-success">
                               <Check className="w-3 h-3 mr-1" />
                               Connected
                             </Badge>
@@ -361,7 +361,7 @@ export default function IntegrationsHub() {
                             </span>
                           </div>
                           {integration.syncStatus === 'failed' && integration.syncError && (
-                            <div className="flex items-center gap-2 mt-2 text-sm text-red-600 dark:text-red-400">
+                            <div className="flex items-center gap-2 mt-2 text-sm text-destructive">
                               <AlertTriangle className="w-4 h-4" />
                               {integration.syncError}
                             </div>
@@ -505,17 +505,17 @@ export default function IntegrationsHub() {
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <p className={`font-mono font-bold ${isRefund ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                            <p className={`font-mono font-bold ${isRefund ? 'text-destructive' : 'text-success'}`}>
                               {isRefund ? '' : '+'}{formatCurrency(txn.amount, txn.currency)}
                             </p>
                             <div className="flex items-center gap-1 justify-end">
                               {txn.isReconciled ? (
-                                <Badge variant="secondary" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs">
+                                <Badge variant="secondary" className="bg-success/10 text-success text-xs">
                                   <Check className="w-3 h-3 mr-1" />
                                   Reconciled
                                 </Badge>
                               ) : (
-                                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs">
+                                <Badge variant="secondary" className="bg-warning/10 text-warning text-xs">
                                   <Clock className="w-3 h-3 mr-1" />
                                   Pending
                                 </Badge>
@@ -541,7 +541,7 @@ export default function IntegrationsHub() {
                 <CardTitle className="text-sm font-medium">Pending Reconciliation</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">12</div>
+                <div className="text-2xl font-bold text-warning">12</div>
                 <p className="text-xs text-muted-foreground mt-1">Transactions need review</p>
               </CardContent>
             </Card>
@@ -550,7 +550,7 @@ export default function IntegrationsHub() {
                 <CardTitle className="text-sm font-medium">Auto-Matched</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">156</div>
+                <div className="text-2xl font-bold text-success">156</div>
                 <p className="text-xs text-muted-foreground mt-1">This month</p>
               </CardContent>
             </Card>
@@ -559,7 +559,7 @@ export default function IntegrationsHub() {
                 <CardTitle className="text-sm font-medium">Failed Imports</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">3</div>
+                <div className="text-2xl font-bold text-destructive">3</div>
                 <p className="text-xs text-muted-foreground mt-1">Require attention</p>
               </CardContent>
             </Card>

@@ -41,7 +41,7 @@ export function useReceiptMutations({
       toast({
         variant: 'destructive',
         title: 'Failed to update receipt',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -62,7 +62,7 @@ export function useReceiptMutations({
       toast({
         variant: 'destructive',
         title: 'Failed to post expense',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -91,7 +91,7 @@ export function useReceiptMutations({
       toast({
         variant: 'destructive',
         title: 'Failed to create expense',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -103,7 +103,7 @@ export function useReceiptMutations({
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'accounts'] });
       toast({
         title: 'Account created successfully',
-        description: `${data.nameEn} has been added.`,
+        description: `${data?.nameEn || 'Account'} has been added.`,
       });
       // The callback receives the data and currently-active account type
       // so the parent can set the appropriate account selector
@@ -113,7 +113,7 @@ export function useReceiptMutations({
       toast({
         variant: 'destructive',
         title: 'Failed to create account',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -137,7 +137,7 @@ export function useReceiptMutations({
       toast({
         variant: 'destructive',
         title: 'Failed to delete expense',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });

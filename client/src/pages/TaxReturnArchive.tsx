@@ -214,10 +214,10 @@ export default function TaxReturnArchive() {
             <CardTitle className="text-sm font-medium">
               {locale === 'ar' ? 'إقرارات ضريبة القيمة المضافة' : 'VAT Returns'}
             </CardTitle>
-            <Receipt className="w-4 h-4 text-blue-500" />
+            <Receipt className="w-4 h-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.vatReturns}</div>
+            <div className="text-2xl font-bold text-primary">{stats.vatReturns}</div>
           </CardContent>
         </Card>
 
@@ -238,10 +238,10 @@ export default function TaxReturnArchive() {
             <CardTitle className="text-sm font-medium">
               {locale === 'ar' ? 'إجمالي الضرائب المدفوعة' : 'Total Tax Paid'}
             </CardTitle>
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <CheckCircle2 className="w-4 h-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalTaxPaid)}</div>
+            <div className="text-2xl font-bold text-success">{formatCurrency(stats.totalTaxPaid)}</div>
           </CardContent>
         </Card>
       </div>

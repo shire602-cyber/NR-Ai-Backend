@@ -60,15 +60,15 @@ const ACCOUNT_TYPE_CONFIG: Record<string, {
     label: 'Revenue', 
     labelAr: 'الإيرادات',
     icon: TrendingUp,
-    colorClass: 'text-blue-600 dark:text-blue-400',
-    bgClass: 'bg-blue-50 dark:bg-blue-900/20'
+    colorClass: 'text-primary',
+    bgClass: 'bg-primary/10'
   },
   expense: { 
     label: 'Expenses', 
     labelAr: 'المصروفات',
     icon: Receipt,
-    colorClass: 'text-amber-600 dark:text-amber-400',
-    bgClass: 'bg-amber-50 dark:bg-amber-900/20'
+    colorClass: 'text-warning',
+    bgClass: 'bg-warning/10'
   }
 };
 

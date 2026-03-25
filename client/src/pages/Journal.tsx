@@ -302,7 +302,7 @@ export default function Journal() {
         const source = String(row.source || 'manual');
         if (source === 'manual') return <span className="text-muted-foreground">Manual</span>;
         const sourceColors: Record<string, string> = {
-          invoice: 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400',
+          invoice: 'bg-primary/10 text-primary',
           receipt: 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400',
           payment: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400',
           reversal: 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400',
@@ -625,15 +625,15 @@ export default function Journal() {
                     <div className="flex items-center gap-2">
                       {isBalanced ? (
                         <>
-                          <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                          <CheckCircle2 className="w-4 h-4 text-success" />
+                          <Badge variant="outline" className="bg-success/10 text-success">
                             {t.balanced}
                           </Badge>
                         </>
                       ) : (
                         <>
                           <XCircle className="w-4 h-4 text-destructive" />
-                          <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive">
                             {t.notBalanced} ({formatNumber(Math.abs(totalDebit - totalCredit), locale)})
                           </Badge>
                         </>

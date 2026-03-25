@@ -75,7 +75,7 @@ export function ReceiptUploadZone({
           className={`
             border-2 border-dashed rounded-lg p-8 text-center transition-all
             ${isDragging ? 'border-primary bg-primary/5' : 'border-border'}
-            ${processedReceipts.length > 0 ? 'border-green-500 bg-green-500/5' : ''}
+            ${processedReceipts.length > 0 ? 'border-success bg-success/5' : ''}
             hover:border-primary hover:bg-accent/50 cursor-pointer
           `}
           onClick={() => document.getElementById('file-input')?.click()}
@@ -96,7 +96,7 @@ export function ReceiptUploadZone({
 
           {processedReceipts.length > 0 ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-center gap-2 text-green-600">
+              <div className="flex items-center justify-center gap-2 text-success">
                 <CheckCircle2 className="w-5 h-5" />
                 <span>{processedReceipts.length} image(s) loaded</span>
               </div>
@@ -189,17 +189,17 @@ export function ReceiptUploadZone({
               <Badge variant="outline">{processingCount} processing</Badge>
             )}
             {completedCount > 0 && (
-              <Badge variant="outline" className="bg-green-500/10 border-green-500">
+              <Badge variant="outline" className="bg-success/10 border-success">
                 {completedCount} ready to save
               </Badge>
             )}
             {localSavedCount > 0 && (
-              <Badge variant="outline" className="bg-blue-500/10 border-blue-500">
+              <Badge variant="outline" className="bg-primary/10 border-primary">
                 {localSavedCount} saved
               </Badge>
             )}
             {errorCount > 0 && (
-              <Badge variant="outline" className="bg-red-500/10 border-red-500">
+              <Badge variant="outline" className="bg-destructive/10 border-destructive">
                 {errorCount} OCR errors
               </Badge>
             )}

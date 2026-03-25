@@ -152,7 +152,7 @@ export default function InvoiceSettings() {
                       <FormDescription>
                         Display your company logo at the top of invoices
                         {!company.logoUrl && (
-                          <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          <span className="block text-xs text-warning mt-1">
                             Note: Set your logo in Company Profile first
                           </span>
                         )}
@@ -180,7 +180,7 @@ export default function InvoiceSettings() {
                       <FormDescription>
                         Display your business address on invoices
                         {!company.businessAddress && (
-                          <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          <span className="block text-xs text-warning mt-1">
                             Note: Set your address in Company Profile first
                           </span>
                         )}
@@ -208,7 +208,7 @@ export default function InvoiceSettings() {
                       <FormDescription>
                         Display your business phone number on invoices
                         {!company.contactPhone && (
-                          <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          <span className="block text-xs text-warning mt-1">
                             Note: Set your phone in Company Profile first
                           </span>
                         )}
@@ -236,7 +236,7 @@ export default function InvoiceSettings() {
                       <FormDescription>
                         Display your business email on invoices
                         {!company.contactEmail && (
-                          <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          <span className="block text-xs text-warning mt-1">
                             Note: Set your email in Company Profile first
                           </span>
                         )}
@@ -264,7 +264,7 @@ export default function InvoiceSettings() {
                       <FormDescription>
                         Display your website URL on invoices
                         {!company.websiteUrl && (
-                          <span className="block text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          <span className="block text-xs text-warning mt-1">
                             Note: Set your website in Company Profile first
                           </span>
                         )}

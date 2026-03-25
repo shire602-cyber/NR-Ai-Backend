@@ -150,10 +150,10 @@ export default function AIFeatures() {
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'critical': return 'bg-red-500';
+      case 'critical': return 'bg-destructive';
       case 'high': return 'bg-orange-500';
-      case 'medium': return 'bg-yellow-500';
-      default: return 'bg-blue-500';
+      case 'medium': return 'bg-warning';
+      default: return 'bg-primary';
     }
   };
 
@@ -280,7 +280,7 @@ export default function AIFeatures() {
             <Card className={`${mounted ? 'animate-in fade-in slide-in-from-bottom-4' : ''}`} style={{ animationDuration: '500ms' }}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Resolved Today</CardTitle>
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <CheckCircle2 className="w-5 h-5 text-success" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold" data-testid="text-resolved-today">
@@ -332,7 +332,7 @@ export default function AIFeatures() {
               onClick={() => generateForecastMutation.mutate()}
               loading={generateForecastMutation.isPending}
               buttonText="Generate Forecast"
-              color="bg-blue-500"
+              color="bg-primary"
             />
           </div>
 
@@ -401,7 +401,7 @@ export default function AIFeatures() {
           ) : unresolvedAlerts.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <CheckCircle2 className="w-12 h-12 text-green-500 mb-4" />
+                <CheckCircle2 className="w-12 h-12 text-success mb-4" />
                 <h3 className="text-lg font-semibold">All Clear</h3>
                 <p className="text-muted-foreground">No anomalies detected in your transactions</p>
                 <Button 
@@ -518,26 +518,26 @@ export default function AIFeatures() {
                     <CardContent className="space-y-4">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground flex items-center gap-1">
-                          <ArrowUpRight className="w-4 h-4 text-green-500" />
+                          <ArrowUpRight className="w-4 h-4 text-success" />
                           Predicted Inflow
                         </span>
-                        <span className="font-semibold text-green-600 dark:text-green-400">
+                        <span className="font-semibold text-success">
                           {formatCurrency(forecast.predictedInflow)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground flex items-center gap-1">
-                          <ArrowDownRight className="w-4 h-4 text-red-500" />
+                          <ArrowDownRight className="w-4 h-4 text-destructive" />
                           Predicted Outflow
                         </span>
-                        <span className="font-semibold text-red-600 dark:text-red-400">
+                        <span className="font-semibold text-destructive">
                           {formatCurrency(forecast.predictedOutflow)}
                         </span>
                       </div>
                       <div className="border-t pt-4">
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium">Net Balance</span>
-                          <span className={`text-lg font-bold ${forecast.predictedBalance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          <span className={`text-lg font-bold ${forecast.predictedBalance >= 0 ? 'text-success' : 'text-destructive'}`}>
                             {formatCurrency(forecast.predictedBalance)}
                           </span>
                         </div>
@@ -608,15 +608,15 @@ export default function AIFeatures() {
               <CardContent>
                 <ul className="space-y-2 text-sm text-muted-foreground mb-4">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     UAE-specific vendor recognition
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Learns from your corrections
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Batch processing support
                   </li>
                 </ul>
@@ -635,8 +635,8 @@ export default function AIFeatures() {
             <Card className="hover-elevate">
               <CardHeader>
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-blue-500 bg-opacity-15 dark:bg-opacity-25 flex items-center justify-center">
-                    <RefreshCw className="w-6 h-6 text-blue-500" />
+                  <div className="w-12 h-12 rounded-lg bg-primary bg-opacity-15 dark:bg-opacity-25 flex items-center justify-center">
+                    <RefreshCw className="w-6 h-6 text-primary" />
                   </div>
                   <div>
                     <CardTitle>Bank Reconciliation</CardTitle>
@@ -647,15 +647,15 @@ export default function AIFeatures() {
               <CardContent>
                 <ul className="space-y-2 text-sm text-muted-foreground mb-4">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Import bank statements (CSV)
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Smart matching suggestions
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     One-click reconciliation
                   </li>
                 </ul>
@@ -674,8 +674,8 @@ export default function AIFeatures() {
             <Card className="hover-elevate">
               <CardHeader>
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-green-500 bg-opacity-15 dark:bg-opacity-25 flex items-center justify-center">
-                    <Lightbulb className="w-6 h-6 text-green-500" />
+                  <div className="w-12 h-12 rounded-lg bg-success bg-opacity-15 dark:bg-opacity-25 flex items-center justify-center">
+                    <Lightbulb className="w-6 h-6 text-success" />
                   </div>
                   <div>
                     <CardTitle>Financial Insights</CardTitle>
@@ -686,15 +686,15 @@ export default function AIFeatures() {
               <CardContent>
                 <ul className="space-y-2 text-sm text-muted-foreground mb-4">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Cost optimization tips
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Cash flow warnings
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     UAE tax compliance alerts
                   </li>
                 </ul>
@@ -722,15 +722,15 @@ export default function AIFeatures() {
               <CardContent>
                 <ul className="space-y-2 text-sm text-muted-foreground mb-4">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Duplicate detection
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Unusual pattern alerts
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 text-success" />
                     Real-time notifications
                   </li>
                 </ul>
@@ -826,15 +826,15 @@ export default function AIFeatures() {
               <Label>Current Settings</Label>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <CheckCircle2 className="w-4 h-4 text-success" />
                   UAE-specific vendor recognition: Enabled
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <CheckCircle2 className="w-4 h-4 text-success" />
                   Learning from corrections: Enabled
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <CheckCircle2 className="w-4 h-4 text-success" />
                   Batch processing: Ready
                 </li>
               </ul>

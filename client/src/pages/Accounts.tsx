@@ -164,12 +164,12 @@ export default function Accounts() {
 
   const getTypeBadgeColor = (type: string) => {
     switch (type) {
-      case 'asset': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400';
-      case 'liability': return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400';
+      case 'asset': return 'bg-primary/10 text-primary';
+      case 'liability': return 'bg-destructive/10 text-destructive';
       case 'equity': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400';
-      case 'income': return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400';
-      case 'expense': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400';
-      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
+      case 'income': return 'bg-success/10 text-success';
+      case 'expense': return 'bg-warning/10 text-warning';
+      default: return 'bg-muted text-foreground dark:text-muted-foreground';
     }
   };
 

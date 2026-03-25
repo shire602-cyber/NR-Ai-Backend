@@ -234,7 +234,7 @@ export default function AdvancedReports() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${cashFlowSummary.operating >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-2xl font-bold ${cashFlowSummary.operating >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {formatCurrency(cashFlowSummary.operating)}
                 </div>
               </CardContent>
@@ -246,7 +246,7 @@ export default function AdvancedReports() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${cashFlowSummary.investing >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-2xl font-bold ${cashFlowSummary.investing >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {formatCurrency(cashFlowSummary.investing)}
                 </div>
               </CardContent>
@@ -258,7 +258,7 @@ export default function AdvancedReports() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${cashFlowSummary.financing >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-2xl font-bold ${cashFlowSummary.financing >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {formatCurrency(cashFlowSummary.financing)}
                 </div>
               </CardContent>
@@ -270,7 +270,7 @@ export default function AdvancedReports() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${cashFlowSummary.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-2xl font-bold ${cashFlowSummary.net >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {formatCurrency(cashFlowSummary.net)}
                 </div>
               </CardContent>
@@ -343,11 +343,11 @@ export default function AdvancedReports() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{locale === 'ar' ? 'حالي' : 'Current'}</span>
-                    <span className="font-mono text-green-600">{formatCurrency(agingSummary.receivables.current)}</span>
+                    <span className="font-mono text-success">{formatCurrency(agingSummary.receivables.current)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{locale === 'ar' ? 'متأخر' : 'Overdue'}</span>
-                    <span className="font-mono text-red-600">{formatCurrency(agingSummary.receivables.overdue)}</span>
+                    <span className="font-mono text-destructive">{formatCurrency(agingSummary.receivables.overdue)}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between font-medium">
@@ -367,11 +367,11 @@ export default function AdvancedReports() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{locale === 'ar' ? 'حالي' : 'Current'}</span>
-                    <span className="font-mono text-green-600">{formatCurrency(agingSummary.payables.current)}</span>
+                    <span className="font-mono text-success">{formatCurrency(agingSummary.payables.current)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{locale === 'ar' ? 'متأخر' : 'Overdue'}</span>
-                    <span className="font-mono text-red-600">{formatCurrency(agingSummary.payables.overdue)}</span>
+                    <span className="font-mono text-destructive">{formatCurrency(agingSummary.payables.overdue)}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between font-medium">
@@ -452,7 +452,7 @@ export default function AdvancedReports() {
                           <TableCell className="text-right font-mono">{formatCurrency(item.days30)}</TableCell>
                           <TableCell className="text-right font-mono">{formatCurrency(item.days60)}</TableCell>
                           <TableCell className="text-right font-mono">{formatCurrency(item.days90)}</TableCell>
-                          <TableCell className="text-right font-mono text-red-600">{formatCurrency(item.over90)}</TableCell>
+                          <TableCell className="text-right font-mono text-destructive">{formatCurrency(item.over90)}</TableCell>
                           <TableCell className="text-right font-mono font-medium">{formatCurrency(item.total)}</TableCell>
                         </TableRow>
                       ))}
@@ -495,13 +495,13 @@ export default function AdvancedReports() {
                           <TableCell className="font-medium">{item.metric}</TableCell>
                           <TableCell className="text-right font-mono">{formatCurrency(item.current)}</TableCell>
                           <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(item.previous)}</TableCell>
-                          <TableCell className={`text-right font-mono ${item.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <TableCell className={`text-right font-mono ${item.change >= 0 ? 'text-success' : 'text-destructive'}`}>
                             <div className="flex items-center justify-end gap-1">
                               {item.change >= 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
                               {formatCurrency(Math.abs(item.change))}
                             </div>
                           </TableCell>
-                          <TableCell className={`text-right font-mono ${item.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <TableCell className={`text-right font-mono ${item.changePercent >= 0 ? 'text-success' : 'text-destructive'}`}>
                             {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(1)}%
                           </TableCell>
                         </TableRow>

@@ -9,7 +9,7 @@ async function throwIfResNotOk(res: Response) {
       const contentType = res.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const json = await res.json();
-        errorMessage = json.message || json.error || JSON.stringify(json);
+        errorMessage = json?.message || json?.error || JSON.stringify(json);
       } else {
         const text = await res.text();
         // If it's HTML, try to extract meaningful error or just use status

@@ -174,9 +174,9 @@ export default function TeamManagement() {
     const roleInfo = ROLES.find(r => r.value === role);
     const colors: Record<string, string> = {
       owner: 'bg-purple-100 text-purple-800',
-      cfo: 'bg-blue-100 text-blue-800',
-      accountant: 'bg-green-100 text-green-800',
-      employee: 'bg-gray-100 text-gray-800',
+      cfo: 'bg-primary/10 text-primary',
+      accountant: 'bg-success/10 text-success',
+      employee: 'bg-muted text-foreground',
     };
     
     return (
@@ -290,7 +290,7 @@ export default function TeamManagement() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.accountants}</div>
+            <div className="text-2xl font-bold text-success">{stats.accountants}</div>
           </CardContent>
         </Card>
         <Card>
@@ -300,7 +300,7 @@ export default function TeamManagement() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-600">{stats.employees}</div>
+            <div className="text-2xl font-bold text-muted-foreground">{stats.employees}</div>
           </CardContent>
         </Card>
       </div>
@@ -528,7 +528,7 @@ export default function TeamManagement() {
                     {ROLES.map(role => (
                       <TableCell key={role.value} className="text-center">
                         {permission.roles.includes(role.value) ? (
-                          <Check className="w-4 h-4 mx-auto text-green-600" />
+                          <Check className="w-4 h-4 mx-auto text-success" />
                         ) : (
                           <X className="w-4 h-4 mx-auto text-muted-foreground" />
                         )}

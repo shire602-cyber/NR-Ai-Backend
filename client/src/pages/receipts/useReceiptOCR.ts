@@ -273,7 +273,7 @@ export function useReceiptOCR(companyId: string | undefined) {
         updated[index] = {
           ...updated[index],
           status: 'error',
-          error: error.message || 'OCR processing failed. Try a clearer image.',
+          error: error?.message || 'OCR processing failed. Try a clearer image.',
           progress: 0,
         };
         return updated;

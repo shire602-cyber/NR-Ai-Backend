@@ -345,7 +345,7 @@ export default function Admin() {
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="stat-total-users">{stats?.totalUsers || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-green-600">+12%</span> from last month
+                  <span className="text-success">+12%</span> from last month
                 </p>
               </CardContent>
             </Card>
@@ -358,7 +358,7 @@ export default function Admin() {
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="stat-total-companies">{stats?.totalCompanies || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-green-600">+8%</span> from last month
+                  <span className="text-success">+8%</span> from last month
                 </p>
               </CardContent>
             </Card>
@@ -373,7 +373,7 @@ export default function Admin() {
                   AED {(stats?.monthlyRevenue || 0).toLocaleString()}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-green-600">+15%</span> from last month
+                  <span className="text-success">+15%</span> from last month
                 </p>
               </CardContent>
             </Card>
@@ -400,31 +400,31 @@ export default function Admin() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <CheckCircle className="w-4 h-4 text-success" />
                     <span>Database</span>
                   </div>
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Healthy</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20">Healthy</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <CheckCircle className="w-4 h-4 text-success" />
                     <span>API Services</span>
                   </div>
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Operational</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20">Operational</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <CheckCircle className="w-4 h-4 text-success" />
                     <span>AI Services (OpenAI)</span>
                   </div>
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Connected</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20">Connected</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <AlertTriangle className="w-4 h-4 text-warning" />
                     <span>WhatsApp Integration</span>
                   </div>
-                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Needs Config</Badge>
+                  <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">Needs Config</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -520,9 +520,9 @@ export default function Admin() {
                 {auditLogs.slice(0, 5).map((log) => (
                   <div key={log.id} className="flex items-center gap-4">
                     <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      {log.action === 'create' && <Plus className="w-4 h-4 text-green-600" />}
-                      {log.action === 'update' && <Edit2 className="w-4 h-4 text-blue-600" />}
-                      {log.action === 'delete' && <Trash2 className="w-4 h-4 text-red-600" />}
+                      {log.action === 'create' && <Plus className="w-4 h-4 text-success" />}
+                      {log.action === 'update' && <Edit2 className="w-4 h-4 text-primary" />}
+                      {log.action === 'delete' && <Trash2 className="w-4 h-4 text-destructive" />}
                       {log.action === 'login' && <Users className="w-4 h-4 text-muted-foreground" />}
                     </div>
                     <div className="flex-1">
@@ -717,7 +717,7 @@ export default function Admin() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="bg-green-50 text-green-700">Active</Badge>
+                          <Badge variant="outline" className="bg-success/10 text-success">Active</Badge>
                         </TableCell>
                         <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
@@ -1134,7 +1134,7 @@ export default function Admin() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Status</span>
-                  <Badge variant="outline" className="bg-amber-50 text-amber-700">Not Configured</Badge>
+                  <Badge variant="outline" className="bg-warning/10 text-warning">Not Configured</Badge>
                 </div>
                 <div className="space-y-2">
                   <Label>Stripe Public Key</Label>
@@ -1164,7 +1164,7 @@ export default function Admin() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Status</span>
-                  <Badge variant="outline" className="bg-green-50 text-green-700">Active</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success">Active</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   WhatsApp messaging works through your personal WhatsApp — no API setup needed.
@@ -1193,7 +1193,7 @@ export default function Admin() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Status</span>
-                  <Badge variant="outline" className="bg-green-50 text-green-700">Connected</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success">Connected</Badge>
                 </div>
                 <div className="space-y-2">
                   <Label>API Key</Label>
@@ -1232,7 +1232,7 @@ export default function Admin() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Status</span>
-                  <Badge variant="outline" className="bg-green-50 text-green-700">Connected</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success">Connected</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Google Sheets integration is configured and ready to use.

@@ -73,14 +73,14 @@ export function ReceiptProcessingQueue({
                 )}
 
                 {receipt.status === 'error' && (
-                  <div className="flex items-center gap-2 text-red-600">
+                  <div className="flex items-center gap-2 text-destructive">
                     <XCircle className="w-4 h-4" />
                     <span className="text-sm">{receipt.error}</span>
                   </div>
                 )}
 
                 {receipt.status === 'saved' && (
-                  <div className="flex items-center gap-2 text-blue-600">
+                  <div className="flex items-center gap-2 text-primary">
                     <CheckCircle2 className="w-4 h-4" />
                     <span className="text-sm font-medium">Successfully saved to database</span>
                   </div>

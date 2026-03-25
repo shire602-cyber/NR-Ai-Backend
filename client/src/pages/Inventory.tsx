@@ -254,11 +254,11 @@ export default function Inventory() {
   const getMovementTypeBadge = (type: string) => {
     switch (type) {
       case 'purchase':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Purchase</Badge>;
+        return <Badge className="bg-success/10 text-success hover:bg-success/10">Purchase</Badge>;
       case 'sale':
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Sale</Badge>;
+        return <Badge className="bg-primary/10 text-primary hover:bg-primary/10">Sale</Badge>;
       case 'adjustment':
-        return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Adjustment</Badge>;
+        return <Badge className="bg-warning/10 text-warning hover:bg-warning/10">Adjustment</Badge>;
       case 'return':
         return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Return</Badge>;
       default:
@@ -404,7 +404,7 @@ export default function Inventory() {
                             <TableCell>{product.unit}</TableCell>
                             <TableCell>
                               {product.isActive ? (
-                                <Badge variant="secondary" className="bg-green-100 text-green-800">Active</Badge>
+                                <Badge variant="secondary" className="bg-success/10 text-success">Active</Badge>
                               ) : (
                                 <Badge variant="secondary">{t.inactive || 'Inactive'}</Badge>
                               )}

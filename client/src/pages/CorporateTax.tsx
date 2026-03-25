@@ -62,9 +62,9 @@ interface CalculationResult {
 const statusBadge = (status: string) => {
   switch (status) {
     case 'filed':
-      return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600"><CheckCircle2 className="w-3 h-3 mr-1" />Filed</Badge>;
+      return <Badge variant="default" className="bg-primary hover:bg-primary/90"><CheckCircle2 className="w-3 h-3 mr-1" />Filed</Badge>;
     case 'paid':
-      return <Badge variant="default" className="bg-green-500 hover:bg-green-600"><Banknote className="w-3 h-3 mr-1" />Paid</Badge>;
+      return <Badge variant="default" className="bg-success hover:bg-success"><Banknote className="w-3 h-3 mr-1" />Paid</Badge>;
     default:
       return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" />Draft</Badge>;
   }
@@ -292,7 +292,7 @@ export default function CorporateTax() {
                   </div>
                   <div className="flex justify-between">
                     <span>Total Expenses</span>
-                    <span className="font-medium text-red-600">({formatCurrency(adjustedCalculation.totalExpenses, 'AED', locale)})</span>
+                    <span className="font-medium text-destructive">({formatCurrency(adjustedCalculation.totalExpenses, 'AED', locale)})</span>
                   </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="font-semibold">Gross Profit</span>
@@ -433,7 +433,7 @@ export default function CorporateTax() {
                                 disabled={updateStatusMutation.isPending}
                                 title="Mark as Filed"
                               >
-                                <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                                <CheckCircle2 className="w-4 h-4 text-primary" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -454,7 +454,7 @@ export default function CorporateTax() {
                               disabled={updateStatusMutation.isPending}
                               title="Mark as Paid"
                             >
-                              <Banknote className="w-4 h-4 text-green-500" />
+                              <Banknote className="w-4 h-4 text-success" />
                             </Button>
                           )}
                         </div>

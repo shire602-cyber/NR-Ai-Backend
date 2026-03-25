@@ -135,7 +135,7 @@ export function ReceiptList({
                         {receipt.category || 'Uncategorized'}
                       </Badge>
                       {receipt.posted && (
-                        <Badge variant="default" className="bg-green-600">
+                        <Badge variant="default" className="bg-success">
                           Posted
                         </Badge>
                       )}

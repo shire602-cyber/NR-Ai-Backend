@@ -77,11 +77,11 @@ export default function Referrals() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'rewarded':
-        return <Badge className="bg-green-500"><Trophy className="w-3 h-3 mr-1" />Rewarded</Badge>;
+        return <Badge className="bg-success"><Trophy className="w-3 h-3 mr-1" />Rewarded</Badge>;
       case 'qualified':
-        return <Badge className="bg-blue-500"><CheckCircle className="w-3 h-3 mr-1" />Qualified</Badge>;
+        return <Badge className="bg-primary"><CheckCircle className="w-3 h-3 mr-1" />Qualified</Badge>;
       case 'signed_up':
-        return <Badge className="bg-amber-500"><Users className="w-3 h-3 mr-1" />Signed Up</Badge>;
+        return <Badge className="bg-warning"><Users className="w-3 h-3 mr-1" />Signed Up</Badge>;
       case 'pending':
         return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
       default:
@@ -125,7 +125,7 @@ export default function Referrals() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Successful</CardTitle>
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-success" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="stat-successful">
@@ -138,7 +138,7 @@ export default function Referrals() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Pending</CardTitle>
-                <Clock className="h-4 w-4 text-amber-500" />
+                <Clock className="h-4 w-4 text-warning" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="stat-pending">
@@ -151,7 +151,7 @@ export default function Referrals() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Rewards Earned</CardTitle>
-                <DollarSign className="h-4 w-4 text-green-500" />
+                <DollarSign className="h-4 w-4 text-success" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="stat-rewards">

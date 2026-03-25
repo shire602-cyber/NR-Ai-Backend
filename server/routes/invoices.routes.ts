@@ -534,6 +534,9 @@ export function registerInvoiceRoutes(app: Express) {
         return res.status(500).json({ message: `Accounts Receivable account (${ACCOUNT_CODES.ACCOUNTS_RECEIVABLE}) not found for company ${invoice.companyId}` });
       }
 
+      // Ensure fiscal year is open before recording payment
+      await assertFiscalYearOpen(invoice.companyId, new Date());
+
       // Wrap payment journal entry in transaction
       await (db as any).transaction(async (tx: any) => {
         const now = new Date();

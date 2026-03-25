@@ -113,7 +113,7 @@ export default function Analytics() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Errors</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="stat-errors">
@@ -278,10 +278,10 @@ export default function Analytics() {
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-2 h-2 rounded-full ${
-                            event.eventType === 'error' ? 'bg-red-500' :
-                            event.eventType === 'page_view' ? 'bg-blue-500' :
-                            event.eventType === 'feature_use' ? 'bg-green-500' :
-                            'bg-gray-500'
+                            event.eventType === 'error' ? 'bg-destructive' :
+                            event.eventType === 'page_view' ? 'bg-primary' :
+                            event.eventType === 'feature_use' ? 'bg-success' :
+                            'bg-muted0'
                           }`} />
                           <div>
                             <div className="font-medium">{event.eventName?.replace(/_/g, ' ')}</div>

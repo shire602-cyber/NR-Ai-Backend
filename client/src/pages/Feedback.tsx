@@ -89,11 +89,11 @@ export default function Feedback() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'resolved':
-        return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" />Resolved</Badge>;
+        return <Badge className="bg-success"><CheckCircle className="w-3 h-3 mr-1" />Resolved</Badge>;
       case 'in_progress':
-        return <Badge className="bg-blue-500"><Clock className="w-3 h-3 mr-1" />In Progress</Badge>;
+        return <Badge className="bg-primary"><Clock className="w-3 h-3 mr-1" />In Progress</Badge>;
       case 'reviewed':
-        return <Badge className="bg-amber-500"><AlertCircle className="w-3 h-3 mr-1" />Reviewed</Badge>;
+        return <Badge className="bg-warning"><AlertCircle className="w-3 h-3 mr-1" />Reviewed</Badge>;
       case 'new':
         return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" />New</Badge>;
       default:
@@ -197,7 +197,7 @@ export default function Feedback() {
                         <Star 
                           className={`w-8 h-8 ${
                             star <= formData.rating 
-                              ? 'fill-amber-400 text-amber-400' 
+                              ? 'fill-warning text-warning' 
                               : 'text-muted-foreground'
                           }`} 
                         />
@@ -313,7 +313,7 @@ export default function Feedback() {
                                 key={star}
                                 className={`w-4 h-4 ${
                                   star <= feedback.rating! 
-                                    ? 'fill-amber-400 text-amber-400' 
+                                    ? 'fill-warning text-warning' 
                                     : 'text-muted-foreground'
                                 }`} 
                               />

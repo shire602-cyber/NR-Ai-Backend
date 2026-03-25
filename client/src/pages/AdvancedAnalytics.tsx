@@ -197,17 +197,17 @@ export default function AdvancedAnalytics() {
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
-      case 'up': return <ArrowUp className="w-4 h-4 text-green-600 dark:text-green-400" />;
-      case 'down': return <ArrowDown className="w-4 h-4 text-red-600 dark:text-red-400" />;
+      case 'up': return <ArrowUp className="w-4 h-4 text-success" />;
+      case 'down': return <ArrowDown className="w-4 h-4 text-destructive" />;
       default: return <Minus className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
   const getInsightIcon = (type: string) => {
     switch (type) {
-      case 'opportunity': return <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />;
-      case 'warning': return <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
-      case 'trend': return <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />;
+      case 'opportunity': return <TrendingUp className="w-5 h-5 text-success" />;
+      case 'warning': return <AlertTriangle className="w-5 h-5 text-warning" />;
+      case 'trend': return <Activity className="w-5 h-5 text-primary" />;
       case 'recommendation': return <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />;
       default: return <Brain className="w-5 h-5" />;
     }
@@ -218,11 +218,11 @@ export default function AdvancedAnalytics() {
   return (
     <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="relative overflow-hidden rounded-lg bg-gradient-to-br from-blue-600/10 via-purple-600/5 to-transparent border border-blue-600/20 p-8">
+      <div className="relative overflow-hidden rounded-lg bg-gradient-to-br from-blue-600/10 via-purple-600/5 to-transparent border border-primary/20 p-8">
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 rounded-lg bg-blue-600/20">
-              <BarChart3 className="w-6 h-6 text-blue-600" />
+            <div className="p-3 rounded-lg bg-primary/20">
+              <BarChart3 className="w-6 h-6 text-primary" />
             </div>
             <div>
               <h1 className="text-3xl font-bold" data-testid="text-analytics-title">Advanced Analytics & Forecasts</h1>
@@ -232,7 +232,7 @@ export default function AdvancedAnalytics() {
             </div>
           </div>
         </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-600/5 rounded-full -ml-24 -mb-24 blur-3xl" />
       </div>
 
@@ -290,10 +290,10 @@ export default function AdvancedAnalytics() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Projected Inflow</CardTitle>
-                <ArrowUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <ArrowUp className="w-4 h-4 text-success" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
+                <div className="text-2xl font-bold font-mono text-success">
                   {formatCurrency(520000, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Next {forecastPeriod === '3months' ? '3' : forecastPeriod === '6months' ? '6' : '12'} months</p>
@@ -303,23 +303,23 @@ export default function AdvancedAnalytics() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Projected Outflow</CardTitle>
-                <ArrowDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <ArrowDown className="w-4 h-4 text-primary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
+                <div className="text-2xl font-bold font-mono text-primary">
                   {formatCurrency(423000, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Estimated expenses</p>
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate border-green-200 dark:border-green-900">
+            <Card className="hover-elevate border-success/20">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Net Cash Position</CardTitle>
-                <Wallet className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <Wallet className="w-4 h-4 text-success" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
+                <div className="text-2xl font-bold font-mono text-success">
                   {formatCurrency(97000, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Projected balance</p>
@@ -445,13 +445,13 @@ export default function AdvancedAnalytics() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate border-green-200 dark:border-green-900">
+            <Card className="hover-elevate border-success/20">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Net Variance</CardTitle>
-                <PiggyBank className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <PiggyBank className="w-4 h-4 text-success" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
+                <div className="text-2xl font-bold font-mono text-success">
                   {formatCurrency(-3400, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Under budget</p>
@@ -495,7 +495,7 @@ export default function AdvancedAnalytics() {
                   return (
                     <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover-elevate">
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-8 rounded-full ${isOverBudget ? 'bg-red-500' : item.variance === 0 ? 'bg-gray-400' : 'bg-green-500'}`} />
+                        <div className={`w-2 h-8 rounded-full ${isOverBudget ? 'bg-destructive' : item.variance === 0 ? 'bg-muted-foreground' : 'bg-success'}`} />
                         <div>
                           <p className="font-medium">{item.category}</p>
                           <p className="text-xs text-muted-foreground">
@@ -504,7 +504,7 @@ export default function AdvancedAnalytics() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className={`font-mono font-bold ${isOverBudget ? 'text-red-600 dark:text-red-400' : item.variance === 0 ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400'}`}>
+                        <p className={`font-mono font-bold ${isOverBudget ? 'text-destructive' : item.variance === 0 ? 'text-muted-foreground' : 'text-success'}`}>
                           {item.variance > 0 ? '+' : ''}{formatCurrency(item.variance, 'AED')}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -544,7 +544,7 @@ export default function AdvancedAnalytics() {
               return (
                 <Card key={idx} className="hover-elevate relative overflow-hidden">
                   <div className={`absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl opacity-20 
-                    ${isPositiveTrend ? 'bg-green-500' : 'bg-red-500'}`} />
+                    ${isPositiveTrend ? 'bg-success' : 'bg-destructive'}`} />
                   <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 gap-2">
                     <div>
                       <CardTitle className="text-sm font-medium">{kpi.label}</CardTitle>
@@ -555,11 +555,11 @@ export default function AdvancedAnalytics() {
                       )}
                     </div>
                     {meetsOrExceedsBenchmark ? (
-                      <Badge variant="secondary" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                      <Badge variant="secondary" className="bg-success/10 text-success">
                         On Track
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                      <Badge variant="secondary" className="bg-warning/10 text-warning">
                         Below Target
                       </Badge>
                     )}
@@ -567,12 +567,12 @@ export default function AdvancedAnalytics() {
                   <CardContent>
                     <div className="flex items-end justify-between">
                       <div>
-                        <p className={`text-3xl font-bold ${isPositiveTrend ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        <p className={`text-3xl font-bold ${isPositiveTrend ? 'text-success' : 'text-destructive'}`}>
                           {kpi.value.toFixed(1)}<span className="text-lg">{kpi.unit}</span>
                         </p>
                         <div className="flex items-center gap-1 mt-2">
                           {getTrendIcon(kpi.trend)}
-                          <span className={`text-xs font-medium ${isPositiveTrend ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          <span className={`text-xs font-medium ${isPositiveTrend ? 'text-success' : 'text-destructive'}`}>
                             {Math.abs(kpi.changePercent).toFixed(1)}% vs last period
                           </span>
                         </div>
@@ -629,9 +629,9 @@ export default function AdvancedAnalytics() {
           <div className="grid gap-4">
             {sampleInsights.map((insight) => {
               const priorityColors = {
-                high: 'border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/20',
-                medium: 'border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20',
-                low: 'border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20',
+                high: 'border-destructive/20 bg-destructive/10/50',
+                medium: 'border-warning/20 bg-warning/10/50',
+                low: 'border-primary/20 bg-primary/10/50',
               };
 
               return (

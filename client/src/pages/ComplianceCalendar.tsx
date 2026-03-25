@@ -48,12 +48,12 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  vat_filing: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  vat_filing: 'bg-primary/10 text-primary',
   corporate_tax: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
-  payment: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  payment: 'bg-success/10 text-success',
   document_upload: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
   review: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300',
-  other: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+  other: 'bg-muted text-foreground dark:text-muted-foreground',
 };
 
 export default function ComplianceCalendar() {
@@ -234,7 +234,7 @@ export default function ComplianceCalendar() {
                       )}
                     </div>
                     {hasOverdue && (
-                      <AlertTriangle className="w-3 h-3 text-red-500 absolute top-1 right-1" />
+                      <AlertTriangle className="w-3 h-3 text-destructive absolute top-1 right-1" />
                     )}
                   </div>
                 );
@@ -326,9 +326,9 @@ export default function ComplianceCalendar() {
           </Card>
 
           {overdueEvents.length > 0 && (
-            <Card className="border-red-500">
+            <Card className="border-destructive">
               <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2 text-red-600">
+                <CardTitle className="text-sm flex items-center gap-2 text-destructive">
                   <AlertTriangle className="w-4 h-4" />
                   {locale === 'ar' ? 'متأخرة' : 'Overdue'}
                 </CardTitle>
@@ -337,7 +337,7 @@ export default function ComplianceCalendar() {
                 <ScrollArea className="h-32">
                   <div className="space-y-2">
                     {overdueEvents.map(event => (
-                      <div key={event.id} className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950 rounded-md">
+                      <div key={event.id} className="flex items-center justify-between p-2 bg-destructive/10 rounded-md">
                         <span className="text-sm font-medium truncate">{event.title}</span>
                         <Badge variant="destructive" className="text-xs">
                           {Math.abs(differenceInDays(event.date, new Date()))}d ago

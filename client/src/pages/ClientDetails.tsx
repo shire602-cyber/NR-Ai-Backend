@@ -154,7 +154,7 @@ export default function ClientDetails() {
           <CardContent>
             <div className="text-2xl font-bold">{documents.length}</div>
             {expiredDocs > 0 && (
-              <p className="text-xs text-red-500">{expiredDocs} expired</p>
+              <p className="text-xs text-destructive">{expiredDocs} expired</p>
             )}
           </CardContent>
         </Card>
@@ -167,7 +167,7 @@ export default function ClientDetails() {
           <CardContent>
             <div className="text-2xl font-bold">{complianceTasks.length}</div>
             {overdueTasks > 0 && (
-              <p className="text-xs text-red-500">{overdueTasks} overdue</p>
+              <p className="text-xs text-destructive">{overdueTasks} overdue</p>
             )}
           </CardContent>
         </Card>
@@ -262,11 +262,11 @@ export default function ClientDetails() {
                       <div key={task.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex items-center gap-2">
                           {task.status === 'completed' ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            <CheckCircle2 className="w-4 h-4 text-success" />
                           ) : new Date(task.dueDate) < new Date() ? (
-                            <AlertTriangle className="w-4 h-4 text-red-500" />
+                            <AlertTriangle className="w-4 h-4 text-destructive" />
                           ) : (
-                            <Clock className="w-4 h-4 text-blue-500" />
+                            <Clock className="w-4 h-4 text-primary" />
                           )}
                           <span className={task.status === 'completed' ? 'line-through opacity-60' : ''}>
                             {task.title}

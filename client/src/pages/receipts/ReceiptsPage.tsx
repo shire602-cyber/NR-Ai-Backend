@@ -182,7 +182,7 @@ export default function ReceiptsPage() {
         successCount++;
       } catch (error: any) {
         console.error('Failed to save receipt:', error);
-        const errorMessage = error.message || 'Failed to save to database';
+        const errorMessage = error?.message || 'Failed to save to database';
 
         setProcessedReceipts((prev) => {
           const updated = [...prev];

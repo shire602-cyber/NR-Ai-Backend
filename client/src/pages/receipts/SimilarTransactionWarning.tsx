@@ -26,7 +26,7 @@ export function SimilarTransactionWarning({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <XCircle className="w-5 h-5 text-yellow-500" />
+            <XCircle className="w-5 h-5 text-warning" />
             Similar Transactions Found
           </DialogTitle>
           <DialogDescription>

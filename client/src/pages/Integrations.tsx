@@ -241,7 +241,7 @@ export default function Integrations() {
                   <CardTitle className="text-lg">Google Sheets</CardTitle>
                   <Badge 
                     variant={integrationStatus?.googleSheets?.connected ? 'default' : 'secondary'}
-                    className={integrationStatus?.googleSheets?.connected ? 'bg-green-500' : ''}
+                    className={integrationStatus?.googleSheets?.connected ? 'bg-success' : ''}
                     data-testid="google-sheets-status"
                   >
                     {integrationStatus?.googleSheets?.connected ? (
@@ -403,7 +403,7 @@ export default function Integrations() {
               <div className="flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-lg">WhatsApp</CardTitle>
-                  <Badge variant="default" className="bg-green-500" data-testid="whatsapp-status">
+                  <Badge variant="default" className="bg-success" data-testid="whatsapp-status">
                     <Check className="w-3 h-3 mr-1" /> {locale === 'en' ? 'Ready' : 'جاهز'}
                   </Badge>
                 </div>
@@ -423,7 +423,7 @@ export default function Integrations() {
                 </p>
                 <Button
                   variant="default"
-                  className="gap-2 w-full bg-green-600 hover:bg-green-700"
+                  className="gap-2 w-full bg-success hover:bg-success"
                   onClick={() => window.location.href = '/whatsapp'}
                   data-testid="button-go-whatsapp"
                 >
@@ -508,8 +508,8 @@ export default function Integrations() {
                     data-testid={`sync-history-${sync.id}`}
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                        <SiGoogle className="w-5 h-5 text-green-600" />
+                      <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
+                        <SiGoogle className="w-5 h-5 text-success" />
                       </div>
                       <div>
                         <div className="font-medium flex items-center gap-2">

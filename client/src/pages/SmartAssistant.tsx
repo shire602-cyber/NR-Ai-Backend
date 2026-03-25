@@ -154,21 +154,21 @@ export default function SmartAssistant() {
   };
 
   const quickQuestions = [
-    { icon: DollarSign, text: "What were our total sales this month?", color: "text-green-600 dark:text-green-400" },
+    { icon: DollarSign, text: "What were our total sales this month?", color: "text-success" },
     { icon: Receipt, text: "Show me pending invoices", color: "text-orange-600 dark:text-orange-400" },
-    { icon: TrendingUp, text: "What's my profit margin?", color: "text-blue-600 dark:text-blue-400" },
-    { icon: TrendingDown, text: "What are my biggest expenses?", color: "text-red-600 dark:text-red-400" },
+    { icon: TrendingUp, text: "What's my profit margin?", color: "text-primary" },
+    { icon: TrendingDown, text: "What are my biggest expenses?", color: "text-destructive" },
     { icon: FileText, text: "How many invoices are unpaid?", color: "text-purple-600 dark:text-purple-400" },
-    { icon: Lightbulb, text: "Give me financial insights", color: "text-yellow-600 dark:text-yellow-400" },
+    { icon: Lightbulb, text: "Give me financial insights", color: "text-warning" },
   ];
 
   const arabicQuickQuestions = [
-    { icon: DollarSign, text: "ما هو إجمالي مبيعاتنا هذا الشهر؟", color: "text-green-600 dark:text-green-400" },
+    { icon: DollarSign, text: "ما هو إجمالي مبيعاتنا هذا الشهر؟", color: "text-success" },
     { icon: Receipt, text: "أرني الفواتير المعلقة", color: "text-orange-600 dark:text-orange-400" },
-    { icon: TrendingUp, text: "ما هو هامش الربح الخاص بي؟", color: "text-blue-600 dark:text-blue-400" },
-    { icon: TrendingDown, text: "ما هي أكبر نفقاتي؟", color: "text-red-600 dark:text-red-400" },
+    { icon: TrendingUp, text: "ما هو هامش الربح الخاص بي؟", color: "text-primary" },
+    { icon: TrendingDown, text: "ما هي أكبر نفقاتي؟", color: "text-destructive" },
     { icon: FileText, text: "كم عدد الفواتير غير المدفوعة؟", color: "text-purple-600 dark:text-purple-400" },
-    { icon: Lightbulb, text: "أعطني رؤى مالية", color: "text-yellow-600 dark:text-yellow-400" },
+    { icon: Lightbulb, text: "أعطني رؤى مالية", color: "text-warning" },
   ];
 
   const displayQuestions = locale === 'ar' ? arabicQuickQuestions : quickQuestions;
@@ -195,9 +195,9 @@ export default function SmartAssistant() {
       {/* Quick Stats */}
       {stats && messages.length === 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
+          <Card className="bg-success/10 border-success/20">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+              <div className="flex items-center gap-2 text-success">
                 <TrendingUp className="w-4 h-4" />
                 <span className="text-xs font-medium">{t.revenue}</span>
               </div>
@@ -206,9 +206,9 @@ export default function SmartAssistant() {
               </p>
             </CardContent>
           </Card>
-          <Card className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900">
+          <Card className="bg-destructive/10 border-destructive/20">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+              <div className="flex items-center gap-2 text-destructive">
                 <TrendingDown className="w-4 h-4" />
                 <span className="text-xs font-medium">{t.expenses}</span>
               </div>
@@ -228,9 +228,9 @@ export default function SmartAssistant() {
               </p>
             </CardContent>
           </Card>
-          <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+          <Card className="bg-primary/10 border-primary/20">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <div className="flex items-center gap-2 text-primary">
                 <FileText className="w-4 h-4" />
                 <span className="text-xs font-medium">{t.invoices}</span>
               </div>
@@ -317,7 +317,7 @@ export default function SmartAssistant() {
                             onClick={() => handleQuickQuestion(prompt)}
                             disabled={nlMutation.isPending}
                           >
-                            <Lightbulb className="w-3 h-3 mr-2 text-yellow-500" />
+                            <Lightbulb className="w-3 h-3 mr-2 text-warning" />
                             {prompt}
                           </Button>
                         ))}

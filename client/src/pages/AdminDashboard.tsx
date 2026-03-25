@@ -111,7 +111,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
+              <CheckCircle className="h-5 w-5 text-success" />
               <span className="text-lg font-medium">Active</span>
             </div>
             <p className="text-xs text-muted-foreground">All AI features operational</p>
@@ -179,9 +179,9 @@ export default function AdminDashboard() {
                   data-testid={`activity-row-${log.id}`}
                 >
                   <div className="mt-1">
-                    {log.action === 'create' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                    {log.action === 'update' && <Clock className="h-4 w-4 text-blue-500" />}
-                    {log.action === 'delete' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                    {log.action === 'create' && <CheckCircle className="h-4 w-4 text-success" />}
+                    {log.action === 'update' && <Clock className="h-4 w-4 text-primary" />}
+                    {log.action === 'delete' && <AlertCircle className="h-4 w-4 text-destructive" />}
                     {log.action === 'invite' && <Mail className="h-4 w-4 text-purple-500" />}
                   </div>
                   <div className="flex-1 min-w-0">

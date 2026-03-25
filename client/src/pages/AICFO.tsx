@@ -171,14 +171,14 @@ export default function AICFO() {
       value: profitLoss ? ((profitLoss.netProfit / (profitLoss.totalRevenue || 1)) * 100) : 0,
       trend: 2.5,
       icon: TrendingUp,
-      color: 'text-green-600 dark:text-green-400',
+      color: 'text-success',
     },
     {
       label: 'Expense Ratio',
       value: profitLoss ? ((profitLoss.totalExpenses / (profitLoss.totalRevenue || 1)) * 100) : 0,
       trend: -1.2,
       icon: BarChart3,
-      color: 'text-blue-600 dark:text-blue-400',
+      color: 'text-primary',
     },
     {
       label: 'Revenue Growth',
@@ -192,7 +192,7 @@ export default function AICFO() {
       value: 85,
       trend: 5,
       icon: DollarSign,
-      color: 'text-amber-600 dark:text-amber-400',
+      color: 'text-warning',
     },
   ];
 
@@ -253,8 +253,8 @@ export default function AICFO() {
                       {Math.round(kpi.value)}%
                     </div>
                     <div className="flex items-center gap-1 mt-2">
-                      <ArrowUp className={`w-3 h-3 ${kpi.trend >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
-                      <span className={`text-xs font-medium ${kpi.trend >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <ArrowUp className={`w-3 h-3 ${kpi.trend >= 0 ? 'text-success' : 'text-destructive'}`} />
+                      <span className={`text-xs font-medium ${kpi.trend >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {Math.abs(kpi.trend).toFixed(1)}% {kpi.trend >= 0 ? 'increase' : 'decrease'}
                       </span>
                     </div>
@@ -269,12 +269,12 @@ export default function AICFO() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <TrendingUp className="w-4 h-4 text-success" />
               </CardHeader>
               <CardContent>
                 {stats ? (
                   <>
-                    <div className="text-3xl font-bold font-mono text-green-600 dark:text-green-400">
+                    <div className="text-3xl font-bold font-mono text-success">
                       {formatCurrency(stats.revenue || 0, 'AED')}
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -290,12 +290,12 @@ export default function AICFO() {
             <Card className="hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                <ArrowDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <ArrowDown className="w-4 h-4 text-primary" />
               </CardHeader>
               <CardContent>
                 {stats ? (
                   <>
-                    <div className="text-3xl font-bold font-mono text-blue-600 dark:text-blue-400">
+                    <div className="text-3xl font-bold font-mono text-primary">
                       {formatCurrency(stats.expenses || 0, 'AED')}
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -308,15 +308,15 @@ export default function AICFO() {
               </CardContent>
             </Card>
 
-            <Card className={`hover-elevate ${(profitLoss?.netProfit || 0) >= 0 ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
+            <Card className={`hover-elevate ${(profitLoss?.netProfit || 0) >= 0 ? 'border-success/20' : 'border-destructive/20'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-                <Target className={`w-4 h-4 ${(profitLoss?.netProfit || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                <Target className={`w-4 h-4 ${(profitLoss?.netProfit || 0) >= 0 ? 'text-success' : 'text-destructive'}`} />
               </CardHeader>
               <CardContent>
                 {profitLoss ? (
                   <>
-                    <div className={`text-3xl font-bold font-mono ${(profitLoss.netProfit || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <div className={`text-3xl font-bold font-mono ${(profitLoss.netProfit || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
                       {formatCurrency(profitLoss.netProfit || 0, 'AED')}
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -334,7 +334,7 @@ export default function AICFO() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <AlertTriangle className="w-4 h-4 text-warning" />
                 Outstanding Invoices
               </CardTitle>
             </CardHeader>
@@ -342,7 +342,7 @@ export default function AICFO() {
               <div className="space-y-3">
                 {stats ? (
                   <>
-                    <div className="text-3xl font-bold font-mono text-amber-600 dark:text-amber-400">
+                    <div className="text-3xl font-bold font-mono text-warning">
                       {formatCurrency(stats.outstanding || 0, 'AED')}
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -456,8 +456,8 @@ export default function AICFO() {
           <div className="grid gap-4">
             {recommendations.map((rec, idx) => {
               const priorityColor = rec.priority === 'high' 
-                ? 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20' 
-                : 'border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20';
+                ? 'border-destructive/20 bg-destructive/10' 
+                : 'border-warning/20 bg-warning/10';
               
               return (
                 <Card key={idx} className={`hover-elevate border-2 ${priorityColor}`}>
@@ -475,7 +475,7 @@ export default function AICFO() {
                   <CardContent>
                     <div className="flex items-center justify-between pt-2 border-t">
                       <span className="text-sm text-muted-foreground">Potential Impact:</span>
-                      <span className="font-mono font-semibold text-green-600 dark:text-green-400">
+                      <span className="font-mono font-semibold text-success">
                         {rec.impact}
                       </span>
                     </div>

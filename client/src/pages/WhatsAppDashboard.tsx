@@ -319,8 +319,8 @@ export default function WhatsAppDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-            <SiWhatsapp className="w-6 h-6 text-green-500" />
+          <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+            <SiWhatsapp className="w-6 h-6 text-success" />
           </div>
           <div>
             <h1 className="text-2xl font-bold">{en ? 'WhatsApp' : 'واتساب'}</h1>
@@ -361,7 +361,7 @@ export default function WhatsAppDashboard() {
                     ? 'This will open WhatsApp for each customer. Your browser may ask to allow popups.'
                     : 'سيتم فتح واتساب لكل عميل. قد يطلب المتصفح السماح بالنوافذ المنبثقة.'}
                 </p>
-                <Button onClick={handleBroadcast} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-send-broadcast">
+                <Button onClick={handleBroadcast} className="w-full bg-success hover:bg-success" data-testid="button-send-broadcast">
                   <Megaphone className="w-4 h-4 mr-2" />
                   {en ? `Send to ${customers.filter(c => c.phone).length} Client(s)` : `إرسال لـ ${customers.filter(c => c.phone).length} عميل`}
                 </Button>
@@ -431,7 +431,7 @@ export default function WhatsAppDashboard() {
                   ) : null;
                 })()}
 
-                <Button onClick={handleSendInvoice} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-open-whatsapp-invoice">
+                <Button onClick={handleSendInvoice} className="w-full bg-success hover:bg-success" data-testid="button-open-whatsapp-invoice">
                   <SiWhatsapp className="w-4 h-4 mr-2" />
                   {en ? 'Open in WhatsApp' : 'فتح في واتساب'}
                 </Button>
@@ -442,7 +442,7 @@ export default function WhatsAppDashboard() {
           {/* Send Message */}
           <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
             <DialogTrigger asChild>
-              <Button className="bg-green-600 hover:bg-green-700" data-testid="button-send-message">
+              <Button className="bg-success hover:bg-success" data-testid="button-send-message">
                 <Send className="w-4 h-4 mr-2" />
                 {en ? 'Send Message' : 'إرسال رسالة'}
               </Button>
@@ -512,7 +512,7 @@ export default function WhatsAppDashboard() {
                   />
                 </div>
 
-                <Button onClick={handleSendMessage} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-open-whatsapp">
+                <Button onClick={handleSendMessage} className="w-full bg-success hover:bg-success" data-testid="button-open-whatsapp">
                   <SiWhatsapp className="w-4 h-4 mr-2" />
                   {en ? 'Open in WhatsApp' : 'فتح في واتساب'}
                 </Button>
@@ -558,19 +558,19 @@ export default function WhatsAppDashboard() {
 
           {messagesLoading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full" />
+              <div className="animate-spin w-8 h-8 border-2 border-success border-t-transparent rounded-full" />
             </div>
           ) : filteredMessages.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-                  <SiWhatsapp className="w-8 h-8 text-green-500" />
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-4">
+                  <SiWhatsapp className="w-8 h-8 text-success" />
                 </div>
                 <h3 className="text-lg font-semibold mb-2">{en ? 'No messages yet' : 'لا توجد رسائل بعد'}</h3>
                 <p className="text-muted-foreground mb-6 max-w-md">
                   {en ? 'Start by sending a message, invoice reminder, or broadcast to your clients' : 'ابدأ بإرسال رسالة أو تذكير فاتورة أو بث لعملائك'}
                 </p>
-                <Button onClick={() => setShowSendDialog(true)} className="bg-green-600 hover:bg-green-700">
+                <Button onClick={() => setShowSendDialog(true)} className="bg-success hover:bg-success">
                   <Send className="w-4 h-4 mr-2" />
                   {en ? 'Send Message' : 'إرسال رسالة'}
                 </Button>
@@ -585,8 +585,8 @@ export default function WhatsAppDashboard() {
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
-                            <SiWhatsapp className="w-5 h-5 text-green-500" />
+                          <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center shrink-0">
+                            <SiWhatsapp className="w-5 h-5 text-success" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
@@ -609,7 +609,7 @@ export default function WhatsAppDashboard() {
                           </div>
                         </div>
                         {msg.to && (
-                          <Button variant="ghost" size="sm" className="text-green-600 shrink-0" onClick={() => openWhatsApp(msg.to!, '')}>
+                          <Button variant="ghost" size="sm" className="text-success shrink-0" onClick={() => openWhatsApp(msg.to!, '')}>
                             <ExternalLink className="w-4 h-4" />
                           </Button>
                         )}
@@ -639,7 +639,7 @@ export default function WhatsAppDashboard() {
                       )}
                     </div>
                     {customer.phone && (
-                      <Button variant="ghost" size="sm" className="text-green-600 shrink-0" onClick={() => handleQuickMessage(customer)}>
+                      <Button variant="ghost" size="sm" className="text-success shrink-0" onClick={() => handleQuickMessage(customer)}>
                         <SiWhatsapp className="w-5 h-5" />
                       </Button>
                     )}
@@ -692,12 +692,12 @@ export default function WhatsAppDashboard() {
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          notification.priority === 'urgent' ? 'bg-red-500/10' :
-                          notification.priority === 'high' ? 'bg-orange-500/10' : 'bg-yellow-500/10'
+                          notification.priority === 'urgent' ? 'bg-destructive/10' :
+                          notification.priority === 'high' ? 'bg-orange-500/10' : 'bg-warning/10'
                         }`}>
                           <CreditCard className={`w-4 h-4 ${
-                            notification.priority === 'urgent' ? 'text-red-600' :
-                            notification.priority === 'high' ? 'text-orange-600' : 'text-yellow-600'
+                            notification.priority === 'urgent' ? 'text-destructive' :
+                            notification.priority === 'high' ? 'text-orange-600' : 'text-warning'
                           }`} />
                         </div>
                         <div className="min-w-0">
@@ -714,7 +714,7 @@ export default function WhatsAppDashboard() {
                         {cust?.phone && (
                           <Button
                             size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-xs h-8"
+                            className="bg-success hover:bg-success text-xs h-8"
                             onClick={() => handleActionNotification(notification)}
                           >
                             <SiWhatsapp className="w-3.5 h-3.5 mr-1" />
@@ -762,8 +762,8 @@ export default function WhatsAppDashboard() {
                 return (
                   <div key={rule.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${rule.enabled ? 'bg-green-500/10' : 'bg-muted'}`}>
-                        <Icon className={`w-5 h-5 ${rule.enabled ? 'text-green-600' : 'text-muted-foreground'}`} />
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${rule.enabled ? 'bg-success/10' : 'bg-muted'}`}>
+                        <Icon className={`w-5 h-5 ${rule.enabled ? 'text-success' : 'text-muted-foreground'}`} />
                       </div>
                       <div>
                         <p className="font-medium text-sm">{rule.name}</p>
@@ -806,8 +806,8 @@ export default function WhatsAppDashboard() {
                 <Card key={tpl.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-green-600" />
+                      <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
+                        <Icon className="w-5 h-5 text-success" />
                       </div>
                       <div>
                         <CardTitle className="text-base">{en ? tpl.name : tpl.nameAr}</CardTitle>

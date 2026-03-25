@@ -94,9 +94,9 @@ export default function Reminders() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'sent':
-        return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" />Sent</Badge>;
+        return <Badge className="bg-success"><CheckCircle className="w-3 h-3 mr-1" />Sent</Badge>;
       case 'delivered':
-        return <Badge className="bg-blue-500"><CheckCircle className="w-3 h-3 mr-1" />Delivered</Badge>;
+        return <Badge className="bg-primary"><CheckCircle className="w-3 h-3 mr-1" />Delivered</Badge>;
       case 'failed':
         return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Failed</Badge>;
       case 'pending':
@@ -113,7 +113,7 @@ export default function Reminders() {
       case 'sms':
         return <MessageSquare className="w-4 h-4" />;
       case 'whatsapp':
-        return <SiWhatsapp className="w-4 h-4 text-green-500" />;
+        return <SiWhatsapp className="w-4 h-4 text-success" />;
       case 'in_app':
         return <Bell className="w-4 h-4" />;
       default:
@@ -259,7 +259,7 @@ export default function Reminders() {
                       data-testid="switch-whatsapp"
                     />
                     <Label className="flex items-center gap-1">
-                      <SiWhatsapp className="w-4 h-4 text-green-500" /> WhatsApp
+                      <SiWhatsapp className="w-4 h-4 text-success" /> WhatsApp
                     </Label>
                   </div>
                 </div>
@@ -406,7 +406,7 @@ export default function Reminders() {
                           <Badge variant="outline"><MessageSquare className="w-3 h-3 mr-1" />SMS</Badge>
                         )}
                         {setting.sendWhatsapp && (
-                          <Badge variant="outline"><SiWhatsapp className="w-3 h-3 mr-1 text-green-500" />WhatsApp</Badge>
+                          <Badge variant="outline"><SiWhatsapp className="w-3 h-3 mr-1 text-success" />WhatsApp</Badge>
                         )}
                       </div>
                     </CardContent>

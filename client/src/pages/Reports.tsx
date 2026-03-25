@@ -208,8 +208,8 @@ export default function Reports() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                <div className="w-8 h-8 rounded-md bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <div className="w-8 h-8 rounded-md bg-success/10 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-success" />
                 </div>
               </CardHeader>
               <CardContent>
@@ -226,8 +226,8 @@ export default function Reports() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                <div className="w-8 h-8 rounded-md bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                  <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                <div className="w-8 h-8 rounded-md bg-destructive/10 flex items-center justify-center">
+                  <TrendingDown className="w-4 h-4 text-destructive" />
                 </div>
               </CardHeader>
               <CardContent>
@@ -244,8 +244,8 @@ export default function Reports() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-                <div className="w-8 h-8 rounded-md bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-                  <DollarSign className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
+                  <DollarSign className="w-4 h-4 text-primary" />
                 </div>
               </CardHeader>
               <CardContent>
@@ -275,7 +275,7 @@ export default function Reports() {
               ) : (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="font-semibold mb-3 text-green-600 dark:text-green-400">Revenue</h3>
+                    <h3 className="font-semibold mb-3 text-success">Revenue</h3>
                     <DataTable<AccountLineItem>
                       data={profitLoss?.revenue ?? []}
                       columns={plColumns}
@@ -296,7 +296,7 @@ export default function Reports() {
                   </div>
 
                   <div>
-                    <h3 className="font-semibold mb-3 text-red-600 dark:text-red-400">Expenses</h3>
+                    <h3 className="font-semibold mb-3 text-destructive">Expenses</h3>
                     <DataTable<AccountLineItem>
                       data={profitLoss?.expenses ?? []}
                       columns={plColumns}
@@ -319,7 +319,7 @@ export default function Reports() {
                   <div className="border-t-4 pt-4">
                     <div className="flex justify-between items-center text-lg font-semibold">
                       <span>Net Profit</span>
-                      <span className={`font-mono ${(profitLoss?.netProfit ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <span className={`font-mono ${(profitLoss?.netProfit ?? 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {formatCurrency(profitLoss?.netProfit ?? 0, 'AED', locale)}
                       </span>
                     </div>
@@ -346,7 +346,7 @@ export default function Reports() {
               ) : (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="font-semibold mb-3 text-blue-600 dark:text-blue-400">Assets</h3>
+                    <h3 className="font-semibold mb-3 text-primary">Assets</h3>
                     <DataTable<AccountLineItem>
                       data={balanceSheet?.assets ?? []}
                       columns={plColumns}
@@ -366,7 +366,7 @@ export default function Reports() {
                   </div>
 
                   <div>
-                    <h3 className="font-semibold mb-3 text-red-600 dark:text-red-400">Liabilities</h3>
+                    <h3 className="font-semibold mb-3 text-destructive">Liabilities</h3>
                     <DataTable<AccountLineItem>
                       data={balanceSheet?.liabilities ?? []}
                       columns={plColumns}
@@ -427,7 +427,7 @@ export default function Reports() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <h3 className="font-semibold text-green-600 dark:text-green-400">Sales (Output VAT)</h3>
+                      <h3 className="font-semibold text-success">Sales (Output VAT)</h3>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Subtotal</span>
@@ -441,7 +441,7 @@ export default function Reports() {
                     </div>
 
                     <div className="space-y-4">
-                      <h3 className="font-semibold text-blue-600 dark:text-blue-400">Purchases (Input VAT)</h3>
+                      <h3 className="font-semibold text-primary">Purchases (Input VAT)</h3>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Subtotal</span>
@@ -458,7 +458,7 @@ export default function Reports() {
                   <div className="border-t-4 pt-6">
                     <div className="flex justify-between items-center text-lg font-semibold">
                       <span>Net VAT Payable to FTA</span>
-                      <span className={`font-mono ${(vatSummary?.netVATPayable ?? 0) >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                      <span className={`font-mono ${(vatSummary?.netVATPayable ?? 0) >= 0 ? 'text-destructive' : 'text-success'}`}>
                         {formatCurrency(Math.abs(vatSummary?.netVATPayable ?? 0), 'AED', locale)}
                         {(vatSummary?.netVATPayable ?? 0) < 0 && ' (Refund)'}
                       </span>

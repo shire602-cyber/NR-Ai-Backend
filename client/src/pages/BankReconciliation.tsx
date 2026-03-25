@@ -448,7 +448,7 @@ export default function BankReconciliation() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.reconciled}</div>
+            <div className="text-2xl font-bold text-success">{stats.reconciled}</div>
           </CardContent>
         </Card>
         <Card>
@@ -458,7 +458,7 @@ export default function BankReconciliation() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{stats.unreconciled}</div>
+            <div className="text-2xl font-bold text-warning">{stats.unreconciled}</div>
           </CardContent>
         </Card>
         <Card>
@@ -468,7 +468,7 @@ export default function BankReconciliation() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.totalAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-2xl font-bold ${stats.totalAmount >= 0 ? 'text-success' : 'text-destructive'}`}>
               {formatCurrency(stats.totalAmount)}
             </div>
           </CardContent>
@@ -549,12 +549,12 @@ export default function BankReconciliation() {
                       </TableCell>
                       <TableCell className="max-w-xs truncate">{transaction.description}</TableCell>
                       <TableCell className="text-muted-foreground">{transaction.reference || '-'}</TableCell>
-                      <TableCell className={`text-right font-mono ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <TableCell className={`text-right font-mono ${transaction.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {formatCurrency(transaction.amount)}
                       </TableCell>
                       <TableCell>
                         {transaction.isReconciled ? (
-                          <Badge variant="default" className="bg-green-100 text-green-800">
+                          <Badge variant="default" className="bg-success/10 text-success">
                             <CheckCircle2 className="w-3 h-3 mr-1" />
                             {t.reconciled}
                           </Badge>
@@ -623,9 +623,9 @@ export default function BankReconciliation() {
               {importFile && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   {importFile.type === 'application/pdf' ? (
-                    <FileText className="w-4 h-4 text-red-500" />
+                    <FileText className="w-4 h-4 text-destructive" />
                   ) : (
-                    <FileSpreadsheet className="w-4 h-4 text-green-500" />
+                    <FileSpreadsheet className="w-4 h-4 text-success" />
                   )}
                   <span>{importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)</span>
                 </div>
@@ -640,11 +640,11 @@ export default function BankReconciliation() {
             <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
               <p className="font-medium">{t.supportedFormats}</p>
               <div className="flex items-center gap-2 text-xs">
-                <FileSpreadsheet className="w-4 h-4 text-green-500" />
+                <FileSpreadsheet className="w-4 h-4 text-success" />
                 <span>CSV: Date, Description, Amount, Reference</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <FileText className="w-4 h-4 text-red-500" />
+                <FileText className="w-4 h-4 text-destructive" />
                 <span>PDF: {t.bankStatementsAI}</span>
               </div>
             </div>
@@ -707,7 +707,7 @@ export default function BankReconciliation() {
                       <div className="text-right">
                         <Badge 
                           variant={suggestion.confidence > 0.8 ? 'default' : 'secondary'}
-                          className={suggestion.confidence > 0.8 ? 'bg-green-100 text-green-800' : ''}
+                          className={suggestion.confidence > 0.8 ? 'bg-success/10 text-success' : ''}
                         >
                           {Math.round(suggestion.confidence * 100)}% match
                         </Badge>

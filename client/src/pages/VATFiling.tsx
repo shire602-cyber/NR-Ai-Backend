@@ -236,11 +236,11 @@ export default function VATFiling() {
       case 'draft':
         return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" />Draft</Badge>;
       case 'pending_review':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800"><AlertTriangle className="w-3 h-3 mr-1" />Review</Badge>;
+        return <Badge variant="secondary" className="bg-warning/10 text-warning"><AlertTriangle className="w-3 h-3 mr-1" />Review</Badge>;
       case 'submitted':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800"><Send className="w-3 h-3 mr-1" />Submitted</Badge>;
+        return <Badge variant="default" className="bg-primary/10 text-primary"><Send className="w-3 h-3 mr-1" />Submitted</Badge>;
       case 'filed':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle2 className="w-3 h-3 mr-1" />Filed</Badge>;
+        return <Badge variant="default" className="bg-success/10 text-success"><CheckCircle2 className="w-3 h-3 mr-1" />Filed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -555,15 +555,15 @@ export default function VATFiling() {
       </div>
 
       {!company?.trnVatNumber && (
-        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+        <Card className="border-warning/20 bg-warning/10">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
+                <p className="font-medium text-warning">
                   {locale === 'ar' ? 'رقم التسجيل الضريبي غير مكتمل' : 'Tax Registration Number Missing'}
                 </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
+                <p className="text-sm text-warning">
                   {locale === 'ar' 
                     ? 'يرجى إضافة رقم التسجيل الضريبي في إعدادات الشركة للتمكن من تقديم الإقرارات.'
                     : 'Please add your TRN in Company Profile to enable VAT filing.'}
@@ -592,7 +592,7 @@ export default function VATFiling() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
+            <div className="text-2xl font-bold text-warning">{stats.pending}</div>
           </CardContent>
         </Card>
         <Card>
@@ -602,7 +602,7 @@ export default function VATFiling() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.filed}</div>
+            <div className="text-2xl font-bold text-success">{stats.filed}</div>
           </CardContent>
         </Card>
         <Card>
@@ -612,7 +612,7 @@ export default function VATFiling() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.totalPayable >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <div className={`text-2xl font-bold ${stats.totalPayable >= 0 ? 'text-destructive' : 'text-success'}`}>
               {formatCurrency(Math.abs(stats.totalPayable))}
             </div>
           </CardContent>
@@ -671,7 +671,7 @@ export default function VATFiling() {
                       <TableCell className="text-right font-mono">
                         {formatCurrency(vatReturn.box13RecoverableTax || vatReturn.box11TotalVat || 0)}
                       </TableCell>
-                      <TableCell className={`text-right font-mono font-medium ${(vatReturn.box14PayableTax || 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      <TableCell className={`text-right font-mono font-medium ${(vatReturn.box14PayableTax || 0) >= 0 ? 'text-destructive' : 'text-success'}`}>
                         {(vatReturn.box14PayableTax || 0) >= 0 ? '' : '('}{formatCurrency(Math.abs(vatReturn.box14PayableTax || 0))}{(vatReturn.box14PayableTax || 0) >= 0 ? '' : ')'}
                       </TableCell>
                       <TableCell>
