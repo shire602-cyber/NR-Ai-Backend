@@ -2456,3 +2456,26 @@ export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type InsertPurchaseOrder = typeof purchaseOrders.$inferInsert;
 export type PurchaseOrderLine = typeof purchaseOrderLines.$inferSelect;
 export type InsertPurchaseOrderLine = typeof purchaseOrderLines.$inferInsert;
+
+// ===========================
+// E-Invoice Transmissions (ASP / Peppol)
+// ===========================
+export const einvoiceTransmissions = pgTable("einvoice_transmissions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }).notNull(),
+  transmissionId: text("transmission_id"),
+  status: text("status").default("pending").notNull(), // pending, sent, delivered, failed
+  aspProvider: text("asp_provider"),
+  recipientId: text("recipient_id"),
+  xmlHash: text("xml_hash"), // SHA-256 of submitted XML
+  errorMessage: text("error_message"),
+  rawResponse: text("raw_response"), // JSON stringified
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  deliveredAt: timestamp("delivered_at"),
+  createdBy: uuid("created_by").references(() => users.id),
+});
+
+export const insertEinvoiceTransmissionSchema = createInsertSchema(einvoiceTransmissions);
+export type EinvoiceTransmission = typeof einvoiceTransmissions.$inferSelect;
+export type InsertEinvoiceTransmission = typeof einvoiceTransmissions.$inferInsert;

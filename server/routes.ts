@@ -60,6 +60,9 @@ import { registerFiscalYearRoutes } from './routes/fiscal-years.routes';
 import { registerBankReconciliationRoutes } from './routes/bank-reconciliation.routes';
 import { registerFxRevaluationRoutes } from './routes/fx-revaluation.routes';
 import { registerPurchaseOrderRoutes } from './routes/purchase-orders.routes';
+import { registerEInvoiceRoutes } from './routes/einvoice.routes';
+import { registerStripeRoutes } from './routes/stripe.routes';
+import { registerBankStatementImportRoutes } from './routes/bank-statement-import.routes';
 
 const log = createLogger('routes');
 
@@ -95,6 +98,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAnomalyRoutes(app);
   registerAutoReconcileRoutes(app);
   registerBankReconciliationRoutes(app);
+  registerBankStatementImportRoutes(app);
   registerCashFlowRoutes(app);
 
   // ─── Reporting & Analytics ──────────────────────────────
@@ -104,6 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Integrations ───────────────────────────────────────
   registerIntegrationRoutes(app);
+  registerStripeRoutes(app);
   registerWhatsAppRoutes(app);
 
   // ─── Platform Features ──────────────────────────────────
@@ -117,6 +122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── UAE Compliance ─────────────────────────────────────
   registerVATRoutes(app);
   registerCorporateTaxRoutes(app);
+  registerEInvoiceRoutes(app);
 
   // ─── Team & Client Portal ──────────────────────────────
   registerTeamRoutes(app);
