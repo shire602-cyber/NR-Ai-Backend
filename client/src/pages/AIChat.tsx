@@ -284,7 +284,7 @@ export default function AIChat() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to get response',
+        description: error?.message || 'Failed to get response',
       });
     },
   });

@@ -113,7 +113,7 @@ export default function AccountLedger() {
     onError: (error: any) => {
       toast({
         title: locale === 'ar' ? 'فشل عكس القيد' : 'Reversal failed',
-        description: error.message || 'An error occurred',
+        description: error?.message || 'An error occurred',
         variant: 'destructive',
       });
     },

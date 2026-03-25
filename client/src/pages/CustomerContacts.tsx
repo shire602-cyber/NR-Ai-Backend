@@ -33,6 +33,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { CustomerContact } from '@shared/schema';
 import * as XLSX from 'xlsx';
 
@@ -57,6 +58,7 @@ export default function CustomerContacts() {
   const [editContact, setEditContact] = useState<CustomerContact | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [portalLinkDialog, setPortalLinkDialog] = useState<{ open: boolean; url: string; contactName: string }>({ open: false, url: '', contactName: '' });
+  const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
 
   const { data: contacts = [], isLoading } = useQuery<CustomerContact[]>({
     queryKey: ['/api/companies', companyId, 'customer-contacts'],
@@ -487,11 +489,7 @@ export default function CustomerContacts() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to delete this contact?')) {
-                                    deleteMutation.mutate(contact.id);
-                                  }
-                                }}
+                                onClick={() => setDeleteContactId(contact.id)}
                                 data-testid={`button-delete-contact-${contact.id}`}
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -765,6 +763,22 @@ export default function CustomerContacts() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteContactId}
+        onOpenChange={(open) => !open && setDeleteContactId(null)}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this contact?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteContactId) {
+            deleteMutation.mutate(deleteContactId);
+            setDeleteContactId(null);
+          }
+        }}
+      />
     </div>
   );
 }

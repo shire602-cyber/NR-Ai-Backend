@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { 
   Plus, 
   Search, 
@@ -82,6 +83,7 @@ export default function ClientTasks() {
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
     title: '',
     titleAr: '',
@@ -413,11 +415,7 @@ export default function ClientTasks() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete?')) {
-                                deleteMutation.mutate(task.id);
-                              }
-                            }}
+                            onClick={() => setDeleteTaskId(task.id)}
                             className="text-destructive"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -433,6 +431,22 @@ export default function ClientTasks() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTaskId}
+        onOpenChange={(open) => !open && setDeleteTaskId(null)}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this task?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteTaskId) {
+            deleteMutation.mutate(deleteTaskId);
+            setDeleteTaskId(null);
+          }
+        }}
+      />
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-lg">

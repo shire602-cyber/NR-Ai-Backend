@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { format, formatDistanceToNow, isAfter } from 'date-fns';
 import type { Invitation, Company } from '@shared/schema';
 
@@ -36,6 +37,7 @@ export default function UserInvitations() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+  const [deleteInviteId, setDeleteInviteId] = useState<string | null>(null);
 
   const { data: invitations = [], isLoading } = useQuery<Invitation[]>({
     queryKey: ['/api/admin/invitations'],
@@ -385,13 +387,9 @@ export default function UserInvitations() {
                                 </DropdownMenuItem>
                               </>
                             )}
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => {
-                                if (confirm('Delete this invitation?')) {
-                                  deleteInvitationMutation.mutate(invitation.id);
-                                }
-                              }}
+                              onClick={() => setDeleteInviteId(invitation.id)}
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete
@@ -416,6 +414,22 @@ export default function UserInvitations() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteInviteId}
+        onOpenChange={(open) => !open && setDeleteInviteId(null)}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this invitation?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteInviteId) {
+            deleteInvitationMutation.mutate(deleteInviteId);
+            setDeleteInviteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

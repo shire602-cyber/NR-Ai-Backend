@@ -64,7 +64,7 @@ export async function exportToGoogleSheets(
   } catch (error: any) {
     return {
       success: false,
-      error: error.message || 'Failed to export to Google Sheets',
+      error: error?.message || 'Failed to export to Google Sheets',
     };
   }
 }

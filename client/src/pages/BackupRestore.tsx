@@ -70,7 +70,7 @@ export default function BackupRestore() {
     onError: (error: any) => {
       toast({
         title: 'Backup Failed',
-        description: error.message || 'Failed to create backup',
+        description: error?.message || 'Failed to create backup',
         variant: 'destructive',
       });
     },
@@ -90,7 +90,7 @@ export default function BackupRestore() {
     onError: (error: any) => {
       toast({
         title: 'Delete Failed',
-        description: error.message || 'Failed to delete backup',
+        description: error?.message || 'Failed to delete backup',
         variant: 'destructive',
       });
     },
@@ -106,7 +106,7 @@ export default function BackupRestore() {
     onError: (error: any) => {
       toast({
         title: 'Preview Failed',
-        description: error.message || 'Failed to get restore preview',
+        description: error?.message || 'Failed to get restore preview',
         variant: 'destructive',
       });
     },
@@ -128,7 +128,7 @@ export default function BackupRestore() {
     onError: (error: any) => {
       toast({
         title: 'Restore Failed',
-        description: error.message || 'Failed to restore backup',
+        description: error?.message || 'Failed to restore backup',
         variant: 'destructive',
       });
     },
@@ -158,7 +158,7 @@ export default function BackupRestore() {
     } catch (error: any) {
       toast({
         title: 'Download Failed',
-        description: error.message || 'Failed to download backup',
+        description: error?.message || 'Failed to download backup',
         variant: 'destructive',
       });
     }

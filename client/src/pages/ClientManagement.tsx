@@ -33,6 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import type { Company } from '@shared/schema';
@@ -49,6 +50,7 @@ export default function ClientManagement() {
   const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<ClientWithStats | null>(null);
+  const [deleteClientId, setDeleteClientId] = useState<string | null>(null);
   
   // Form state for new client - all fields
   const [formData, setFormData] = useState({
@@ -479,13 +481,9 @@ export default function ClientManagement() {
                             </DropdownMenuItem>
                           </Link>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
-                                deleteClientMutation.mutate(client.id);
-                              }
-                            }}
+                            onClick={() => setDeleteClientId(client.id)}
                             data-testid={`menu-delete-${client.id}`}
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -510,6 +508,22 @@ export default function ClientManagement() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteClientId}
+        onOpenChange={(open) => !open && setDeleteClientId(null)}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this client? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteClientId) {
+            deleteClientMutation.mutate(deleteClientId);
+            setDeleteClientId(null);
+          }
+        }}
+      />
 
       <Dialog open={!!editingClient} onOpenChange={(open) => !open && setEditingClient(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { 
   Upload, 
   FileText, 
@@ -82,6 +83,7 @@ export default function ClientDocuments() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [newDocument, setNewDocument] = useState({
     name: '',
     nameAr: '',
@@ -413,11 +415,7 @@ export default function ClientDocuments() {
                               size="icon"
                               variant="ghost"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this document?')) {
-                                  deleteMutation.mutate(doc.id);
-                                }
-                              }}
+                              onClick={() => setDeleteDocId(doc.id)}
                               data-testid={`button-delete-${doc.id}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -433,6 +431,22 @@ export default function ClientDocuments() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteDocId}
+        onOpenChange={(open) => !open && setDeleteDocId(null)}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this document?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteDocId) {
+            deleteMutation.mutate(deleteDocId);
+            setDeleteDocId(null);
+          }
+        }}
+      />
 
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="sm:max-w-lg">

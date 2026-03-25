@@ -31,7 +31,7 @@ export function useMutationWithToast<
     onError: (error, variables, context) => {
       toast({
         title: errorMessage || "An error occurred",
-        description: error instanceof Error ? error.message : String(error),
+        description: error instanceof Error ? error?.message : String(error),
         variant: "destructive",
       });
       onError?.(error, variables, context);

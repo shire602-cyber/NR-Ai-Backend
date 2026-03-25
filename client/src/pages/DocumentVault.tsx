@@ -16,6 +16,7 @@ import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { 
   Upload, 
   FileText, 
@@ -79,6 +80,7 @@ export default function DocumentVault() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [newDocument, setNewDocument] = useState({
     name: '',
     nameAr: '',
@@ -415,11 +417,7 @@ export default function DocumentVault() {
                               size="icon"
                               variant="ghost"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => {
-                                if (confirm(locale === 'ar' ? 'هل أنت متأكد من حذف هذا المستند؟' : 'Are you sure you want to delete this document?')) {
-                                  deleteMutation.mutate(doc.id);
-                                }
-                              }}
+                              onClick={() => setDeleteDocId(doc.id)}
                               data-testid={`button-delete-${doc.id}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -435,6 +433,22 @@ export default function DocumentVault() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteDocId}
+        onOpenChange={(open) => !open && setDeleteDocId(null)}
+        title={locale === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete'}
+        description={locale === 'ar' ? 'هل أنت متأكد من حذف هذا المستند؟' : 'Are you sure you want to delete this document?'}
+        confirmLabel={locale === 'ar' ? 'حذف' : 'Delete'}
+        cancelLabel={locale === 'ar' ? 'إلغاء' : 'Cancel'}
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteDocId) {
+            deleteMutation.mutate(deleteDocId);
+            setDeleteDocId(null);
+          }
+        }}
+      />
 
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="sm:max-w-lg">

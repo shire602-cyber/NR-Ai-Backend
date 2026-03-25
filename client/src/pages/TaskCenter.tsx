@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
@@ -81,6 +82,7 @@ export default function TaskCenter() {
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
     title: '',
     titleAr: '',
@@ -413,11 +415,7 @@ export default function TaskCenter() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => {
-                              if (confirm(locale === 'ar' ? 'هل أنت متأكد من الحذف؟' : 'Are you sure you want to delete?')) {
-                                deleteMutation.mutate(task.id);
-                              }
-                            }}
+                            onClick={() => setDeleteTaskId(task.id)}
                             className="text-destructive"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -558,6 +556,22 @@ export default function TaskCenter() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTaskId}
+        onOpenChange={(open) => !open && setDeleteTaskId(null)}
+        title={locale === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete'}
+        description={locale === 'ar' ? 'هل أنت متأكد من الحذف؟' : 'Are you sure you want to delete this task?'}
+        confirmLabel={locale === 'ar' ? 'حذف' : 'Delete'}
+        cancelLabel={locale === 'ar' ? 'إلغاء' : 'Cancel'}
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteTaskId) {
+            deleteMutation.mutate(deleteTaskId);
+            setDeleteTaskId(null);
+          }
+        }}
+      />
     </div>
   );
 }

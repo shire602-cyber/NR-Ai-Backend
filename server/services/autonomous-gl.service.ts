@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { pool } from '../db';
 import { getEnv } from '../config/env';
 import { createLogger } from '../config/logger';
+import { assertFiscalYearOpenPool } from '../lib/fiscal-year-guard';
 
 const log = createLogger('autonomous-gl');
 
@@ -467,6 +468,19 @@ async function createJournalEntryForQueueItem(
   const q = client || pool;
   const amount = parseFloat(item.amount);
   const txnDate = new Date(item.transaction_date);
+
+  // Fiscal year guard -- prevent JE creation in closed periods
+  if (client) {
+    await assertFiscalYearOpenPool(client, companyId, txnDate);
+  } else {
+    // No transaction client — use a temporary connection for the check
+    const tempClient = await pool.connect();
+    try {
+      await assertFiscalYearOpenPool(tempClient, companyId, txnDate);
+    } finally {
+      tempClient.release();
+    }
+  }
 
   // Generate entry number (FOR UPDATE to prevent duplicates in concurrent transactions)
   const dateStr = txnDate.toISOString().slice(0, 10).replace(/-/g, '');

@@ -148,7 +148,7 @@ export default function Invoices() {
       toast({
         variant: 'destructive',
         title: 'Failed to create invoice',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -178,7 +178,7 @@ export default function Invoices() {
       toast({
         variant: 'destructive',
         title: 'Failed to update invoice',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -200,7 +200,7 @@ export default function Invoices() {
       toast({
         variant: 'destructive',
         title: 'Failed to update status',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -218,7 +218,7 @@ export default function Invoices() {
       toast({
         variant: 'destructive',
         title: t.deleteFailed,
-        description: error.message || t.tryAgain,
+        description: error?.message || t.tryAgain,
       });
     },
   });
@@ -289,7 +289,7 @@ export default function Invoices() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to load invoice details.',
+        description: error?.message || 'Failed to load invoice details.',
       });
     }
   };
@@ -398,7 +398,7 @@ export default function Invoices() {
       toast({
         variant: 'destructive',
         title: 'Failed to update branding',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -601,7 +601,7 @@ export default function Invoices() {
                   });
                   toast({ title: 'PDF Downloaded', description: 'Invoice PDF has been downloaded successfully' });
                 } catch (error: any) {
-                  toast({ title: 'Error', description: error.message || 'Failed to generate PDF', variant: 'destructive' });
+                  toast({ title: 'Error', description: error?.message || 'Failed to generate PDF', variant: 'destructive' });
                 }
               }}
               aria-label="Download PDF"
@@ -644,7 +644,7 @@ export default function Invoices() {
                   }
                   toast({ title: 'Opening WhatsApp...' });
                 } catch (error: any) {
-                  toast({ title: 'Error', description: error.message || 'Failed to send via WhatsApp', variant: 'destructive' });
+                  toast({ title: 'Error', description: error?.message || 'Failed to send via WhatsApp', variant: 'destructive' });
                 }
               }}
               aria-label="Share invoice via WhatsApp"

@@ -57,7 +57,7 @@ export function EmailPopup({ open, onClose, locale = 'en' }: EmailPopupProps) {
     } catch (error: any) {
       toast({
         title: locale === 'en' ? 'Error' : 'خطأ',
-        description: error.message || (locale === 'en' ? 'Failed to join waitlist' : 'فشل الانضمام إلى القائمة'),
+        description: error?.message || (locale === 'en' ? 'Failed to join waitlist' : 'فشل الانضمام إلى القائمة'),
         variant: 'destructive',
       });
     } finally {

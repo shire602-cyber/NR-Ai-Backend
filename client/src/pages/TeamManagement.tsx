@@ -114,7 +114,7 @@ export default function TeamManagement() {
       toast({
         variant: 'destructive',
         title: 'Invitation Failed',
-        description: error.message || 'Failed to send invitation',
+        description: error?.message || 'Failed to send invitation',
       });
     },
   });
@@ -135,7 +135,7 @@ export default function TeamManagement() {
       toast({
         variant: 'destructive',
         title: 'Update Failed',
-        description: error.message || 'Failed to update role',
+        description: error?.message || 'Failed to update role',
       });
     },
   });
@@ -154,7 +154,7 @@ export default function TeamManagement() {
       toast({
         variant: 'destructive',
         title: 'Removal Failed',
-        description: error.message || 'Failed to remove member',
+        description: error?.message || 'Failed to remove member',
       });
     },
   });
