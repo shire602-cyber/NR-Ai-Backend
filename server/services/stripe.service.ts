@@ -88,15 +88,33 @@ export const stripeService = {
     const params: any = { limit: 100 };
     if (since) params.created = { gte: Math.floor(since.getTime() / 1000) };
 
-    const [charges, refunds, payouts] = await Promise.all([
-      stripe.charges.list(params),
-      stripe.refunds.list(params),
-      stripe.payouts.list(params),
-    ]);
+    // Safety cap to avoid unbounded fetches
+    const MAX_RECORDS = 500;
 
     const transactions: StripeTransaction[] = [];
 
-    for (const charge of charges.data) {
+    // Auto-paginate charges
+    const chargesList: any[] = [];
+    for await (const charge of stripe.charges.list(params)) {
+      chargesList.push(charge);
+      if (chargesList.length >= MAX_RECORDS) break;
+    }
+
+    // Auto-paginate refunds
+    const refundsList: any[] = [];
+    for await (const refund of stripe.refunds.list(params)) {
+      refundsList.push(refund);
+      if (refundsList.length >= MAX_RECORDS) break;
+    }
+
+    // Auto-paginate payouts
+    const payoutsList: any[] = [];
+    for await (const payout of stripe.payouts.list(params)) {
+      payoutsList.push(payout);
+      if (payoutsList.length >= MAX_RECORDS) break;
+    }
+
+    for (const charge of chargesList) {
       transactions.push({
         externalId: charge.id,
         type: 'charge',
@@ -117,7 +135,7 @@ export const stripeService = {
       });
     }
 
-    for (const refund of refunds.data) {
+    for (const refund of refundsList) {
       transactions.push({
         externalId: refund.id,
         type: 'refund',
@@ -133,7 +151,7 @@ export const stripeService = {
       });
     }
 
-    for (const payout of payouts.data) {
+    for (const payout of payoutsList) {
       transactions.push({
         externalId: payout.id,
         type: 'payout',

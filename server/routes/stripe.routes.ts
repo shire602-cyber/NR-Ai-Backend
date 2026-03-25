@@ -54,6 +54,7 @@ export function registerStripeRoutes(app: Express) {
   // =============================================
   app.get(
     '/api/integrations/stripe/callback',
+    authMiddleware,
     asyncHandler(async (req: Request, res: Response) => {
       const { code, state: companyId, error, error_description } = req.query;
 
@@ -68,6 +69,18 @@ export function registerStripeRoutes(app: Express) {
 
       if (!code || !companyId) {
         return res.redirect('/integrations?stripe_error=missing_params');
+      }
+
+      // CSRF protection: verify the authenticated user owns the company in the state param
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.redirect('/integrations?stripe_error=not_authenticated');
+      }
+
+      const hasAccess = await storage.hasCompanyAccess(userId, String(companyId));
+      if (!hasAccess) {
+        log.warn({ userId, companyId }, 'Stripe OAuth callback: user does not own company');
+        return res.redirect('/integrations?stripe_error=access_denied');
       }
 
       try {
@@ -325,9 +338,15 @@ export function registerStripeRoutes(app: Express) {
           .json({ message: 'Stripe integration not found or no webhook secret configured' });
       }
 
-      // Verify the webhook signature
+      // Verify the webhook signature using the raw body buffer
+      // (express.json's verify callback stores it as req.rawBody)
+      const rawBody = (req as any).rawBody;
+      if (!rawBody) {
+        return res.status(400).json({ message: 'Missing raw body for signature verification' });
+      }
+
       const event = stripeService.verifyWebhookSignature(
-        req.body,
+        rawBody,
         signature,
         integration.webhookSecret,
       );

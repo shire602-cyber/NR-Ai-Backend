@@ -38,6 +38,10 @@ applySecurityMiddleware(app);
 app.use(
   express.json({
     limit: '50mb', // For base64-encoded receipt images
+    verify: (req: any, _res, buf) => {
+      // Preserve the raw body buffer for Stripe webhook signature verification
+      req.rawBody = buf;
+    },
   })
 );
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));

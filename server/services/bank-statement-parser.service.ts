@@ -564,7 +564,8 @@ export function parseOFX(content: string): ParsedTransaction[] {
 
   // Split into individual transaction blocks
   // OFX uses <STMTTRN>...</STMTTRN> for each transaction
-  const trnRegex = /<STMTTRN>([\s\S]*?)(?:<\/STMTTRN>|(?=<STMTTRN>))/gi;
+  // The regex handles: XML-style closing tags, SGML-style (next <STMTTRN> or end-of-list tag or EOF)
+  const trnRegex = /<STMTTRN>([\s\S]*?)(?:<\/STMTTRN>|(?=<STMTTRN>)|(?=<\/BANKTRANLIST>)|$)/gi;
   let trnMatch: RegExpExecArray | null;
 
   while ((trnMatch = trnRegex.exec(content)) !== null) {
@@ -617,7 +618,7 @@ export function detectBankFormat(content: string): DetectResult {
 
   // OFX detection: look for OFX/SGML markers
   if (
-    trimmed.includes('<OFX>') || trimmed.includes('<OFX>') ||
+    trimmed.includes('<OFX>') ||
     trimmed.includes('OFXHEADER:') ||
     trimmed.includes('<STMTTRN>') ||
     trimmed.includes('<BANKMSGSRSV1>')

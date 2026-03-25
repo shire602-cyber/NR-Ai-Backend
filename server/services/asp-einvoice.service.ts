@@ -60,7 +60,11 @@ export const aspEInvoiceService = {
   async validateXml(xml: string): Promise<{ valid: boolean; errors: string[] }> {
     const errors: string[] = [];
 
-    // Required UBL 2.1 elements
+    // Required UBL 2.1 elements (use regex for more precise matching)
+    if (!xml.match(/<cbc:ID>[^<]+<\/cbc:ID>/))                     errors.push('Missing invoice ID (cbc:ID)');
+    if (!xml.match(/<cbc:IssueDate>[^<]+<\/cbc:IssueDate>/))       errors.push('Missing IssueDate');
+    if (!xml.match(/<cbc:InvoiceTypeCode>[^<]+<\/cbc:InvoiceTypeCode>/)) errors.push('Missing InvoiceTypeCode');
+    if (!xml.match(/<cbc:DocumentCurrencyCode>[^<]+<\/cbc:DocumentCurrencyCode>/)) errors.push('Missing DocumentCurrencyCode');
     if (!xml.includes('cbc:UBLVersionID'))          errors.push('Missing UBLVersionID');
     if (!xml.includes('cbc:CustomizationID'))       errors.push('Missing CustomizationID');
     if (!xml.includes('cbc:ProfileID'))             errors.push('Missing ProfileID');

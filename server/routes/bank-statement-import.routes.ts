@@ -17,6 +17,7 @@ import {
   type ParsedTransaction,
 } from '../services/bank-statement-parser.service';
 import { autoReconcileTransactions } from '../services/auto-reconcile.service';
+import { db } from '../db';
 import { createLogger } from '../config/logger';
 
 const log = createLogger('bank-statement-import');
@@ -175,6 +176,11 @@ export function registerBankStatementImportRoutes(app: Express) {
         return res.status(404).json({ message: 'Bank account not found for this company' });
       }
 
+      // Only asset-type accounts (bank/cash) are valid for statement import
+      if (account.type !== 'asset') {
+        return res.status(400).json({ message: 'Selected account must be a bank/cash account (asset type)' });
+      }
+
       // Build duplicate set from existing transactions
       const existing = await storage.getBankTransactionsByCompanyId(companyId);
       const existingSet = new Set(
@@ -185,33 +191,36 @@ export function registerBankStatementImportRoutes(app: Express) {
       let skipped = 0;
       let duplicates = 0;
 
-      for (const txn of transactions) {
-        const key = duplicateKey(new Date(txn.date), txn.amount, txn.description);
-        const isDuplicate = existingSet.has(key);
+      // Wrap all inserts in a database transaction so partial imports don't happen
+      await db.transaction(async (tx: any) => {
+        for (const txn of transactions) {
+          const key = duplicateKey(new Date(txn.date), txn.amount, txn.description);
+          const isDuplicate = existingSet.has(key);
 
-        if (isDuplicate) {
-          duplicates++;
-          if (skipDuplicates) {
-            skipped++;
-            continue;
+          if (isDuplicate) {
+            duplicates++;
+            if (skipDuplicates) {
+              skipped++;
+              continue;
+            }
           }
+
+          await storage.createBankTransaction({
+            companyId,
+            bankAccountId,
+            transactionDate: new Date(txn.date),
+            description: txn.description,
+            amount: String(txn.amount),
+            reference: txn.reference || null,
+            importSource: 'csv',
+            isReconciled: false,
+          });
+
+          // Add to the set so within-batch duplicates are also caught
+          existingSet.add(key);
+          imported++;
         }
-
-        await storage.createBankTransaction({
-          companyId,
-          bankAccountId,
-          transactionDate: new Date(txn.date),
-          description: txn.description,
-          amount: String(txn.amount),
-          reference: txn.reference || null,
-          importSource: 'csv',
-          isReconciled: false,
-        });
-
-        // Add to the set so within-batch duplicates are also caught
-        existingSet.add(key);
-        imported++;
-      }
+      });
 
       log.info(
         { companyId, bankAccountId, imported, skipped, duplicates, total: transactions.length },
