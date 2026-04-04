@@ -41,6 +41,24 @@ import { registerPortalPublicRoutes } from './routes/portal.public.routes';
 import { registerAdminRoutes } from './routes/admin.routes';
 import { registerRecurringInvoiceRoutes } from './routes/recurring-invoices.routes';
 import { registerInventoryRoutes } from './routes/inventory.routes';
+import { registerBillingRoutes } from './routes/billing.routes';
+import { registerQuoteRoutes } from './routes/quotes.routes';
+import { registerCreditNoteRoutes } from './routes/credit-notes.routes';
+import { registerPurchaseOrderRoutes } from './routes/purchase-orders.routes';
+import { registerInvoiceTemplateRoutes } from './routes/invoice-templates.routes';
+import { registerBankRoutes } from './routes/bank.routes';
+import { registerPushRoutes } from './routes/push.routes';
+import { registerExchangeRateRoutes } from './routes/exchange-rates.routes';
+import { registerFinancialStatementRoutes } from './routes/financial-statements.routes';
+import { registerEmployeeRoutes } from './routes/employees.routes';
+import { registerPayrollRoutes } from './routes/payroll.routes';
+import { registerReconciliationRuleRoutes } from './routes/reconciliation-rules.routes';
+import { registerDocumentVersionRoutes } from './routes/document-versions.routes';
+import { registerComplianceDashboardRoutes } from './routes/compliance-dashboard.routes';
+import { registerApiKeyRoutes } from './routes/api-keys.routes';
+import { registerWebhookRoutes } from './routes/webhooks.routes';
+import { registerFixedAssetRoutes } from './routes/fixed-assets.routes';
+import { registerCostCenterRoutes } from './routes/cost-centers.routes';
 
 const log = createLogger('routes');
 
@@ -90,6 +108,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Admin Panel ────────────────────────────────────────
   registerAdminRoutes(app);
+
+  // ─── Billing & Subscriptions ──────────────────────────────
+  registerBillingRoutes(app);
+
+  // ─── Sales Documents ──────────────────────────────────────
+  registerQuoteRoutes(app);
+  registerCreditNoteRoutes(app);
+
+  // ─── Purchasing ───────────────────────────────────────────
+  registerPurchaseOrderRoutes(app);
+
+  // ─── Invoice Templates ────────────────────────────────────
+  registerInvoiceTemplateRoutes(app);
+
+  // ─── Banking ──────────────────────────────────────────────
+  registerBankRoutes(app);
+
+  // ─── Push Notifications ───────────────────────────────────
+  registerPushRoutes(app);
+
+  // ─── Phase 4: Multi-Currency & Financial Statements ────────
+  registerExchangeRateRoutes(app);
+  registerFinancialStatementRoutes(app);
+
+  // ─── Phase 5: Payroll & Employees ──────────────────────────
+  registerEmployeeRoutes(app);
+  registerPayrollRoutes(app);
+
+  // ─── Phase 6: Advanced Reconciliation ──────────────────────
+  registerReconciliationRuleRoutes(app);
+
+  // ─── Phase 7: Audit Trail & Compliance ─────────────────────
+  registerDocumentVersionRoutes(app);
+  registerComplianceDashboardRoutes(app);
+
+  // ─── Phase 8: Developer API ────────────────────────────────
+  registerApiKeyRoutes(app);
+  registerWebhookRoutes(app);
+
+  // ─── Fixed Assets & Cost Centers ──────────────────────────
+  registerFixedAssetRoutes(app);
+  registerCostCenterRoutes(app);
 
   log.info('All route modules registered');
 

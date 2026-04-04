@@ -94,7 +94,6 @@ export function registerContactRoutes(app: Express) {
             address: contact.address || null,
             city: contact.city || null,
             country: contact.country || 'UAE',
-            isVatRegistered: !!contact.trnNumber || !!contact.trn,
           });
           results.updated++;
         } else {

@@ -21,8 +21,14 @@ export interface AuthUser {
  */
 declare global {
   namespace Express {
+    interface User {
+      id: string;
+      email: string;
+      isAdmin: boolean;
+      userType: string;
+    }
     interface Request {
-      user?: AuthUser;
+      subscription?: any; // Cached subscription for feature gating
     }
   }
 }

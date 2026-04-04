@@ -155,7 +155,9 @@ export const t = {
     corporateTax: 'Corporate Tax',
     teamManagement: 'Team Management',
     advancedReports: 'Advanced Reports',
-    
+    fixedAssets: 'Fixed Assets',
+    costCenters: 'Cost Centers',
+
     // Engagement
     notifications: 'Notifications',
     reminders: 'Payment Reminders',
@@ -379,7 +381,9 @@ export const t = {
     corporateTax: 'ضريبة الشركات',
     teamManagement: 'إدارة الفريق',
     advancedReports: 'التقارير المتقدمة',
-    
+    fixedAssets: 'الأصول الثابتة',
+    costCenters: 'مراكز التكلفة',
+
     // Engagement
     notifications: 'الإشعارات',
     reminders: 'تذكيرات الدفع',

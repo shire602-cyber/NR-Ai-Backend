@@ -317,6 +317,15 @@ export default function Dashboard() {
         </ScrollReveal>
       )}
 
+      {/* Error state for dashboard stats */}
+      {statsError && (
+        <Card className="border-destructive bg-destructive/5">
+          <CardContent className="py-4 text-sm text-destructive">
+            Failed to load dashboard statistics. Please refresh or try again later.
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Cards */}
       <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StaggerItem>

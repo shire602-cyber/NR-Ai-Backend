@@ -132,7 +132,7 @@ export default function AdvancedReports() {
   });
 
   const agingSummary = useMemo(() => {
-    if (!agingData) return { receivables: { current: 0, overdue: 0 }, payables: { current: 0, overdue: 0 } };
+    if (!agingData) return { receivables: { current: 0, overdue: 0, total: 0 }, payables: { current: 0, overdue: 0, total: 0 } };
     
     const receivables = agingData.filter(a => a.type === 'receivable');
     const payables = agingData.filter(a => a.type === 'payable');

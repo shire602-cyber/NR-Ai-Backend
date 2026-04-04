@@ -18,6 +18,7 @@ import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { registerRoutes } from './routes';
 import { setupVite, serveStatic } from './vite';
 import { initScheduler } from './services/scheduler.service';
+import { initWebPush } from './services/push-notification.service';
 
 // ─── Validate environment on startup ─────────────────────────
 const env = validateEnv();
@@ -33,6 +34,9 @@ app.set('trust proxy', 1);
 
 // ─── Security middleware (helmet, CORS, rate limiting) ──────
 applySecurityMiddleware(app);
+
+// ─── Stripe webhook needs raw body (BEFORE json parsing) ─────
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 
 // ─── Body parsing ────────────────────────────────────────────
 app.use(
@@ -96,6 +100,9 @@ async function bootstrap() {
 
   // ─── Background scheduler (engagement automation) ─────
   initScheduler();
+
+  // ─── Web push initialization ──────────────────────────
+  initWebPush();
 
   // ─── API 404 handler (before static/SPA fallback) ───────
   app.use('/api/*', notFoundHandler);

@@ -50,8 +50,13 @@ async function seedChartOfAccounts(
   }
 }
 
-// Stronger password validation: 8+ characters
-const passwordSchema = z.string().min(8, 'Password must be at least 8 characters');
+// Stronger password validation for a financial system:
+// 8+ characters, at least one uppercase, one lowercase, one digit
+const passwordSchema = z.string()
+  .min(8, 'Password must be at least 8 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one digit');
 
 // =============================================
 // Route registration
@@ -127,6 +132,18 @@ export function registerAuthRoutes(app: Express): void {
         status: 'active',
         currentPeriodStart: now,
         currentPeriodEnd: periodEnd,
+        maxUsers: 1,
+        maxInvoices: 20,
+        maxReceipts: 20,
+        aiCreditsRemaining: 10,
+        billingCycle: 'monthly',
+        maxCompanies: 1,
+        maxStorageMb: 500,
+        aiCreditsPerMonth: 10,
+        aiCreditsUsedThisMonth: 0,
+        invoicesCreatedThisMonth: 0,
+        receiptsCreatedThisMonth: 0,
+        usagePeriodStart: now,
       });
 
       // Generate tokens

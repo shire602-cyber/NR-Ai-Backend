@@ -43,12 +43,14 @@ export function registerAIRoutes(app: Express) {
     log.warn('AI routes registered without OpenAI — AI endpoints will return 503');
   }
 
+
   // =====================================
   // AI Categorization Route
   // =====================================
 
   // Customer-only: AI expense categorization
   app.post("/api/ai/categorize", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const validated = categorizationRequestSchema.parse(req.body);
       const userId = (req as any).user.id;
@@ -114,6 +116,7 @@ Amount: ${validated.amount} ${validated.currency}`
 
   // AI Bank Statement Parser Route
   app.post("/api/ai/parse-bank-statement", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { text } = req.body;
 
@@ -184,6 +187,7 @@ If no valid transactions can be found, return { "transactions": [] }`
 
   // AI CFO Advice Route
   app.post("/api/ai/cfo-advice", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, question, context } = req.body;
 
@@ -265,6 +269,7 @@ Keep your tone professional but friendly, like a trusted advisor.`
 
   // Enhanced AI Batch Transaction Categorization
   app.post("/api/ai/batch-categorize", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, transactions } = req.body;
       const userId = (req as any).user.id;
@@ -368,6 +373,7 @@ Respond with a JSON object:
 
   // Anomaly & Duplicate Detection
   app.post("/api/ai/detect-anomalies", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId } = req.body;
       const userId = (req as any).user.id;
@@ -528,6 +534,7 @@ Respond with JSON:
 
   // AI-Assisted Bank Reconciliation
   app.post("/api/ai/reconcile", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId } = req.body;
       const userId = (req as any).user.id;
@@ -749,6 +756,7 @@ ${JSON.stringify(ledgerData, null, 2)}`
 
   // Predictive Cash Flow Forecasting
   app.post("/api/ai/forecast-cashflow", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, forecastMonths = 3 } = req.body;
       const userId = (req as any).user.id;
@@ -927,6 +935,7 @@ Respond with JSON:
 
   // Main Natural Language Query Endpoint
   app.post("/api/ai/nl-gateway", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, message, locale = 'en', context = {} } = req.body;
       const userId = (req as any).user.id;
@@ -1134,10 +1143,12 @@ Company: ${company.name}`;
 
   // Enhanced /api/ask endpoint with streaming support
   app.post("/api/ask", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     const startTime = Date.now();
     let fullResponse = '';
     let conversationId: string | undefined;
     let isStreaming = false; // Track if we're in streaming mode (headers sent)
+    let validated: { message: string; companyId?: string; model: string; systemPrompt?: string; stream: boolean } | undefined;
 
     try {
       const userId = (req as any).user.id;
@@ -1151,7 +1162,7 @@ Company: ${company.name}`;
         stream: z.boolean().optional().default(false),
       });
 
-      const validated = validationSchema.parse(req.body);
+      validated = validationSchema.parse(req.body);
 
       // If companyId is provided, verify access
       if (validated.companyId) {
@@ -1616,6 +1627,7 @@ IMPORTANT GUIDELINES:
 
   // Smart suggestions based on context
   app.post("/api/ai/smart-suggest", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, context, fieldType, currentValue } = req.body;
       const userId = (req as any).user.id;

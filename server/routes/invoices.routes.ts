@@ -7,6 +7,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { insertInvoiceSchema } from '../../shared/schema';
 import { generateInvoicePDF } from '../services/pdf-invoice.service';
 import { generateEInvoiceXML } from '../services/einvoice.service';
+import { checkUsageLimit } from '../middleware/featureGate';
 
 export function registerInvoiceRoutes(app: Express) {
   // =====================================
@@ -105,7 +106,7 @@ export function registerInvoiceRoutes(app: Express) {
   }));
 
   // Customer-only: Create invoices
-  app.post("/api/companies/:companyId/invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/invoices", authMiddleware, requireCustomer, checkUsageLimit('invoices'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
     const { lines, date, ...invoiceData } = req.body;
@@ -180,7 +181,6 @@ export function registerInvoiceRoutes(app: Express) {
         sourceId: invoice.id,
         createdBy: userId,
         postedBy: null,
-        postedAt: null,
       });
 
       // Debit: Accounts Receivable (total)
@@ -252,7 +252,6 @@ export function registerInvoiceRoutes(app: Express) {
       await storage.updateJournalEntry(entry.id, {
         status: 'posted',
         postedBy: userId,
-        postedAt: new Date(),
       });
     }
 
@@ -401,7 +400,6 @@ export function registerInvoiceRoutes(app: Express) {
           sourceId: invoice.id,
           createdBy: userId,
           postedBy: null,
-          postedAt: null,
         });
 
         // Debit: Selected payment account (total)

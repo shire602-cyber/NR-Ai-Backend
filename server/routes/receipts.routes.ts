@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { z } from 'zod';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { checkUsageLimit } from '../middleware/featureGate';
 import { insertInvoiceSchema } from '../../shared/schema';
 
 export function registerReceiptRoutes(app: Express) {
@@ -77,7 +78,7 @@ export function registerReceiptRoutes(app: Express) {
     });
   }));
 
-  app.post("/api/companies/:companyId/receipts", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/receipts", authMiddleware, requireCustomer, checkUsageLimit('receipts'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -113,6 +114,16 @@ export function registerReceiptRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
+    // Verify receipt exists and user has access
+    const receipt = await storage.getReceipt(id);
+    if (!receipt) {
+      return res.status(404).json({ message: 'Receipt not found' });
+    }
+    const hasAccess = await storage.hasCompanyAccess(userId, receipt.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     // Convert empty category string to null (UUID field cannot accept empty strings)
     if (req.body.category === '') {
       req.body.category = null;
@@ -127,6 +138,16 @@ export function registerReceiptRoutes(app: Express) {
   app.delete("/api/receipts/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
+
+    // Verify receipt exists and user has access
+    const receipt = await storage.getReceipt(id);
+    if (!receipt) {
+      return res.status(404).json({ message: 'Receipt not found' });
+    }
+    const hasAccess = await storage.hasCompanyAccess(userId, receipt.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     await storage.deleteReceipt(id);
     res.json({ message: 'Receipt deleted successfully' });
@@ -192,13 +213,6 @@ export function registerReceiptRoutes(app: Express) {
       return res.status(400).json({ message: 'Payment account must be a cash or bank account (asset)' });
     }
 
-    // TODO: Wrap in database transaction to ensure atomicity
-    // For now, we'll proceed with the journal entry creation
-    // In production, this should be wrapped in a transaction
-    // NOTE: The operations below (journal entry creation, journal line creation,
-    // and receipt update) need to be wrapped in a database transaction to prevent
-    // partial writes if any step fails mid-way.
-
     // Parse date safely
     let entryDate: Date;
     try {
@@ -212,50 +226,18 @@ export function registerReceiptRoutes(app: Express) {
       entryDate = new Date();
     }
 
-    // Generate entry number atomically via storage helper
-    const entryNumber = await storage.generateEntryNumber(receipt.companyId, entryDate);
+    // Wrap all posting operations in a transaction for atomicity.
+    // If any step fails, everything rolls back — no orphaned journal entries.
+    const updatedReceipt = await storage.postReceiptTransaction(
+      receipt,
+      { accountId, paymentAccountId },
+      { expenseAccount, paymentAccount },
+      entryDate,
+      userId,
+      totalAmount,
+    );
 
-    // Create journal entry for the receipt
-    const entry = await storage.createJournalEntry({
-      companyId: receipt.companyId,
-      date: entryDate,
-      memo: `Receipt: ${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-      entryNumber,
-      status: 'posted',
-      source: 'receipt',
-      sourceId: receipt.id,
-      createdBy: userId,
-      postedBy: userId,
-      postedAt: new Date(),
-    });
-
-    // Debit: Expense Account (total amount including VAT)
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: expenseAccount.id,
-      debit: totalAmount,
-      credit: 0,
-      description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-    });
-
-    // Credit: Payment Account (cash/bank)
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: paymentAccount.id,
-      debit: 0,
-      credit: totalAmount,
-      description: `Payment for ${receipt.merchant || 'expense'}`,
-    });
-
-    // Update receipt with posting information
-    const updatedReceipt = await storage.updateReceipt(id, {
-      accountId,
-      paymentAccountId,
-      posted: true,
-      journalEntryId: entry.id,
-    });
-
-    console.log('[Receipts] Receipt posted successfully:', id, 'Journal entry:', entry.id);
+    console.log('[Receipts] Receipt posted successfully:', id, 'Journal entry:', updatedReceipt.journalEntryId);
     res.json(updatedReceipt);
   }));
 }

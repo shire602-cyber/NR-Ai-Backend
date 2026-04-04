@@ -267,7 +267,6 @@ export function registerJournalRoutes(app: Express) {
     const updatedEntry = await storage.updateJournalEntry(id, {
       status: 'posted',
       postedBy: userId,
-      postedAt: new Date(),
     });
 
     console.log('[Journal] Entry posted successfully:', id);
@@ -314,7 +313,6 @@ export function registerJournalRoutes(app: Express) {
       reversalReason: reason || null,
       createdBy: userId,
       postedBy: userId,
-      postedAt: new Date(),
     });
 
     // Create reversed lines (swap debits and credits)
@@ -332,7 +330,6 @@ export function registerJournalRoutes(app: Express) {
     await storage.updateJournalEntry(id, {
       status: 'void',
       updatedBy: userId,
-      updatedAt: new Date(),
     });
 
     console.log('[Journal] Entry reversed:', id, '-> new entry:', reversalEntry.id);

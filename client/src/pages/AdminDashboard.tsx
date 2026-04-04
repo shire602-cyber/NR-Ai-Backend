@@ -154,7 +154,7 @@ export default function AdminDashboard() {
                   <Building2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No clients yet</p>
                   <Link href="/admin/clients">
-                    <Button variant="link" className="mt-2">Add your first client</Button>
+                    <Button variant="ghost" className="mt-2">Add your first client</Button>
                   </Link>
                 </div>
               )}

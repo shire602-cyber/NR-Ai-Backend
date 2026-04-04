@@ -3,6 +3,8 @@ import { storage } from "../storage";
 import { authMiddleware } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { generateInvoicePDF } from "../services/pdf-invoice.service";
+import { createInvoicePaymentSession } from "../services/invoice-payment.service";
+import { isStripeConfigured } from "../services/stripe.service";
 import crypto from "crypto";
 
 /**
@@ -147,5 +149,34 @@ export function registerPortalPublicRoutes(app: Express) {
       'Content-Length': pdfBuffer.length.toString(),
     });
     res.send(pdfBuffer);
+  }));
+
+  // Public: Pay invoice via Stripe (no auth — accessed from public invoice view)
+  app.post("/api/public/invoice/:token/pay", asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.params;
+
+    if (!isStripeConfigured()) {
+      return res.status(503).json({ message: "Online payment is not currently available" });
+    }
+
+    // Find invoice by share token
+    const invoice = await storage.getInvoiceByShareToken(token);
+    if (!invoice) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    if (invoice.status === "paid") {
+      return res.status(400).json({ message: "Invoice already paid" });
+    }
+
+    const origin = req.headers.origin || req.headers.referer || "http://localhost:5000";
+    const returnUrl = `${origin}/view/invoice/${token}`;
+
+    const result = await createInvoicePaymentSession(invoice.id, returnUrl);
+    if (!result) {
+      return res.status(500).json({ message: "Failed to create payment session" });
+    }
+
+    res.json({ url: result.sessionUrl });
   }));
 }

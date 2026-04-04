@@ -116,7 +116,7 @@ export function ScrollReveal({
       variants={variants}
       className={className}
       transition={{ delay }}
-      {...props}
+      {...(props as any)}
     >
       {children}
     </motion.div>
@@ -142,7 +142,7 @@ export function StaggerContainer({
       animate={isInView ? "visible" : "hidden"}
       variants={staggerContainer}
       className={className}
-      {...props}
+      {...(props as any)}
     >
       {children}
     </motion.div>
@@ -159,7 +159,7 @@ export function StaggerItem({
   className?: string;
 } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <motion.div variants={staggerItem} className={className} {...props}>
+    <motion.div variants={staggerItem} className={className} {...(props as any)}>
       {children}
     </motion.div>
   );

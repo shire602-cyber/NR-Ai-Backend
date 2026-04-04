@@ -62,7 +62,8 @@ export const companies = pgTable("companies", {
   contactEmail: text("contact_email"),
   websiteUrl: text("website_url"),
   logoUrl: text("logo_url"),
-  
+  stampImageUrl: text("stamp_image_url"),
+
   // Tax & Compliance
   trnVatNumber: text("trn_vat_number"),
   taxRegistrationType: text("tax_registration_type"), // Standard, Flat Rate, Non-registered, Other
@@ -204,6 +205,7 @@ export const journalLines = pgTable("journal_lines", {
   reconciledAt: timestamp("reconciled_at"),
   reconciledBy: uuid("reconciled_by").references(() => users.id),
   bankTransactionId: uuid("bank_transaction_id"), // Reference to matched bank transaction
+  costCenterId: uuid("cost_center_id"), // Optional cost center allocation
 });
 
 export const insertJournalLineSchema = createInsertSchema(journalLines).omit({
@@ -235,6 +237,11 @@ export const invoices = pgTable("invoices", {
   einvoiceXml: text("einvoice_xml"),
   einvoiceHash: text("einvoice_hash"),
   einvoiceStatus: text("einvoice_status"), // null | generated | submitted | accepted | rejected
+  quoteId: uuid("quote_id"),
+  templateId: uuid("template_id"),
+  paymentIntentId: text("payment_intent_id"),
+  paidAt: timestamp("paid_at"),
+  paymentMethod: text("payment_method"), // stripe | bank_transfer | cash | cheque
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -609,6 +616,7 @@ export const bankTransactions = pgTable("bank_transactions", {
   matchedInvoiceId: uuid("matched_invoice_id").references(() => invoices.id),
   matchConfidence: real("match_confidence"), // AI confidence for the match
   importSource: text("import_source"), // manual | csv | api
+  bankConnectionId: uuid("bank_connection_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -1815,7 +1823,21 @@ export const subscriptions = pgTable("subscriptions", {
   maxInvoices: integer("max_invoices").default(50),
   maxReceipts: integer("max_receipts").default(100),
   aiCreditsRemaining: integer("ai_credits_remaining").default(100),
-  
+
+  // Billing cycle
+  billingCycle: text("billing_cycle").notNull().default("monthly"), // monthly | yearly
+
+  // Enhanced limits
+  maxCompanies: integer("max_companies").default(1),
+  maxStorageMb: integer("max_storage_mb").default(500),
+
+  // Monthly usage tracking
+  aiCreditsPerMonth: integer("ai_credits_per_month").default(10),
+  aiCreditsUsedThisMonth: integer("ai_credits_used_this_month").default(0),
+  invoicesCreatedThisMonth: integer("invoices_created_this_month").default(0),
+  receiptsCreatedThisMonth: integer("receipts_created_this_month").default(0),
+  usagePeriodStart: timestamp("usage_period_start"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1899,3 +1921,626 @@ export const insertAiConversationSchema = createInsertSchema(aiConversations).om
 
 export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
 export type AiConversation = typeof aiConversations.$inferSelect;
+
+// ===========================
+// Stripe Webhook Events (Idempotency)
+// ===========================
+export const stripeEvents = pgTable("stripe_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  stripeEventId: text("stripe_event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+  payload: text("payload"),
+});
+
+export const insertStripeEventSchema = createInsertSchema(stripeEvents).omit({
+  id: true,
+  processedAt: true,
+});
+
+export type InsertStripeEvent = z.infer<typeof insertStripeEventSchema>;
+export type StripeEvent = typeof stripeEvents.$inferSelect;
+
+// ===========================
+// Quotes / Estimates
+// ===========================
+export const quotes = pgTable("quotes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  customerName: text("customer_name").notNull(),
+  customerTrn: text("customer_trn"),
+  contactId: uuid("contact_id").references(() => customerContacts.id),
+  date: timestamp("date").notNull(),
+  expiryDate: timestamp("expiry_date"),
+  currency: text("currency").notNull().default("AED"),
+  subtotal: real("subtotal").notNull().default(0),
+  vatAmount: real("vat_amount").notNull().default(0),
+  total: real("total").notNull().default(0),
+  status: text("status").notNull().default("draft"), // draft | sent | accepted | rejected | expired | converted
+  convertedInvoiceId: uuid("converted_invoice_id").references(() => invoices.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertQuoteSchema = createInsertSchema(quotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertQuote = z.infer<typeof insertQuoteSchema>;
+export type Quote = typeof quotes.$inferSelect;
+
+// ===========================
+// Quote Lines
+// ===========================
+export const quoteLines = pgTable("quote_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: uuid("quote_id").notNull().references(() => quotes.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: real("quantity").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  vatRate: real("vat_rate").notNull().default(0.05),
+  vatSupplyType: text("vat_supply_type").default("standard_rated"),
+});
+
+export const insertQuoteLineSchema = createInsertSchema(quoteLines).omit({
+  id: true,
+});
+
+export type InsertQuoteLine = z.infer<typeof insertQuoteLineSchema>;
+export type QuoteLine = typeof quoteLines.$inferSelect;
+
+// ===========================
+// Credit Notes
+// ===========================
+export const creditNotes = pgTable("credit_notes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id),
+  customerName: text("customer_name").notNull(),
+  customerTrn: text("customer_trn"),
+  date: timestamp("date").notNull(),
+  reason: text("reason"),
+  currency: text("currency").notNull().default("AED"),
+  subtotal: real("subtotal").notNull().default(0),
+  vatAmount: real("vat_amount").notNull().default(0),
+  total: real("total").notNull().default(0),
+  status: text("status").notNull().default("draft"), // draft | issued | void
+  journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCreditNoteSchema = createInsertSchema(creditNotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCreditNote = z.infer<typeof insertCreditNoteSchema>;
+export type CreditNote = typeof creditNotes.$inferSelect;
+
+// ===========================
+// Credit Note Lines
+// ===========================
+export const creditNoteLines = pgTable("credit_note_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  creditNoteId: uuid("credit_note_id").notNull().references(() => creditNotes.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: real("quantity").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  vatRate: real("vat_rate").notNull().default(0.05),
+  vatSupplyType: text("vat_supply_type").default("standard_rated"),
+});
+
+export const insertCreditNoteLineSchema = createInsertSchema(creditNoteLines).omit({
+  id: true,
+});
+
+export type InsertCreditNoteLine = z.infer<typeof insertCreditNoteLineSchema>;
+export type CreditNoteLine = typeof creditNoteLines.$inferSelect;
+
+// ===========================
+// Purchase Orders
+// ===========================
+export const purchaseOrders = pgTable("purchase_orders", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  vendorName: text("vendor_name").notNull(),
+  vendorTrn: text("vendor_trn"),
+  contactId: uuid("contact_id").references(() => customerContacts.id),
+  date: timestamp("date").notNull(),
+  expectedDeliveryDate: timestamp("expected_delivery_date"),
+  currency: text("currency").notNull().default("AED"),
+  subtotal: real("subtotal").notNull().default(0),
+  vatAmount: real("vat_amount").notNull().default(0),
+  total: real("total").notNull().default(0),
+  status: text("status").notNull().default("draft"), // draft | sent | approved | received | cancelled
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+
+// ===========================
+// Purchase Order Lines
+// ===========================
+export const purchaseOrderLines = pgTable("purchase_order_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  purchaseOrderId: uuid("purchase_order_id").notNull().references(() => purchaseOrders.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: real("quantity").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  vatRate: real("vat_rate").notNull().default(0.05),
+  vatSupplyType: text("vat_supply_type").default("standard_rated"),
+});
+
+export const insertPurchaseOrderLineSchema = createInsertSchema(purchaseOrderLines).omit({
+  id: true,
+});
+
+export type InsertPurchaseOrderLine = z.infer<typeof insertPurchaseOrderLineSchema>;
+export type PurchaseOrderLine = typeof purchaseOrderLines.$inferSelect;
+
+// ===========================
+// Invoice Templates
+// ===========================
+export const invoiceTemplates = pgTable("invoice_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  primaryColor: text("primary_color").default("#1E40AF"),
+  accentColor: text("accent_color").default("#3B82F6"),
+  layout: text("layout").default("standard"), // standard | modern | minimal
+  showColumns: text("show_columns"), // JSON: { quantity: true, unitPrice: true, vatRate: true }
+  headerText: text("header_text"),
+  footerText: text("footer_text"),
+  showLogo: boolean("show_logo").default(true),
+  showStamp: boolean("show_stamp").default(false),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertInvoiceTemplateSchema = createInsertSchema(invoiceTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertInvoiceTemplate = z.infer<typeof insertInvoiceTemplateSchema>;
+export type InvoiceTemplate = typeof invoiceTemplates.$inferSelect;
+
+// ===========================
+// Bank Connections
+// ===========================
+export const bankConnections = pgTable("bank_connections", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  bankName: text("bank_name").notNull(),
+  accountNumberLast4: text("account_number_last4"),
+  bankAccountId: uuid("bank_account_id").references(() => accounts.id),
+  connectionType: text("connection_type").default("csv"), // csv | ofx | api
+  status: text("status").default("active"), // active | disconnected | pending_consent | error
+  lastSyncAt: timestamp("last_sync_at"),
+  // Open Banking / Wio Bank fields
+  provider: text("provider"), // wio | lean | tarabut | null (for CSV/OFX)
+  externalAccountId: text("external_account_id"), // Bank's account identifier
+  iban: text("iban"),
+  consentId: text("consent_id"), // Open Banking consent reference
+  accessToken: text("access_token"), // Encrypted OAuth token
+  refreshToken: text("refresh_token"), // Encrypted OAuth refresh token
+  tokenExpiresAt: timestamp("token_expires_at"),
+  consentExpiresAt: timestamp("consent_expires_at"),
+  autoSync: boolean("auto_sync").default(false), // Auto-fetch transactions
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertBankConnectionSchema = createInsertSchema(bankConnections).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBankConnection = z.infer<typeof insertBankConnectionSchema>;
+export type BankConnection = typeof bankConnections.$inferSelect;
+
+// ===========================
+// Push Notification Subscriptions
+// ===========================
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dhKey: text("p256dh_key").notNull(),
+  authKey: text("auth_key").notNull(),
+  userAgent: text("user_agent"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+// ===========================
+// Notification Preferences
+// ===========================
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  pushEnabled: boolean("push_enabled").default(true),
+  emailEnabled: boolean("email_enabled").default(true),
+  invoiceReminders: boolean("invoice_reminders").default(true),
+  vatDeadlines: boolean("vat_deadlines").default(true),
+  paymentReceived: boolean("payment_received").default(true),
+  weeklyDigest: boolean("weekly_digest").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+
+// ===========================
+// Phase 4: Exchange Rates (Multi-Currency)
+// ===========================
+export const exchangeRates = pgTable("exchange_rates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  fromCurrency: text("from_currency").notNull(),
+  toCurrency: text("to_currency").notNull(),
+  rate: real("rate").notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  source: text("source").default("manual"), // manual | api
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertExchangeRateSchema = createInsertSchema(exchangeRates).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertExchangeRate = z.infer<typeof insertExchangeRateSchema>;
+export type ExchangeRate = typeof exchangeRates.$inferSelect;
+
+// ===========================
+// Phase 5: Employees
+// ===========================
+export const employees = pgTable("employees", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  employeeNumber: text("employee_number").notNull(),
+  name: text("name").notNull(),
+  nameAr: text("name_ar"),
+  email: text("email"),
+  phone: text("phone"),
+  position: text("position"),
+  department: text("department"),
+  nationality: text("nationality"),
+  emiratesId: text("emirates_id"),
+  passportNumber: text("passport_number"),
+  bankName: text("bank_name"),
+  bankAccountNumber: text("bank_account_number"),
+  bankIban: text("bank_iban"),
+  basicSalary: real("basic_salary").notNull().default(0),
+  housingAllowance: real("housing_allowance").default(0),
+  transportAllowance: real("transport_allowance").default(0),
+  otherAllowances: real("other_allowances").default(0),
+  joinDate: timestamp("join_date"),
+  endDate: timestamp("end_date"),
+  status: text("status").notNull().default("active"), // active | terminated | on_leave
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEmployeeSchema = createInsertSchema(employees).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type Employee = typeof employees.$inferSelect;
+
+// ===========================
+// Phase 5: Payroll Runs
+// ===========================
+export const payrollRuns = pgTable("payroll_runs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  period: text("period").notNull(), // e.g. "2026-03"
+  runDate: timestamp("run_date").notNull(),
+  totalBasicSalary: real("total_basic_salary").default(0),
+  totalAllowances: real("total_allowances").default(0),
+  totalDeductions: real("total_deductions").default(0),
+  totalNetPay: real("total_net_pay").default(0),
+  employeeCount: integer("employee_count").default(0),
+  status: text("status").notNull().default("draft"), // draft | approved | paid | cancelled
+  journalEntryId: uuid("journal_entry_id"),
+  wpsFileGenerated: boolean("wps_file_generated").default(false),
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+
+// ===========================
+// Phase 5: Payroll Lines (per employee per run)
+// ===========================
+export const payrollLines = pgTable("payroll_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  payrollRunId: uuid("payroll_run_id").notNull().references(() => payrollRuns.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id),
+  basicSalary: real("basic_salary").notNull(),
+  housingAllowance: real("housing_allowance").default(0),
+  transportAllowance: real("transport_allowance").default(0),
+  otherAllowances: real("other_allowances").default(0),
+  deductions: real("deductions").default(0),
+  netPay: real("net_pay").notNull(),
+  notes: text("notes"),
+});
+
+export const insertPayrollLineSchema = createInsertSchema(payrollLines).omit({
+  id: true,
+});
+
+export type InsertPayrollLine = z.infer<typeof insertPayrollLineSchema>;
+export type PayrollLine = typeof payrollLines.$inferSelect;
+
+// ===========================
+// Phase 6: Bank Reconciliation Rules
+// ===========================
+export const reconciliationRules = pgTable("reconciliation_rules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  priority: integer("priority").default(0),
+  matchField: text("match_field").notNull(), // description | reference | amount
+  matchType: text("match_type").notNull(), // contains | exact | regex | starts_with
+  matchValue: text("match_value").notNull(),
+  targetAccountId: uuid("target_account_id").references(() => accounts.id),
+  category: text("category"),
+  memo: text("memo"),
+  isActive: boolean("is_active").default(true),
+  timesApplied: integer("times_applied").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertReconciliationRuleSchema = createInsertSchema(reconciliationRules).omit({
+  id: true,
+  timesApplied: true,
+  createdAt: true,
+});
+
+export type InsertReconciliationRule = z.infer<typeof insertReconciliationRuleSchema>;
+export type ReconciliationRule = typeof reconciliationRules.$inferSelect;
+
+// ===========================
+// Phase 7: Document Versions
+// ===========================
+export const documentVersions = pgTable("document_versions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  documentType: text("document_type").notNull(), // invoice | quote | credit_note | purchase_order | receipt
+  documentId: uuid("document_id").notNull(),
+  version: integer("version").notNull().default(1),
+  changeDescription: text("change_description"),
+  changedBy: uuid("changed_by").references(() => users.id),
+  snapshotData: text("snapshot_data"), // JSON snapshot of the document at this version
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertDocumentVersionSchema = createInsertSchema(documentVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
+export type DocumentVersion = typeof documentVersions.$inferSelect;
+
+// ===========================
+// Phase 8: API Keys
+// ===========================
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull(), // hashed API key
+  keyPrefix: text("key_prefix").notNull(), // first 8 chars for display
+  scopes: text("scopes").notNull().default("read"), // read | write | admin (comma-separated)
+  lastUsedAt: timestamp("last_used_at"),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({
+  id: true,
+  lastUsedAt: true,
+  createdAt: true,
+});
+
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type ApiKey = typeof apiKeys.$inferSelect;
+
+// ===========================
+// Phase 8: Webhooks
+// ===========================
+export const webhookEndpoints = pgTable("webhook_endpoints", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  secret: text("secret").notNull(), // used to sign payloads
+  events: text("events").notNull(), // comma-separated: invoice.created, payment.received, etc.
+  isActive: boolean("is_active").default(true),
+  failureCount: integer("failure_count").default(0),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertWebhookEndpointSchema = createInsertSchema(webhookEndpoints).omit({
+  id: true,
+  failureCount: true,
+  lastTriggeredAt: true,
+  createdAt: true,
+});
+
+export type InsertWebhookEndpoint = z.infer<typeof insertWebhookEndpointSchema>;
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+
+// ===========================
+// Phase 8: Webhook Deliveries (log)
+// ===========================
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  webhookEndpointId: uuid("webhook_endpoint_id").notNull().references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+  event: text("event").notNull(),
+  payload: text("payload").notNull(),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  success: boolean("success").default(false),
+  attemptNumber: integer("attempt_number").default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertWebhookDeliverySchema = createInsertSchema(webhookDeliveries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+
+// ===========================
+// Cost Centers
+// ===========================
+export const costCenters = pgTable("cost_centers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  parentId: uuid("parent_id"), // self-ref for hierarchy
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertCostCenterSchema = createInsertSchema(costCenters).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCostCenter = z.infer<typeof insertCostCenterSchema>;
+export type CostCenter = typeof costCenters.$inferSelect;
+
+// ===========================
+// Fixed Asset Categories
+// ===========================
+export const fixedAssetCategories = pgTable("fixed_asset_categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  defaultUsefulLifeMonths: integer("default_useful_life_months"),
+  defaultDepreciationMethod: text("default_depreciation_method").default("straight_line"),
+  defaultAssetAccountId: uuid("default_asset_account_id").references(() => accounts.id),
+  defaultDepreciationAccountId: uuid("default_depreciation_account_id").references(() => accounts.id),
+  defaultAccumulatedDepAccountId: uuid("default_accumulated_dep_account_id").references(() => accounts.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFixedAssetCategorySchema = createInsertSchema(fixedAssetCategories).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertFixedAssetCategory = z.infer<typeof insertFixedAssetCategorySchema>;
+export type FixedAssetCategory = typeof fixedAssetCategories.$inferSelect;
+
+// ===========================
+// Fixed Assets
+// ===========================
+export const fixedAssets = pgTable("fixed_assets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  assetCode: text("asset_code").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  categoryId: uuid("category_id").references(() => fixedAssetCategories.id),
+  purchaseDate: timestamp("purchase_date").notNull(),
+  purchasePrice: real("purchase_price").notNull(),
+  residualValue: real("residual_value").notNull().default(0),
+  usefulLifeMonths: integer("useful_life_months").notNull(),
+  depreciationMethod: text("depreciation_method").notNull().default("straight_line"), // straight_line | declining_balance
+  assetAccountId: uuid("asset_account_id").references(() => accounts.id),
+  depreciationExpenseAccountId: uuid("depreciation_expense_account_id").references(() => accounts.id),
+  accumulatedDepAccountId: uuid("accumulated_dep_account_id").references(() => accounts.id),
+  status: text("status").notNull().default("active"), // active | disposed | fully_depreciated
+  disposalDate: timestamp("disposal_date"),
+  disposalPrice: real("disposal_price"),
+  disposalJournalEntryId: uuid("disposal_journal_entry_id"),
+  location: text("location"),
+  serialNumber: text("serial_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertFixedAssetSchema = createInsertSchema(fixedAssets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertFixedAsset = z.infer<typeof insertFixedAssetSchema>;
+export type FixedAsset = typeof fixedAssets.$inferSelect;
+
+// ===========================
+// Depreciation Schedules
+// ===========================
+export const depreciationSchedules = pgTable("depreciation_schedules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixedAssetId: uuid("fixed_asset_id").notNull().references(() => fixedAssets.id, { onDelete: "cascade" }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  depreciationAmount: real("depreciation_amount").notNull(),
+  accumulatedDepreciation: real("accumulated_depreciation").notNull(),
+  bookValue: real("book_value").notNull(),
+  journalEntryId: uuid("journal_entry_id"),
+  status: text("status").notNull().default("pending"), // pending | posted
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertDepreciationScheduleSchema = createInsertSchema(depreciationSchedules).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDepreciationSchedule = z.infer<typeof insertDepreciationScheduleSchema>;
+export type DepreciationSchedule = typeof depreciationSchedules.$inferSelect;

@@ -1,7 +1,21 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
+
+/**
+ * Helper: validate company access for the authenticated user.
+ * Returns true if authorized, sends 403 and returns false otherwise.
+ */
+async function verifyCompanyAccess(req: Request, res: Response, companyId: string): Promise<boolean> {
+  const userId = (req as any).user.id;
+  const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+  if (!hasAccess) {
+    res.status(403).json({ message: 'Access denied to this company' });
+    return false;
+  }
+  return true;
+}
 
 /**
  * Register all dashboard and basic report routes.
@@ -11,8 +25,9 @@ export function registerDashboardRoutes(app: Express) {
   // Dashboard Stats Routes
   // =====================================
 
-  app.get("/api/companies/:companyId/dashboard/stats", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/dashboard/stats", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    if (!await verifyCompanyAccess(req, res, companyId)) return;
     const invoices = await storage.getInvoicesByCompanyId(companyId);
     const entries = await storage.getJournalEntriesByCompanyId(companyId);
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -48,8 +63,9 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/companies/:companyId/dashboard/expense-breakdown", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/dashboard/expense-breakdown", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    if (!await verifyCompanyAccess(req, res, companyId)) return;
     const entries = await storage.getJournalEntriesByCompanyId(companyId);
     const accounts = await storage.getAccountsByCompanyId(companyId);
     const expenseAccounts = accounts.filter(a => a.type === 'expense');
@@ -78,8 +94,9 @@ export function registerDashboardRoutes(app: Express) {
     res.json(breakdown);
   }));
 
-  app.get("/api/companies/:companyId/dashboard/monthly-trends", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/dashboard/monthly-trends", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    if (!await verifyCompanyAccess(req, res, companyId)) return;
     const invoices = await storage.getInvoicesByCompanyId(companyId);
     const entries = await storage.getJournalEntriesByCompanyId(companyId);
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -129,8 +146,9 @@ export function registerDashboardRoutes(app: Express) {
   // Reports Routes
   // =====================================
 
-  app.get("/api/companies/:companyId/reports/pl", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reports/pl", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    if (!await verifyCompanyAccess(req, res, companyId)) return;
     const { startDate, endDate } = req.query;
 
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -196,8 +214,9 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/companies/:companyId/reports/balance-sheet", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reports/balance-sheet", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    if (!await verifyCompanyAccess(req, res, companyId)) return;
     const { startDate, endDate } = req.query;
 
     const accounts = await storage.getAccountsByCompanyId(companyId);
@@ -269,8 +288,9 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/companies/:companyId/reports/vat-summary", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reports/vat-summary", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
+    if (!await verifyCompanyAccess(req, res, companyId)) return;
     const { startDate, endDate } = req.query;
 
     let invoices = await storage.getInvoicesByCompanyId(companyId);
@@ -289,6 +309,7 @@ export function registerDashboardRoutes(app: Express) {
       });
 
       receipts = receipts.filter(receipt => {
+        if (!receipt.date) return false;
         const receiptDate = new Date(receipt.date);
         if (start && receiptDate < start) return false;
         if (end && receiptDate > end) return false;
@@ -336,12 +357,13 @@ export function registerDashboardRoutes(app: Express) {
   // Dashboard Routes
   // =====================================
 
-  app.get("/api/dashboard/stats", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/dashboard/stats", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.query;
     if (!companyId) {
       return res.json({ revenue: 0, expenses: 0, outstanding: 0, totalInvoices: 0, totalEntries: 0 });
     }
 
+    if (!await verifyCompanyAccess(req, res, companyId as string)) return;
     const invoices = await storage.getInvoicesByCompanyId(companyId as string);
     const accounts = await storage.getAccountsByCompanyId(companyId as string);
     const entries = await storage.getJournalEntriesByCompanyId(companyId as string);
@@ -375,22 +397,24 @@ export function registerDashboardRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/dashboard/recent-invoices", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/dashboard/recent-invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.query;
     if (!companyId) {
       return res.json([]);
     }
 
+    if (!await verifyCompanyAccess(req, res, companyId as string)) return;
     const invoices = await storage.getInvoicesByCompanyId(companyId as string);
     res.json(invoices.slice(0, 5));
   }));
 
-  app.get("/api/dashboard/expense-breakdown", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/dashboard/expense-breakdown", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.query;
     if (!companyId) {
       return res.json([]);
     }
 
+    if (!await verifyCompanyAccess(req, res, companyId as string)) return;
     const accounts = await storage.getAccountsByCompanyId(companyId as string);
     const entries = await storage.getJournalEntriesByCompanyId(companyId as string);
 

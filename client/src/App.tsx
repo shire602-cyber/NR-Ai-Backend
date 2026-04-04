@@ -10,6 +10,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useI18n } from '@/lib/i18n';
 import { getToken } from '@/lib/auth';
+import { registerServiceWorker } from '@/lib/push';
 import { Button } from '@/components/ui/button';
 import { User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -70,6 +71,21 @@ import PublicInvoiceView from '@/pages/PublicInvoiceView';
 import CustomerPortal from '@/pages/CustomerPortal';
 import RecurringInvoices from '@/pages/RecurringInvoices';
 import Inventory from '@/pages/Inventory';
+import Subscription from '@/pages/Subscription';
+import Quotes from '@/pages/Quotes';
+import CreditNotes from '@/pages/CreditNotes';
+import PurchaseOrders from '@/pages/PurchaseOrders';
+import InvoiceTemplates from '@/pages/InvoiceTemplates';
+import NotificationPreferences from '@/pages/NotificationPreferences';
+import ExchangeRates from '@/pages/ExchangeRates';
+import FinancialStatements from '@/pages/FinancialStatements';
+import Employees from '@/pages/Employees';
+import Payroll from '@/pages/Payroll';
+import ReconciliationRules from '@/pages/ReconciliationRules';
+import DocumentVersions from '@/pages/DocumentVersions';
+import DeveloperSettings from '@/pages/DeveloperSettings';
+import FixedAssets from '@/pages/FixedAssets';
+import CostCenters from '@/pages/CostCenters';
 
 // Components
 import { OnboardingWizard } from '@/components/Onboarding';
@@ -196,6 +212,12 @@ function Router() {
           <Route path="/accounts" component={Accounts} />
           <Route path="/chart-of-accounts" component={ChartOfAccounts} />
           <Route path="/accounts/:id/ledger" component={AccountLedger} />
+          <Route path="/subscription" component={Subscription} />
+          <Route path="/quotes" component={Quotes} />
+          <Route path="/credit-notes" component={CreditNotes} />
+          <Route path="/purchase-orders" component={PurchaseOrders} />
+          <Route path="/invoice-templates" component={InvoiceTemplates} />
+          <Route path="/notification-preferences" component={NotificationPreferences} />
           <Route path="/invoices" component={Invoices} />
           <Route path="/recurring-invoices" component={RecurringInvoices} />
           <Route path="/journal" component={Journal} />
@@ -230,7 +252,18 @@ function Router() {
           <Route path="/compliance-calendar" component={ComplianceCalendar} />
           <Route path="/task-center" component={TaskCenter} />
           <Route path="/news-feed" component={UAENewsFeed} />
-          
+
+          {/* Phase 4-8 Routes */}
+          <Route path="/exchange-rates" component={ExchangeRates} />
+          <Route path="/financial-statements" component={FinancialStatements} />
+          <Route path="/employees" component={Employees} />
+          <Route path="/payroll" component={Payroll} />
+          <Route path="/reconciliation-rules" component={ReconciliationRules} />
+          <Route path="/document-versions" component={DocumentVersions} />
+          <Route path="/developer-settings" component={DeveloperSettings} />
+          <Route path="/fixed-assets" component={FixedAssets} />
+          <Route path="/cost-centers" component={CostCenters} />
+
           {/* Admin Routes */}
           <Route path="/admin/dashboard" component={AdminDashboard} />
           <Route path="/admin/clients" component={ClientManagement} />
@@ -242,7 +275,6 @@ function Router() {
           <Route path="/admin/import" component={ClientImport} />
           <Route path="/admin/activity-logs" component={ActivityLogs} />
           <Route path="/admin/users" component={Admin} />
-          <Route path="/admin" component={Admin} />
           
           <Route component={NotFound} />
         </Switch>
@@ -257,6 +289,8 @@ export default function App() {
   useEffect(() => {
     // Initialize locale settings
     setLocale(locale);
+    // Register PWA service worker
+    registerServiceWorker();
   }, []);
 
   return (

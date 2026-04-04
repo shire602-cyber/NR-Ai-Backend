@@ -55,7 +55,31 @@ import type {
   RecurringInvoice, InsertRecurringInvoice,
   CorporateTaxReturn, InsertCorporateTaxReturn,
   Product, InsertProduct,
-  InventoryMovement, InsertInventoryMovement
+  InventoryMovement, InsertInventoryMovement,
+  Quote, InsertQuote,
+  QuoteLine, InsertQuoteLine,
+  CreditNote, InsertCreditNote,
+  CreditNoteLine, InsertCreditNoteLine,
+  PurchaseOrder, InsertPurchaseOrder,
+  PurchaseOrderLine, InsertPurchaseOrderLine,
+  InvoiceTemplate, InsertInvoiceTemplate,
+  BankConnection, InsertBankConnection,
+  StripeEvent, InsertStripeEvent,
+  PushSubscription, InsertPushSubscription,
+  NotificationPreferences, InsertNotificationPreferences,
+  ExchangeRate, InsertExchangeRate,
+  Employee, InsertEmployee,
+  PayrollRun, InsertPayrollRun,
+  PayrollLine, InsertPayrollLine,
+  ReconciliationRule, InsertReconciliationRule,
+  DocumentVersion, InsertDocumentVersion,
+  ApiKey, InsertApiKey,
+  WebhookEndpoint, InsertWebhookEndpoint,
+  WebhookDelivery, InsertWebhookDelivery,
+  CostCenter, InsertCostCenter,
+  FixedAssetCategory, InsertFixedAssetCategory,
+  FixedAsset, InsertFixedAsset,
+  DepreciationSchedule, InsertDepreciationSchedule
 } from "@shared/schema";
 import {
   users,
@@ -114,10 +138,34 @@ import {
   recurringInvoices,
   corporateTaxReturns,
   products,
-  inventoryMovements
+  inventoryMovements,
+  quotes,
+  quoteLines,
+  creditNotes,
+  creditNoteLines,
+  purchaseOrders,
+  purchaseOrderLines,
+  invoiceTemplates,
+  bankConnections,
+  stripeEvents,
+  pushSubscriptions,
+  notificationPreferences,
+  exchangeRates,
+  employees,
+  payrollRuns,
+  payrollLines,
+  reconciliationRules,
+  documentVersions,
+  apiKeys,
+  webhookEndpoints,
+  webhookDeliveries,
+  costCenters,
+  fixedAssetCategories,
+  fixedAssets,
+  depreciationSchedules
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, lte } from "drizzle-orm";
+import { eq, and, desc, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -544,6 +592,79 @@ export interface IStorage {
   getInventoryMovementsByProductId(productId: string): Promise<InventoryMovement[]>;
   getInventoryMovementsByCompanyId(companyId: string): Promise<InventoryMovement[]>;
   createInventoryMovement(data: InsertInventoryMovement): Promise<InventoryMovement>;
+
+  // Quotes
+  getQuote(id: string): Promise<Quote | undefined>;
+  getQuotesByCompanyId(companyId: string): Promise<Quote[]>;
+  createQuote(quote: InsertQuote): Promise<Quote>;
+  updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote>;
+  deleteQuote(id: string): Promise<void>;
+
+  // Quote Lines
+  createQuoteLine(line: InsertQuoteLine): Promise<QuoteLine>;
+  getQuoteLinesByQuoteId(quoteId: string): Promise<QuoteLine[]>;
+  deleteQuoteLinesByQuoteId(quoteId: string): Promise<void>;
+
+  // Credit Notes
+  getCreditNote(id: string): Promise<CreditNote | undefined>;
+  getCreditNotesByCompanyId(companyId: string): Promise<CreditNote[]>;
+  createCreditNote(note: InsertCreditNote): Promise<CreditNote>;
+  updateCreditNote(id: string, data: Partial<InsertCreditNote>): Promise<CreditNote>;
+  deleteCreditNote(id: string): Promise<void>;
+
+  // Credit Note Lines
+  createCreditNoteLine(line: InsertCreditNoteLine): Promise<CreditNoteLine>;
+  getCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<CreditNoteLine[]>;
+  deleteCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<void>;
+
+  // Purchase Orders
+  getPurchaseOrder(id: string): Promise<PurchaseOrder | undefined>;
+  getPurchaseOrdersByCompanyId(companyId: string): Promise<PurchaseOrder[]>;
+  createPurchaseOrder(po: InsertPurchaseOrder): Promise<PurchaseOrder>;
+  updatePurchaseOrder(id: string, data: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder>;
+  deletePurchaseOrder(id: string): Promise<void>;
+
+  // Purchase Order Lines
+  createPurchaseOrderLine(line: InsertPurchaseOrderLine): Promise<PurchaseOrderLine>;
+  getPurchaseOrderLinesByPurchaseOrderId(poId: string): Promise<PurchaseOrderLine[]>;
+  deletePurchaseOrderLinesByPurchaseOrderId(poId: string): Promise<void>;
+
+  // Invoice Templates
+  getInvoiceTemplate(id: string): Promise<InvoiceTemplate | undefined>;
+  getInvoiceTemplatesByCompanyId(companyId: string): Promise<InvoiceTemplate[]>;
+  createInvoiceTemplate(template: InsertInvoiceTemplate): Promise<InvoiceTemplate>;
+  updateInvoiceTemplate(id: string, data: Partial<InsertInvoiceTemplate>): Promise<InvoiceTemplate>;
+  deleteInvoiceTemplate(id: string): Promise<void>;
+  getDefaultInvoiceTemplate(companyId: string): Promise<InvoiceTemplate | undefined>;
+
+  // Bank Connections
+  getBankConnection(id: string): Promise<BankConnection | undefined>;
+  getBankConnectionsByCompanyId(companyId: string): Promise<BankConnection[]>;
+  createBankConnection(connection: InsertBankConnection): Promise<BankConnection>;
+  updateBankConnection(id: string, data: Partial<InsertBankConnection>): Promise<BankConnection>;
+  deleteBankConnection(id: string): Promise<void>;
+
+  // Stripe Events
+  getStripeEvent(stripeEventId: string): Promise<StripeEvent | undefined>;
+  createStripeEvent(event: InsertStripeEvent): Promise<StripeEvent>;
+
+  // Usage Tracking
+  incrementInvoiceCount(companyId: string): Promise<void>;
+  incrementReceiptCount(companyId: string): Promise<void>;
+  decrementAiCredits(companyId: string, amount?: number): Promise<void>;
+  resetMonthlyUsage(companyId: string): Promise<void>;
+  getCompanyCountByUserId(userId: string): Promise<number>;
+  getUserCountByCompanyId(companyId: string): Promise<number>;
+
+  // Push Subscriptions
+  getPushSubscriptionsByUserId(userId: string): Promise<PushSubscription[]>;
+  createPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
+  deletePushSubscription(id: string): Promise<void>;
+  deactivatePushSubscription(endpoint: string): Promise<void>;
+
+  // Notification Preferences
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
+  upsertNotificationPreferences(userId: string, prefs: Partial<InsertNotificationPreferences>): Promise<NotificationPreferences>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -587,7 +708,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(companyUsers, eq(companies.id, companyUsers.companyId))
       .where(eq(companyUsers.userId, userId));
     
-    return results.map(r => r.companies);
+    return results.map((r: { companies: Company }) => r.companies);
   }
 
   async createCompany(insertCompany: InsertCompany): Promise<Company> {
@@ -703,7 +824,7 @@ export class DatabaseStorage implements IStorage {
     if (accountsData.length === 0) return [];
     
     const expectedCount = accountsData.length;
-    const createdAccounts = await db.transaction(async (tx) => {
+    const createdAccounts = await db.transaction(async (tx: typeof db) => {
       const inserted = await tx
         .insert(accounts)
         .values(accountsData)
@@ -741,8 +862,9 @@ export class DatabaseStorage implements IStorage {
   async getAccountsWithBalances(companyId: string, dateRange?: { start: Date; end: Date }) {
     const accountsList = await db.select().from(accounts).where(eq(accounts.companyId, companyId));
     
-    const results = await Promise.all(accountsList.map(async (account) => {
-      let lines = await db
+    type BalanceLine = { debit: number; credit: number; date: Date; status: string };
+    const results = await Promise.all(accountsList.map(async (account: Account) => {
+      let lines: BalanceLine[] = await db
         .select({
           debit: journalLines.debit,
           credit: journalLines.credit,
@@ -752,18 +874,18 @@ export class DatabaseStorage implements IStorage {
         .from(journalLines)
         .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
         .where(eq(journalLines.accountId, account.id));
-      
+
       if (dateRange) {
-        lines = lines.filter(line => {
+        lines = lines.filter((line: BalanceLine) => {
           const lineDate = new Date(line.date);
           return lineDate >= dateRange.start && lineDate <= dateRange.end;
         });
       }
-      
-      const postedLines = lines.filter(l => l.status === 'posted');
-      
-      const debitTotal = postedLines.reduce((sum, l) => sum + (l.debit || 0), 0);
-      const creditTotal = postedLines.reduce((sum, l) => sum + (l.credit || 0), 0);
+
+      const postedLines = lines.filter((l: BalanceLine) => l.status === 'posted');
+
+      const debitTotal = postedLines.reduce((sum: number, l: BalanceLine) => sum + (l.debit || 0), 0);
+      const creditTotal = postedLines.reduce((sum: number, l: BalanceLine) => sum + (l.credit || 0), 0);
       
       let balance = 0;
       if (['asset', 'expense'].includes(account.type)) {
@@ -795,7 +917,8 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Account not found');
     }
     
-    const allLines = await db
+    type LedgerLine = { lineId: string; debit: number; credit: number; lineDescription: string | null; entryId: string; entryNumber: string; date: Date; memo: string | null; source: string; status: string };
+    const allLines: LedgerLine[] = await db
       .select({
         lineId: journalLines.id,
         debit: journalLines.debit,
@@ -811,45 +934,45 @@ export class DatabaseStorage implements IStorage {
       .from(journalLines)
       .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
       .where(eq(journalLines.accountId, accountId));
-    
-    const postedLines = allLines.filter(l => l.status === 'posted');
-    postedLines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
+
+    const postedLines = allLines.filter((l: LedgerLine) => l.status === 'posted');
+    postedLines.sort((a: LedgerLine, b: LedgerLine) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
     let openingBalance = 0;
     if (options?.dateStart) {
-      const priorLines = postedLines.filter(l => new Date(l.date) < options.dateStart!);
-      const priorDebit = priorLines.reduce((sum, l) => sum + (l.debit || 0), 0);
-      const priorCredit = priorLines.reduce((sum, l) => sum + (l.credit || 0), 0);
-      
+      const priorLines = postedLines.filter((l: LedgerLine) => new Date(l.date) < options.dateStart!);
+      const priorDebit = priorLines.reduce((sum: number, l: LedgerLine) => sum + (l.debit || 0), 0);
+      const priorCredit = priorLines.reduce((sum: number, l: LedgerLine) => sum + (l.credit || 0), 0);
+
       if (['asset', 'expense'].includes(account.type)) {
         openingBalance = priorDebit - priorCredit;
       } else {
         openingBalance = priorCredit - priorDebit;
       }
     }
-    
+
     let filteredLines = postedLines;
     if (options?.dateStart) {
-      filteredLines = filteredLines.filter(l => new Date(l.date) >= options.dateStart!);
+      filteredLines = filteredLines.filter((l: LedgerLine) => new Date(l.date) >= options.dateStart!);
     }
     if (options?.dateEnd) {
-      filteredLines = filteredLines.filter(l => new Date(l.date) <= options.dateEnd!);
+      filteredLines = filteredLines.filter((l: LedgerLine) => new Date(l.date) <= options.dateEnd!);
     }
-    
+
     if (options?.search) {
       const searchLower = options.search.toLowerCase();
-      filteredLines = filteredLines.filter(l => 
+      filteredLines = filteredLines.filter((l: LedgerLine) =>
         l.entryNumber?.toLowerCase().includes(searchLower) ||
         l.memo?.toLowerCase().includes(searchLower) ||
         l.lineDescription?.toLowerCase().includes(searchLower)
       );
     }
-    
+
     let runningBalance = openingBalance;
     let totalDebit = 0;
     let totalCredit = 0;
-    
-    const allEntries = filteredLines.map(line => {
+
+    const allEntries = filteredLines.map((line: LedgerLine) => {
       const debit = line.debit || 0;
       const credit = line.credit || 0;
       
@@ -934,25 +1057,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteJournalEntry(id: string): Promise<void> {
+    // Safeguard: prevent deletion of posted/void entries (accounting integrity)
+    const [entry] = await db.select().from(journalEntries).where(eq(journalEntries.id, id));
+    if (entry && (entry.status === 'posted' || entry.status === 'void')) {
+      throw new Error('Cannot delete a posted or voided journal entry. Void it instead.');
+    }
+    // Delete lines first, then the entry
+    await db.delete(journalLines).where(eq(journalLines.entryId, id));
     await db.delete(journalEntries).where(eq(journalEntries.id, id));
   }
 
   async generateEntryNumber(companyId: string, date: Date): Promise<string> {
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     const prefix = `JE-${dateStr}`;
-    
-    // Get count of entries for this company and date prefix using SQL for atomicity
-    const allEntries = await db
-      .select()
+
+    // Use SQL COUNT with LIKE for atomicity — avoids fetching all entries into JS
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
       .from(journalEntries)
-      .where(eq(journalEntries.companyId, companyId));
-    
-    // Filter entries that match this date prefix
-    const todayEntries = allEntries.filter(e => 
-      e.entryNumber?.startsWith(prefix)
-    );
-    
-    const nextNumber = todayEntries.length + 1;
+      .where(
+        and(
+          eq(journalEntries.companyId, companyId),
+          sql`${journalEntries.entryNumber} LIKE ${prefix + '%'}`
+        )
+      );
+
+    const nextNumber = (Number(result?.count) || 0) + 1;
     return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
   }
 
@@ -1022,6 +1152,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteInvoice(id: string): Promise<void> {
+    // Safeguard: prevent deletion of paid invoices (financial record integrity)
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    if (invoice && invoice.status === 'paid') {
+      throw new Error('Cannot delete a paid invoice. Void or credit it instead.');
+    }
+    // Delete lines first, then the invoice
+    await db.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
     await db.delete(invoices).where(eq(invoices.id, id));
   }
 
@@ -1086,6 +1223,85 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Receipt not found');
     }
     return receipt;
+  }
+
+  /**
+   * Post a receipt to the journal within a single database transaction.
+   * Creates journal entry + lines + updates receipt atomically.
+   * If any step fails, everything rolls back.
+   */
+  async postReceiptTransaction(
+    receipt: Receipt,
+    accounts: { accountId: string; paymentAccountId: string },
+    resolvedAccounts: { expenseAccount: Account; paymentAccount: Account },
+    entryDate: Date,
+    userId: string,
+    totalAmount: number,
+  ): Promise<Receipt> {
+    return await db.transaction(async (tx: any) => {
+      // Generate entry number inside transaction
+      const dateStr = entryDate.toISOString().slice(0, 10).replace(/-/g, '');
+      const prefix = `JE-${dateStr}`;
+      const [countResult] = await tx
+        .select({ count: sql<number>`count(*)` })
+        .from(journalEntries)
+        .where(
+          and(
+            eq(journalEntries.companyId, receipt.companyId),
+            sql`${journalEntries.entryNumber} LIKE ${prefix + '%'}`
+          )
+        );
+      const nextNumber = (Number(countResult?.count) || 0) + 1;
+      const entryNumber = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+
+      // Create journal entry
+      const [entry] = await tx
+        .insert(journalEntries)
+        .values({
+          companyId: receipt.companyId,
+          date: entryDate,
+          memo: `Receipt: ${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
+          entryNumber,
+          status: 'posted',
+          source: 'receipt',
+          sourceId: receipt.id,
+          createdBy: userId,
+          postedBy: userId,
+        })
+        .returning();
+
+      // Debit: Expense Account
+      await tx.insert(journalLines).values({
+        entryId: entry.id,
+        accountId: resolvedAccounts.expenseAccount.id,
+        debit: totalAmount,
+        credit: 0,
+        description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
+      });
+
+      // Credit: Payment Account
+      await tx.insert(journalLines).values({
+        entryId: entry.id,
+        accountId: resolvedAccounts.paymentAccount.id,
+        debit: 0,
+        credit: totalAmount,
+        description: `Payment for ${receipt.merchant || 'expense'}`,
+      });
+
+      // Update receipt
+      const [updated] = await tx
+        .update(receipts)
+        .set({
+          accountId: accounts.accountId,
+          paymentAccountId: accounts.paymentAccountId,
+          posted: true,
+          journalEntryId: entry.id,
+        })
+        .where(eq(receipts.id, receipt.id))
+        .returning();
+
+      return updated;
+    });
   }
 
   async deleteReceipt(id: string): Promise<void> {
@@ -1547,7 +1763,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(ecommerceIntegrations, eq(ecommerceTransactions.integrationId, ecommerceIntegrations.id))
       .where(eq(ecommerceIntegrations.companyId, companyId));
     
-    return results.map(r => r.ecommerceTransactions);
+    return results.map((r: { ecommerceTransactions: EcommerceTransaction }) => r.ecommerceTransactions);
   }
 
   async createEcommerceTransaction(insertTransaction: InsertEcommerceTransaction): Promise<EcommerceTransaction> {
@@ -2105,7 +2321,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(companyUsers.userId, users.id))
       .where(eq(companyUsers.companyId, companyId));
     
-    return results.map(r => ({
+    return results.map((r: { company_users: CompanyUser; users: User }) => ({
       ...r.company_users,
       user: r.users
     }));
@@ -2385,6 +2601,23 @@ export class DatabaseStorage implements IStorage {
 
   // Admin Company Management
   async deleteCompany(id: string): Promise<void> {
+    // Safeguard: check if company has financial transactions before deletion
+    const companyInvoices = await db.select({ count: sql<number>`count(*)` })
+      .from(invoices).where(eq(invoices.companyId, id));
+    const companyEntries = await db.select({ count: sql<number>`count(*)` })
+      .from(journalEntries).where(eq(journalEntries.companyId, id));
+
+    const invoiceCount = Number(companyInvoices[0]?.count) || 0;
+    const entryCount = Number(companyEntries[0]?.count) || 0;
+
+    if (invoiceCount > 0 || entryCount > 0) {
+      throw new Error(
+        `Cannot delete company with ${invoiceCount} invoices and ${entryCount} journal entries. Archive it instead.`
+      );
+    }
+
+    // Safe to delete — company has no financial data
+    await db.delete(companyUsers).where(eq(companyUsers.companyId, id));
     await db.delete(companies).where(eq(companies.id, id));
   }
 
@@ -2768,6 +3001,667 @@ export class DatabaseStorage implements IStorage {
       .values(data)
       .returning();
     return movement;
+  }
+
+  // Quotes
+  async getQuote(id: string): Promise<Quote | undefined> {
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, id));
+    return quote || undefined;
+  }
+
+  async getQuotesByCompanyId(companyId: string): Promise<Quote[]> {
+    return await db.select().from(quotes).where(eq(quotes.companyId, companyId));
+  }
+
+  async createQuote(quote: InsertQuote): Promise<Quote> {
+    const [created] = await db.insert(quotes).values(quote).returning();
+    return created;
+  }
+
+  async updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote> {
+    const [updated] = await db.update(quotes).set(data).where(eq(quotes.id, id)).returning();
+    if (!updated) throw new Error("Quote not found");
+    return updated;
+  }
+
+  async deleteQuote(id: string): Promise<void> {
+    await db.delete(quotes).where(eq(quotes.id, id));
+  }
+
+  // Quote Lines
+  async createQuoteLine(line: InsertQuoteLine): Promise<QuoteLine> {
+    const [created] = await db.insert(quoteLines).values(line).returning();
+    return created;
+  }
+
+  async getQuoteLinesByQuoteId(quoteId: string): Promise<QuoteLine[]> {
+    return await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quoteId));
+  }
+
+  async deleteQuoteLinesByQuoteId(quoteId: string): Promise<void> {
+    await db.delete(quoteLines).where(eq(quoteLines.quoteId, quoteId));
+  }
+
+  // Credit Notes
+  async getCreditNote(id: string): Promise<CreditNote | undefined> {
+    const [note] = await db.select().from(creditNotes).where(eq(creditNotes.id, id));
+    return note || undefined;
+  }
+
+  async getCreditNotesByCompanyId(companyId: string): Promise<CreditNote[]> {
+    return await db.select().from(creditNotes).where(eq(creditNotes.companyId, companyId));
+  }
+
+  async createCreditNote(note: InsertCreditNote): Promise<CreditNote> {
+    const [created] = await db.insert(creditNotes).values(note).returning();
+    return created;
+  }
+
+  async updateCreditNote(id: string, data: Partial<InsertCreditNote>): Promise<CreditNote> {
+    const [updated] = await db.update(creditNotes).set(data).where(eq(creditNotes.id, id)).returning();
+    if (!updated) throw new Error("Credit note not found");
+    return updated;
+  }
+
+  async deleteCreditNote(id: string): Promise<void> {
+    await db.delete(creditNotes).where(eq(creditNotes.id, id));
+  }
+
+  // Credit Note Lines
+  async createCreditNoteLine(line: InsertCreditNoteLine): Promise<CreditNoteLine> {
+    const [created] = await db.insert(creditNoteLines).values(line).returning();
+    return created;
+  }
+
+  async getCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<CreditNoteLine[]> {
+    return await db.select().from(creditNoteLines).where(eq(creditNoteLines.creditNoteId, creditNoteId));
+  }
+
+  async deleteCreditNoteLinesByCreditNoteId(creditNoteId: string): Promise<void> {
+    await db.delete(creditNoteLines).where(eq(creditNoteLines.creditNoteId, creditNoteId));
+  }
+
+  // Purchase Orders
+  async getPurchaseOrder(id: string): Promise<PurchaseOrder | undefined> {
+    const [po] = await db.select().from(purchaseOrders).where(eq(purchaseOrders.id, id));
+    return po || undefined;
+  }
+
+  async getPurchaseOrdersByCompanyId(companyId: string): Promise<PurchaseOrder[]> {
+    return await db.select().from(purchaseOrders).where(eq(purchaseOrders.companyId, companyId));
+  }
+
+  async createPurchaseOrder(po: InsertPurchaseOrder): Promise<PurchaseOrder> {
+    const [created] = await db.insert(purchaseOrders).values(po).returning();
+    return created;
+  }
+
+  async updatePurchaseOrder(id: string, data: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder> {
+    const [updated] = await db.update(purchaseOrders).set(data).where(eq(purchaseOrders.id, id)).returning();
+    if (!updated) throw new Error("Purchase order not found");
+    return updated;
+  }
+
+  async deletePurchaseOrder(id: string): Promise<void> {
+    await db.delete(purchaseOrders).where(eq(purchaseOrders.id, id));
+  }
+
+  // Purchase Order Lines
+  async createPurchaseOrderLine(line: InsertPurchaseOrderLine): Promise<PurchaseOrderLine> {
+    const [created] = await db.insert(purchaseOrderLines).values(line).returning();
+    return created;
+  }
+
+  async getPurchaseOrderLinesByPurchaseOrderId(poId: string): Promise<PurchaseOrderLine[]> {
+    return await db.select().from(purchaseOrderLines).where(eq(purchaseOrderLines.purchaseOrderId, poId));
+  }
+
+  async deletePurchaseOrderLinesByPurchaseOrderId(poId: string): Promise<void> {
+    await db.delete(purchaseOrderLines).where(eq(purchaseOrderLines.purchaseOrderId, poId));
+  }
+
+  // Invoice Templates
+  async getInvoiceTemplate(id: string): Promise<InvoiceTemplate | undefined> {
+    const [template] = await db.select().from(invoiceTemplates).where(eq(invoiceTemplates.id, id));
+    return template || undefined;
+  }
+
+  async getInvoiceTemplatesByCompanyId(companyId: string): Promise<InvoiceTemplate[]> {
+    return await db.select().from(invoiceTemplates).where(eq(invoiceTemplates.companyId, companyId));
+  }
+
+  async createInvoiceTemplate(template: InsertInvoiceTemplate): Promise<InvoiceTemplate> {
+    const [created] = await db.insert(invoiceTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateInvoiceTemplate(id: string, data: Partial<InsertInvoiceTemplate>): Promise<InvoiceTemplate> {
+    const [updated] = await db.update(invoiceTemplates).set(data).where(eq(invoiceTemplates.id, id)).returning();
+    if (!updated) throw new Error("Invoice template not found");
+    return updated;
+  }
+
+  async deleteInvoiceTemplate(id: string): Promise<void> {
+    await db.delete(invoiceTemplates).where(eq(invoiceTemplates.id, id));
+  }
+
+  async getDefaultInvoiceTemplate(companyId: string): Promise<InvoiceTemplate | undefined> {
+    const [template] = await db.select().from(invoiceTemplates)
+      .where(and(eq(invoiceTemplates.companyId, companyId), eq(invoiceTemplates.isDefault, true)));
+    return template || undefined;
+  }
+
+  // Bank Connections
+  async getBankConnection(id: string): Promise<BankConnection | undefined> {
+    const [conn] = await db.select().from(bankConnections).where(eq(bankConnections.id, id));
+    return conn || undefined;
+  }
+
+  async getBankConnectionsByCompanyId(companyId: string): Promise<BankConnection[]> {
+    return await db.select().from(bankConnections).where(eq(bankConnections.companyId, companyId));
+  }
+
+  async createBankConnection(connection: InsertBankConnection): Promise<BankConnection> {
+    const [created] = await db.insert(bankConnections).values(connection).returning();
+    return created;
+  }
+
+  async updateBankConnection(id: string, data: Partial<InsertBankConnection>): Promise<BankConnection> {
+    const [updated] = await db.update(bankConnections).set(data).where(eq(bankConnections.id, id)).returning();
+    if (!updated) throw new Error("Bank connection not found");
+    return updated;
+  }
+
+  async deleteBankConnection(id: string): Promise<void> {
+    await db.delete(bankConnections).where(eq(bankConnections.id, id));
+  }
+
+  // Stripe Events
+  async getStripeEvent(stripeEventId: string): Promise<StripeEvent | undefined> {
+    const [event] = await db.select().from(stripeEvents).where(eq(stripeEvents.stripeEventId, stripeEventId));
+    return event || undefined;
+  }
+
+  async createStripeEvent(event: InsertStripeEvent): Promise<StripeEvent> {
+    const [created] = await db.insert(stripeEvents).values(event).returning();
+    return created;
+  }
+
+  // Usage Tracking
+  async incrementInvoiceCount(companyId: string): Promise<void> {
+    await db.update(subscriptions)
+      .set({ invoicesCreatedThisMonth: sql`COALESCE(invoices_created_this_month, 0) + 1` })
+      .where(eq(subscriptions.companyId, companyId));
+  }
+
+  async incrementReceiptCount(companyId: string): Promise<void> {
+    await db.update(subscriptions)
+      .set({ receiptsCreatedThisMonth: sql`COALESCE(receipts_created_this_month, 0) + 1` })
+      .where(eq(subscriptions.companyId, companyId));
+  }
+
+  async decrementAiCredits(companyId: string, amount: number = 1): Promise<void> {
+    await db.update(subscriptions)
+      .set({ aiCreditsUsedThisMonth: sql`COALESCE(ai_credits_used_this_month, 0) + ${amount}` })
+      .where(eq(subscriptions.companyId, companyId));
+  }
+
+  async resetMonthlyUsage(companyId: string): Promise<void> {
+    await db.update(subscriptions)
+      .set({
+        invoicesCreatedThisMonth: 0,
+        receiptsCreatedThisMonth: 0,
+        aiCreditsUsedThisMonth: 0,
+        usagePeriodStart: new Date(),
+      })
+      .where(eq(subscriptions.companyId, companyId));
+  }
+
+  async getCompanyCountByUserId(userId: string): Promise<number> {
+    const result = await db.select().from(companyUsers).where(eq(companyUsers.userId, userId));
+    return result.length;
+  }
+
+  async getUserCountByCompanyId(companyId: string): Promise<number> {
+    const result = await db.select().from(companyUsers).where(eq(companyUsers.companyId, companyId));
+    return result.length;
+  }
+
+  // Push Subscriptions
+  async getPushSubscriptionsByUserId(userId: string): Promise<PushSubscription[]> {
+    return await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async createPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription> {
+    const [created] = await db.insert(pushSubscriptions).values(sub).returning();
+    return created;
+  }
+
+  async deletePushSubscription(id: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, id));
+  }
+
+  async deactivatePushSubscription(endpoint: string): Promise<void> {
+    await db.update(pushSubscriptions)
+      .set({ isActive: false })
+      .where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  // Notification Preferences
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const [prefs] = await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId));
+    return prefs || undefined;
+  }
+
+  async upsertNotificationPreferences(userId: string, prefs: Partial<InsertNotificationPreferences>): Promise<NotificationPreferences> {
+    const existing = await this.getNotificationPreferences(userId);
+    if (existing) {
+      const [updated] = await db.update(notificationPreferences)
+        .set({ ...prefs, updatedAt: new Date() })
+        .where(eq(notificationPreferences.userId, userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(notificationPreferences)
+      .values({ ...prefs, userId })
+      .returning();
+    return created;
+  }
+
+  // ===== Phase 4: Exchange Rates =====
+  async getExchangeRatesByCompanyId(companyId: string): Promise<ExchangeRate[]> {
+    return await db.select().from(exchangeRates)
+      .where(eq(exchangeRates.companyId, companyId))
+      .orderBy(desc(exchangeRates.effectiveDate));
+  }
+
+  async getExchangeRate(id: string): Promise<ExchangeRate | undefined> {
+    const [rate] = await db.select().from(exchangeRates).where(eq(exchangeRates.id, id));
+    return rate || undefined;
+  }
+
+  async getLatestExchangeRate(companyId: string, fromCurrency: string, toCurrency: string): Promise<ExchangeRate | undefined> {
+    const [rate] = await db.select().from(exchangeRates)
+      .where(and(
+        eq(exchangeRates.companyId, companyId),
+        eq(exchangeRates.fromCurrency, fromCurrency),
+        eq(exchangeRates.toCurrency, toCurrency)
+      ))
+      .orderBy(desc(exchangeRates.effectiveDate))
+      .limit(1);
+    return rate || undefined;
+  }
+
+  async createExchangeRate(rate: InsertExchangeRate): Promise<ExchangeRate> {
+    const [created] = await db.insert(exchangeRates).values(rate).returning();
+    return created;
+  }
+
+  async deleteExchangeRate(id: string): Promise<void> {
+    await db.delete(exchangeRates).where(eq(exchangeRates.id, id));
+  }
+
+  // ===== Phase 5: Employees =====
+  async getEmployeesByCompanyId(companyId: string): Promise<Employee[]> {
+    return await db.select().from(employees)
+      .where(eq(employees.companyId, companyId))
+      .orderBy(employees.name);
+  }
+
+  async getEmployee(id: string): Promise<Employee | undefined> {
+    const [emp] = await db.select().from(employees).where(eq(employees.id, id));
+    return emp || undefined;
+  }
+
+  async createEmployee(data: InsertEmployee): Promise<Employee> {
+    const [created] = await db.insert(employees).values(data).returning();
+    return created;
+  }
+
+  async updateEmployee(id: string, data: Partial<InsertEmployee>): Promise<Employee> {
+    const [updated] = await db.update(employees).set(data).where(eq(employees.id, id)).returning();
+    return updated;
+  }
+
+  async deleteEmployee(id: string): Promise<void> {
+    await db.delete(employees).where(eq(employees.id, id));
+  }
+
+  // ===== Phase 5: Payroll Runs =====
+  async getPayrollRunsByCompanyId(companyId: string): Promise<PayrollRun[]> {
+    return await db.select().from(payrollRuns)
+      .where(eq(payrollRuns.companyId, companyId))
+      .orderBy(desc(payrollRuns.runDate));
+  }
+
+  async getPayrollRun(id: string): Promise<PayrollRun | undefined> {
+    const [run] = await db.select().from(payrollRuns).where(eq(payrollRuns.id, id));
+    return run || undefined;
+  }
+
+  async createPayrollRun(data: InsertPayrollRun): Promise<PayrollRun> {
+    const [created] = await db.insert(payrollRuns).values(data).returning();
+    return created;
+  }
+
+  async updatePayrollRun(id: string, data: Partial<InsertPayrollRun>): Promise<PayrollRun> {
+    const [updated] = await db.update(payrollRuns).set(data).where(eq(payrollRuns.id, id)).returning();
+    return updated;
+  }
+
+  async deletePayrollRun(id: string): Promise<void> {
+    await db.delete(payrollRuns).where(eq(payrollRuns.id, id));
+  }
+
+  // ===== Phase 5: Payroll Lines =====
+  async getPayrollLinesByRunId(runId: string): Promise<PayrollLine[]> {
+    return await db.select().from(payrollLines).where(eq(payrollLines.payrollRunId, runId));
+  }
+
+  async createPayrollLine(data: InsertPayrollLine): Promise<PayrollLine> {
+    const [created] = await db.insert(payrollLines).values(data).returning();
+    return created;
+  }
+
+  async deletePayrollLinesByRunId(runId: string): Promise<void> {
+    await db.delete(payrollLines).where(eq(payrollLines.payrollRunId, runId));
+  }
+
+  // ===== Phase 6: Reconciliation Rules =====
+  async getReconciliationRulesByCompanyId(companyId: string): Promise<ReconciliationRule[]> {
+    return await db.select().from(reconciliationRules)
+      .where(eq(reconciliationRules.companyId, companyId))
+      .orderBy(reconciliationRules.priority);
+  }
+
+  async getReconciliationRule(id: string): Promise<ReconciliationRule | undefined> {
+    const [rule] = await db.select().from(reconciliationRules).where(eq(reconciliationRules.id, id));
+    return rule || undefined;
+  }
+
+  async createReconciliationRule(data: InsertReconciliationRule): Promise<ReconciliationRule> {
+    const [created] = await db.insert(reconciliationRules).values(data).returning();
+    return created;
+  }
+
+  async updateReconciliationRule(id: string, data: Partial<InsertReconciliationRule>): Promise<ReconciliationRule> {
+    const [updated] = await db.update(reconciliationRules).set(data).where(eq(reconciliationRules.id, id)).returning();
+    return updated;
+  }
+
+  async deleteReconciliationRule(id: string): Promise<void> {
+    await db.delete(reconciliationRules).where(eq(reconciliationRules.id, id));
+  }
+
+  async incrementRuleAppliedCount(id: string): Promise<void> {
+    await db.update(reconciliationRules)
+      .set({ timesApplied: sql`COALESCE(${reconciliationRules.timesApplied}, 0) + 1` })
+      .where(eq(reconciliationRules.id, id));
+  }
+
+  // ===== Phase 7: Document Versions =====
+  async getDocumentVersions(companyId: string, documentType: string, documentId: string): Promise<DocumentVersion[]> {
+    return await db.select().from(documentVersions)
+      .where(and(
+        eq(documentVersions.companyId, companyId),
+        eq(documentVersions.documentType, documentType),
+        eq(documentVersions.documentId, documentId)
+      ))
+      .orderBy(desc(documentVersions.version));
+  }
+
+  async createDocumentVersion(data: InsertDocumentVersion): Promise<DocumentVersion> {
+    const [created] = await db.insert(documentVersions).values(data).returning();
+    return created;
+  }
+
+  async getDocumentVersionCount(companyId: string, documentType: string, documentId: string): Promise<number> {
+    const result = await db.select().from(documentVersions)
+      .where(and(
+        eq(documentVersions.companyId, companyId),
+        eq(documentVersions.documentType, documentType),
+        eq(documentVersions.documentId, documentId)
+      ));
+    return result.length;
+  }
+
+  // ===== Phase 8: API Keys =====
+  async getApiKeysByCompanyId(companyId: string): Promise<ApiKey[]> {
+    return await db.select().from(apiKeys)
+      .where(eq(apiKeys.companyId, companyId))
+      .orderBy(desc(apiKeys.createdAt));
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<ApiKey | undefined> {
+    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+    return key || undefined;
+  }
+
+  async createApiKey(data: InsertApiKey): Promise<ApiKey> {
+    const [created] = await db.insert(apiKeys).values(data).returning();
+    return created;
+  }
+
+  async updateApiKey(id: string, data: Partial<InsertApiKey>): Promise<ApiKey> {
+    const [updated] = await db.update(apiKeys).set(data).where(eq(apiKeys.id, id)).returning();
+    return updated;
+  }
+
+  async deleteApiKey(id: string): Promise<void> {
+    await db.delete(apiKeys).where(eq(apiKeys.id, id));
+  }
+
+  async updateApiKeyLastUsed(id: string): Promise<void> {
+    await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, id));
+  }
+
+  // ===== Phase 8: Webhook Endpoints =====
+  async getWebhookEndpointsByCompanyId(companyId: string): Promise<WebhookEndpoint[]> {
+    return await db.select().from(webhookEndpoints)
+      .where(eq(webhookEndpoints.companyId, companyId))
+      .orderBy(desc(webhookEndpoints.createdAt));
+  }
+
+  async getWebhookEndpoint(id: string): Promise<WebhookEndpoint | undefined> {
+    const [wh] = await db.select().from(webhookEndpoints).where(eq(webhookEndpoints.id, id));
+    return wh || undefined;
+  }
+
+  async getActiveWebhookEndpointsForEvent(companyId: string, event: string): Promise<WebhookEndpoint[]> {
+    const all = await db.select().from(webhookEndpoints)
+      .where(and(eq(webhookEndpoints.companyId, companyId), eq(webhookEndpoints.isActive, true)));
+    return all.filter((wh: WebhookEndpoint) => wh.events.split(',').map((e: string) => e.trim()).includes(event));
+  }
+
+  async createWebhookEndpoint(data: InsertWebhookEndpoint): Promise<WebhookEndpoint> {
+    const [created] = await db.insert(webhookEndpoints).values(data).returning();
+    return created;
+  }
+
+  async updateWebhookEndpoint(id: string, data: Partial<InsertWebhookEndpoint>): Promise<WebhookEndpoint> {
+    const [updated] = await db.update(webhookEndpoints).set(data).where(eq(webhookEndpoints.id, id)).returning();
+    return updated;
+  }
+
+  async deleteWebhookEndpoint(id: string): Promise<void> {
+    await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
+  }
+
+  async incrementWebhookFailureCount(id: string): Promise<void> {
+    await db.update(webhookEndpoints)
+      .set({ failureCount: sql`COALESCE(${webhookEndpoints.failureCount}, 0) + 1` })
+      .where(eq(webhookEndpoints.id, id));
+  }
+
+  // ===== Phase 8: Webhook Deliveries =====
+  async getWebhookDeliveriesByEndpointId(endpointId: string): Promise<WebhookDelivery[]> {
+    return await db.select().from(webhookDeliveries)
+      .where(eq(webhookDeliveries.webhookEndpointId, endpointId))
+      .orderBy(desc(webhookDeliveries.createdAt))
+      .limit(100);
+  }
+
+  async createWebhookDelivery(data: InsertWebhookDelivery): Promise<WebhookDelivery> {
+    const [created] = await db.insert(webhookDeliveries).values(data).returning();
+    return created;
+  }
+
+  // ===== Cost Centers =====
+  async getCostCentersByCompanyId(companyId: string): Promise<CostCenter[]> {
+    return await db.select().from(costCenters)
+      .where(eq(costCenters.companyId, companyId))
+      .orderBy(costCenters.code);
+  }
+
+  async getCostCenter(id: string): Promise<CostCenter | undefined> {
+    const [cc] = await db.select().from(costCenters).where(eq(costCenters.id, id));
+    return cc || undefined;
+  }
+
+  async createCostCenter(data: InsertCostCenter): Promise<CostCenter> {
+    const [created] = await db.insert(costCenters).values(data).returning();
+    return created;
+  }
+
+  async updateCostCenter(id: string, data: Partial<InsertCostCenter>): Promise<CostCenter> {
+    const [updated] = await db.update(costCenters)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(costCenters.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCostCenter(id: string): Promise<void> {
+    await db.delete(costCenters).where(eq(costCenters.id, id));
+  }
+
+  // ===== Fixed Asset Categories =====
+  async getFixedAssetCategoriesByCompanyId(companyId: string): Promise<FixedAssetCategory[]> {
+    return await db.select().from(fixedAssetCategories)
+      .where(eq(fixedAssetCategories.companyId, companyId))
+      .orderBy(fixedAssetCategories.name);
+  }
+
+  async getFixedAssetCategory(id: string): Promise<FixedAssetCategory | undefined> {
+    const [cat] = await db.select().from(fixedAssetCategories).where(eq(fixedAssetCategories.id, id));
+    return cat || undefined;
+  }
+
+  async createFixedAssetCategory(data: InsertFixedAssetCategory): Promise<FixedAssetCategory> {
+    const [created] = await db.insert(fixedAssetCategories).values(data).returning();
+    return created;
+  }
+
+  async updateFixedAssetCategory(id: string, data: Partial<InsertFixedAssetCategory>): Promise<FixedAssetCategory> {
+    const [updated] = await db.update(fixedAssetCategories).set(data).where(eq(fixedAssetCategories.id, id)).returning();
+    return updated;
+  }
+
+  async deleteFixedAssetCategory(id: string): Promise<void> {
+    await db.delete(fixedAssetCategories).where(eq(fixedAssetCategories.id, id));
+  }
+
+  // ===== Fixed Assets =====
+  async getFixedAssetsByCompanyId(companyId: string): Promise<FixedAsset[]> {
+    return await db.select().from(fixedAssets)
+      .where(eq(fixedAssets.companyId, companyId))
+      .orderBy(desc(fixedAssets.createdAt));
+  }
+
+  async getFixedAsset(id: string): Promise<FixedAsset | undefined> {
+    const [asset] = await db.select().from(fixedAssets).where(eq(fixedAssets.id, id));
+    return asset || undefined;
+  }
+
+  async createFixedAsset(data: InsertFixedAsset): Promise<FixedAsset> {
+    const [created] = await db.insert(fixedAssets).values(data).returning();
+    return created;
+  }
+
+  async updateFixedAsset(id: string, data: Partial<InsertFixedAsset>): Promise<FixedAsset> {
+    const [updated] = await db.update(fixedAssets)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(fixedAssets.id, id)).returning();
+    return updated;
+  }
+
+  async deleteFixedAsset(id: string): Promise<void> {
+    // Delete depreciation schedules first (cascade should handle, but be explicit)
+    await db.delete(depreciationSchedules).where(eq(depreciationSchedules.fixedAssetId, id));
+    await db.delete(fixedAssets).where(eq(fixedAssets.id, id));
+  }
+
+  // ===== Depreciation Schedules =====
+  async getDepreciationSchedulesByAssetId(assetId: string): Promise<DepreciationSchedule[]> {
+    return await db.select().from(depreciationSchedules)
+      .where(eq(depreciationSchedules.fixedAssetId, assetId))
+      .orderBy(depreciationSchedules.periodStart);
+  }
+
+  async getDepreciationSchedule(id: string): Promise<DepreciationSchedule | undefined> {
+    const [schedule] = await db.select().from(depreciationSchedules).where(eq(depreciationSchedules.id, id));
+    return schedule || undefined;
+  }
+
+  async createDepreciationSchedule(data: InsertDepreciationSchedule): Promise<DepreciationSchedule> {
+    const [created] = await db.insert(depreciationSchedules).values(data).returning();
+    return created;
+  }
+
+  async updateDepreciationSchedule(id: string, data: Partial<InsertDepreciationSchedule>): Promise<DepreciationSchedule> {
+    const [updated] = await db.update(depreciationSchedules).set(data).where(eq(depreciationSchedules.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDepreciationSchedulesByAssetId(assetId: string): Promise<void> {
+    await db.delete(depreciationSchedules)
+      .where(and(
+        eq(depreciationSchedules.fixedAssetId, assetId),
+        eq(depreciationSchedules.status, 'pending')
+      ));
+  }
+
+  async getPendingDepreciationSchedules(companyId: string): Promise<DepreciationSchedule[]> {
+    const assets = await db.select({ id: fixedAssets.id }).from(fixedAssets)
+      .where(and(eq(fixedAssets.companyId, companyId), eq(fixedAssets.status, 'active')));
+    if (assets.length === 0) return [];
+    const assetIds = assets.map((a: { id: string }) => a.id);
+    return await db.select().from(depreciationSchedules)
+      .where(and(
+        sql`${depreciationSchedules.fixedAssetId} IN (${sql.join(assetIds.map((id: string) => sql`${id}`), sql`, `)})`,
+        eq(depreciationSchedules.status, 'pending')
+      ))
+      .orderBy(depreciationSchedules.periodStart);
+  }
+
+  // ===== Bank Connection Updates (Open Banking) =====
+  async updateBankConnectionTokens(id: string, data: {
+    accessToken?: string | null;
+    refreshToken?: string | null;
+    tokenExpiresAt?: Date | null;
+    consentId?: string | null;
+    consentExpiresAt?: Date | null;
+    status?: string;
+    lastError?: string | null;
+  }): Promise<BankConnection> {
+    const [updated] = await db.update(bankConnections).set(data).where(eq(bankConnections.id, id)).returning();
+    return updated;
+  }
+
+  async getBankConnectionsByProvider(companyId: string, provider: string): Promise<BankConnection[]> {
+    return await db.select().from(bankConnections)
+      .where(and(
+        eq(bankConnections.companyId, companyId),
+        eq(bankConnections.provider, provider)
+      ));
+  }
+
+  async getAutoSyncBankConnections(): Promise<BankConnection[]> {
+    return await db.select().from(bankConnections)
+      .where(and(
+        eq(bankConnections.autoSync, true),
+        eq(bankConnections.status, 'active'),
+        eq(bankConnections.connectionType, 'api')
+      ));
   }
 }
 

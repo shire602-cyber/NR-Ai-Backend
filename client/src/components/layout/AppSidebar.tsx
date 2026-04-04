@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  BookMarked, 
-  BarChart3, 
+import {
+  LayoutDashboard,
+  FileText,
+  BookMarked,
+  BarChart3,
   Sparkles,
   Languages,
   LogOut,
@@ -28,7 +28,16 @@ import {
   Settings,
   FileUp,
   History,
-  Database
+  Database,
+  CreditCard,
+  FileOutput,
+  FileMinus,
+  ClipboardList,
+  Palette,
+  Bell,
+  BanknoteIcon,
+  Landmark,
+  GitBranchPlus
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,16 +63,27 @@ const coreItems = [
   { title: 'journal', icon: BookMarked, url: '/journal' },
   { title: 'invoices', icon: FileText, url: '/invoices' },
   { title: 'recurringInvoices', icon: CalendarDays, url: '/recurring-invoices' },
+  { title: 'quotes', icon: FileOutput, url: '/quotes' },
+  { title: 'creditNotes', icon: FileMinus, url: '/credit-notes' },
   { title: 'receipts', icon: Receipt, url: '/receipts' },
+  { title: 'purchaseOrders', icon: ClipboardList, url: '/purchase-orders' },
   { title: 'contacts', icon: Users, url: '/contacts' },
   { title: 'inventory', icon: ShoppingCart, url: '/inventory' },
+  { title: 'invoiceTemplates', icon: Palette, url: '/invoice-templates' },
   { title: 'bankReconciliation', icon: Building2, url: '/bank-reconciliation' },
+  { title: 'exchangeRates', icon: BanknoteIcon, url: '/exchange-rates' },
+  { title: 'employees', icon: Users, url: '/employees' },
+  { title: 'payroll', icon: Wallet, url: '/payroll' },
+  { title: 'fixedAssets', icon: Landmark, url: '/fixed-assets' },
+  { title: 'costCenters', icon: GitBranchPlus, url: '/cost-centers' },
 ];
 
 const reportsItems = [
   { title: 'reports', icon: BarChart3, url: '/reports' },
+  { title: 'financialStatements', icon: FileText, url: '/financial-statements' },
   { title: 'vatFiling', icon: FileCheck, url: '/vat-filing' },
   { title: 'corporateTax', icon: FileCheck, url: '/corporate-tax' },
+  { title: 'reconciliationRules', icon: Settings, url: '/reconciliation-rules' },
 ];
 
 const aiItems = [
@@ -81,7 +101,11 @@ const clientPortalItems = [
 ];
 
 const settingsItems = [
+  { title: 'subscription', icon: CreditCard, url: '/subscription' },
   { title: 'teamManagement', icon: Users, url: '/team' },
+  { title: 'notificationPrefs', icon: Bell, url: '/notification-preferences' },
+  { title: 'developerSettings', icon: Settings, url: '/developer-settings' },
+  { title: 'documentVersions', icon: FileStack, url: '/document-versions' },
   { title: 'history', icon: History, url: '/history' },
   { title: 'backupRestore', icon: Database, url: '/backup-restore' },
   { title: 'integrationsHub', icon: ShoppingCart, url: '/integrations-hub' },
