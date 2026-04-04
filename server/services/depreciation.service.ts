@@ -16,17 +16,22 @@ export function calculateMonthlyDepreciation(
 ): number {
   if (method === 'declining_balance') {
     const usefulLifeYears = usefulLifeMonths / 12;
-    const rate = 1 - Math.pow(residualValue / purchasePrice, 1 / usefulLifeYears);
+    // When residualValue is 0, Math.pow(0/price, 1/n) = 0, making rate = 1.0 (100%).
+    // Use double-declining balance method instead: rate = 2 / usefulLifeYears.
+    const rate = residualValue <= 0
+      ? (2 / usefulLifeYears)
+      : 1 - Math.pow(residualValue / purchasePrice, 1 / usefulLifeYears);
     const annualDep = currentBookValue * rate;
     const monthly = annualDep / 12;
-    // Don't depreciate below residual value
-    return Math.min(monthly, currentBookValue - residualValue);
+    // Don't depreciate below residual value (guard against negative values)
+    return Math.max(0, Math.min(monthly, currentBookValue - residualValue));
   }
 
   // Default: straight_line
   const totalDepreciable = purchasePrice - residualValue;
   const monthly = totalDepreciable / usefulLifeMonths;
-  return Math.min(monthly, currentBookValue - residualValue);
+  // Guard against negative depreciation when bookValue < residualValue
+  return Math.max(0, Math.min(monthly, currentBookValue - residualValue));
 }
 
 /**
@@ -204,12 +209,16 @@ export async function disposeAsset(
 
   const entryNumber = await storage.generateEntryNumber(asset.companyId, disposalDate);
 
+  // Gain/loss account: use the depreciation expense account as a reasonable default
+  const gainLossAccountId = asset.depreciationExpenseAccountId || asset.accumulatedDepAccountId;
+
   // Create disposal journal entry
   const entry = await storage.createJournalEntry({
     companyId: asset.companyId,
     entryNumber,
     date: disposalDate,
-    memo: `Disposal of asset: ${asset.name} (${asset.assetCode})`,
+    memo: `Disposal of asset: ${asset.name} (${asset.assetCode})` +
+      (gainLoss !== 0 ? ` — ${gainLoss > 0 ? 'gain' : 'loss'} of ${Math.abs(gainLoss).toFixed(2)} recorded to depreciation expense account` : ''),
     status: 'posted',
     source: 'system',
     sourceId: asset.id,
@@ -228,7 +237,19 @@ export async function disposeAsset(
     });
   }
 
-  // Credit the asset account (remove the asset)
+  // Debit cash/bank for disposal proceeds (using asset account as placeholder —
+  // user should adjust to proper cash account)
+  if (disposalPrice > 0) {
+    await storage.createJournalLine({
+      entryId: entry.id,
+      accountId: asset.assetAccountId,
+      debit: disposalPrice,
+      credit: 0,
+      description: `Disposal proceeds: ${asset.name}`,
+    });
+  }
+
+  // Credit the asset account (remove the asset at purchase price)
   await storage.createJournalLine({
     entryId: entry.id,
     accountId: asset.assetAccountId,
@@ -237,19 +258,24 @@ export async function disposeAsset(
     description: `Dispose asset: ${asset.name}`,
   });
 
-  // If there's disposal proceeds, record them
-  // Gain/loss is recognized automatically since debits and credits must balance
-  // For disposal proceeds: debit cash/bank, credit gain (or debit loss)
-  // This simplified version records the net gain/loss against the asset account
-  if (disposalPrice > 0 && asset.assetAccountId) {
-    // Debit cash/receivable for disposal proceeds
-    // Using the asset account temporarily -- the user should adjust to proper cash account
+  // Record gain or loss to balance the journal entry
+  // Gain (proceeds > bookValue): credit the gain/loss account
+  // Loss (proceeds < bookValue): debit the gain/loss account
+  if (gainLoss > 0) {
     await storage.createJournalLine({
       entryId: entry.id,
-      accountId: asset.assetAccountId,
-      debit: disposalPrice,
+      accountId: gainLossAccountId,
+      debit: 0,
+      credit: gainLoss,
+      description: `Gain on disposal: ${asset.name}`,
+    });
+  } else if (gainLoss < 0) {
+    await storage.createJournalLine({
+      entryId: entry.id,
+      accountId: gainLossAccountId,
+      debit: Math.abs(gainLoss),
       credit: 0,
-      description: `Disposal proceeds: ${asset.name}`,
+      description: `Loss on disposal: ${asset.name}`,
     });
   }
 

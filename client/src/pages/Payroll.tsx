@@ -78,10 +78,6 @@ export default function Payroll() {
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
   const { canAccess, getRequiredTier } = useSubscription();
 
-  if (!canAccess('payroll')) {
-    return <UpgradePrompt feature="payroll" requiredTier={getRequiredTier('payroll')} />;
-  }
-
   const [newRunDialogOpen, setNewRunDialogOpen] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
@@ -219,6 +215,10 @@ export default function Payroll() {
   const totalPayroll = payrollRuns.reduce((sum, r) => sum + (r.totalNetPay || 0), 0);
   const draftCount = payrollRuns.filter(r => r.status === 'draft').length;
   const approvedCount = payrollRuns.filter(r => r.status === 'approved').length;
+
+  if (!canAccess('payroll')) {
+    return <UpgradePrompt feature="payroll" requiredTier={getRequiredTier('payroll')} />;
+  }
 
   if (isLoadingCompany || isLoading) {
     return (

@@ -70,7 +70,7 @@ export function registerCreditNoteRoutes(app: Express) {
     }));
 
   // Customer-only: Update credit note
-  app.put('/api/credit-notes/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.put('/api/credit-notes/:id', authMiddleware, requireCustomer, requireFeature('creditNotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
     const { lines, ...updateData } = req.body;
@@ -126,7 +126,7 @@ export function registerCreditNoteRoutes(app: Express) {
   }));
 
   // Customer-only: Issue credit note (creates reversing journal entry)
-  app.post('/api/credit-notes/:id/issue', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/credit-notes/:id/issue', authMiddleware, requireCustomer, requireFeature('creditNotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -213,7 +213,7 @@ export function registerCreditNoteRoutes(app: Express) {
   }));
 
   // Customer-only: Void credit note
-  app.post('/api/credit-notes/:id/void', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/credit-notes/:id/void', authMiddleware, requireCustomer, requireFeature('creditNotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -240,7 +240,7 @@ export function registerCreditNoteRoutes(app: Express) {
   }));
 
   // Customer-only: Generate PDF
-  app.get('/api/credit-notes/:id/pdf', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get('/api/credit-notes/:id/pdf', authMiddleware, requireCustomer, requireFeature('creditNotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 

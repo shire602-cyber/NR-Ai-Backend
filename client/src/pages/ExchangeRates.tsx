@@ -45,10 +45,6 @@ export default function ExchangeRates() {
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
   const { canAccess, getRequiredTier } = useSubscription();
 
-  if (!canAccess('multiCurrency')) {
-    return <UpgradePrompt feature="multiCurrency" requiredTier={getRequiredTier('multiCurrency')} />;
-  }
-
   // Dialog state
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [formFromCurrency, setFormFromCurrency] = useState('USD');
@@ -150,6 +146,10 @@ export default function ExchangeRates() {
     }
     convertMutation.mutate();
   };
+
+  if (!canAccess('multiCurrency')) {
+    return <UpgradePrompt feature="multiCurrency" requiredTier={getRequiredTier('multiCurrency')} />;
+  }
 
   if (isLoadingCompany) {
     return (

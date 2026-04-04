@@ -69,7 +69,7 @@ export function registerQuoteRoutes(app: Express) {
     }));
 
   // Customer-only: Update quote
-  app.put('/api/quotes/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.put('/api/quotes/:id', authMiddleware, requireCustomer, requireFeature('quotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
     const { lines, ...updateData } = req.body;
@@ -117,7 +117,7 @@ export function registerQuoteRoutes(app: Express) {
   }));
 
   // Customer-only: Convert quote to invoice
-  app.post('/api/quotes/:id/convert-to-invoice', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/quotes/:id/convert-to-invoice', authMiddleware, requireCustomer, requireFeature('quotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -176,7 +176,7 @@ export function registerQuoteRoutes(app: Express) {
   }));
 
   // Customer-only: Generate PDF
-  app.get('/api/quotes/:id/pdf', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get('/api/quotes/:id/pdf', authMiddleware, requireCustomer, requireFeature('quotes'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 

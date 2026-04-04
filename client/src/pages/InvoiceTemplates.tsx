@@ -54,26 +54,6 @@ export default function InvoiceTemplates() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<InvoiceTemplate | null>(null);
 
-  if (subLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!canAccess('invoiceTemplates')) {
-    return (
-      <div className="max-w-2xl mx-auto mt-16">
-        <UpgradePrompt
-          feature="invoiceTemplates"
-          requiredTier={getRequiredTier('invoiceTemplates')}
-          description="Customize your invoice appearance with professional templates. Add your branding, colors, and layout preferences."
-        />
-      </div>
-    );
-  }
-
   const { data: templates, isLoading } = useQuery<InvoiceTemplate[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'invoice-templates'],
     enabled: !!selectedCompanyId,
@@ -190,6 +170,26 @@ export default function InvoiceTemplates() {
       default: return layout;
     }
   };
+
+  if (subLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!canAccess('invoiceTemplates')) {
+    return (
+      <div className="max-w-2xl mx-auto mt-16">
+        <UpgradePrompt
+          feature="invoiceTemplates"
+          requiredTier={getRequiredTier('invoiceTemplates')}
+          description="Customize your invoice appearance with professional templates. Add your branding, colors, and layout preferences."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

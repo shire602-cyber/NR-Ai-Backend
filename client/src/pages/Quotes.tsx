@@ -73,10 +73,6 @@ export default function Quotes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
 
-  if (!canAccess('quotes')) {
-    return <UpgradePrompt feature="quotes" requiredTier={getRequiredTier('quotes')} />;
-  }
-
   const { data: quotes, isLoading } = useQuery<Quote[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'quotes'],
     enabled: !!selectedCompanyId,
@@ -232,6 +228,10 @@ export default function Quotes() {
   const subtotal = watchLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0);
   const vatAmount = watchLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice * line.vatRate), 0);
   const total = subtotal + vatAmount;
+
+  if (!canAccess('quotes')) {
+    return <UpgradePrompt feature="quotes" requiredTier={getRequiredTier('quotes')} />;
+  }
 
   return (
     <div className="space-y-6">

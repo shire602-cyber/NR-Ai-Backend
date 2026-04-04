@@ -70,7 +70,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
     }));
 
   // Customer-only: Update purchase order
-  app.put('/api/purchase-orders/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.put('/api/purchase-orders/:id', authMiddleware, requireCustomer, requireFeature('purchaseOrders'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
     const { lines, ...updateData } = req.body;
@@ -103,7 +103,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
   }));
 
   // Customer-only: Delete purchase order
-  app.delete('/api/purchase-orders/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.delete('/api/purchase-orders/:id', authMiddleware, requireCustomer, requireFeature('purchaseOrders'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -126,7 +126,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
   }));
 
   // Customer-only: Send purchase order
-  app.post('/api/purchase-orders/:id/send', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/purchase-orders/:id/send', authMiddleware, requireCustomer, requireFeature('purchaseOrders'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -153,7 +153,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
   }));
 
   // Customer-only: Approve purchase order
-  app.post('/api/purchase-orders/:id/approve', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/purchase-orders/:id/approve', authMiddleware, requireCustomer, requireFeature('purchaseOrders'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -180,7 +180,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
   }));
 
   // Customer-only: Receive purchase order (mark as received)
-  app.post('/api/purchase-orders/:id/receive', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/purchase-orders/:id/receive', authMiddleware, requireCustomer, requireFeature('purchaseOrders'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -207,7 +207,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
   }));
 
   // Customer-only: Generate PDF
-  app.get('/api/purchase-orders/:id/pdf', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get('/api/purchase-orders/:id/pdf', authMiddleware, requireCustomer, requireFeature('purchaseOrders'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 

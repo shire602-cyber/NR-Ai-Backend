@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 
 export function registerVATRoutes(app: Express) {
@@ -9,7 +9,7 @@ export function registerVATRoutes(app: Express) {
   // =====================================
 
   // Get VAT returns by company
-  app.get("/api/companies/:companyId/vat-returns", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/vat-returns", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 
@@ -23,7 +23,7 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Generate VAT return (FTA VAT 201 format with emirate breakdown)
-  app.post("/api/companies/:companyId/vat-returns/generate", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/vat-returns/generate", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { periodStart, periodEnd } = req.body;
@@ -229,10 +229,21 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Submit VAT return
-  app.post("/api/vat-returns/:id/submit", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/vat-returns/:id/submit", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { id } = req.params;
     const { adjustmentAmount, adjustmentReason, notes } = req.body;
+
+    // Look up the VAT return to verify it exists and check company access
+    const existing = await storage.getVatReturn(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'VAT return not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     const vatReturn = await storage.updateVatReturn(id, {
       status: 'submitted',
@@ -247,9 +258,21 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Update VAT return (for editing draft returns)
-  app.patch("/api/vat-returns/:id", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/vat-returns/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { id } = req.params;
     const updateData = req.body;
+
+    // Look up the VAT return to verify it exists and check company access
+    const existing = await storage.getVatReturn(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'VAT return not found' });
+    }
+
+    const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     const vatReturn = await storage.updateVatReturn(id, {
       ...updateData,

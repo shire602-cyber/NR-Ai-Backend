@@ -115,7 +115,7 @@ Amount: ${validated.amount} ${validated.currency}`
   }));
 
   // AI Bank Statement Parser Route
-  app.post("/api/ai/parse-bank-statement", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/ai/parse-bank-statement", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { text } = req.body;
@@ -186,13 +186,20 @@ If no valid transactions can be found, return { "transactions": [] }`
   }));
 
   // AI CFO Advice Route
-  app.post("/api/ai/cfo-advice", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/ai/cfo-advice", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
+      const userId = (req as any).user.id;
       const { companyId, question, context } = req.body;
 
       if (!companyId || !question) {
         return res.status(400).json({ message: 'Company ID and question are required' });
+      }
+
+      // Verify company access
+      const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'Access denied' });
       }
 
       // Get additional company data for context
@@ -648,7 +655,7 @@ ${JSON.stringify(ledgerData, null, 2)}`
   }));
 
   // Apply Reconciliation Match
-  app.post("/api/bank-transactions/:id/reconcile", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/bank-transactions/:id/reconcile", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = (req as any).user?.id;
@@ -903,9 +910,17 @@ Respond with JSON:
   }));
 
   // Get stored forecasts
-  app.get("/api/companies/:companyId/forecasts", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/forecasts", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { companyId } = req.params;
+      const userId = (req as any).user.id;
+
+      // Verify company access
+      const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
       const forecasts = await storage.getCashFlowForecastsByCompanyId(companyId);
       res.json(forecasts);
     } catch (error: any) {
@@ -914,9 +929,21 @@ Respond with JSON:
   }));
 
   // Transaction Classification Feedback (for ML learning)
-  app.post("/api/ai/classification-feedback", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/ai/classification-feedback", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     try {
+      const userId = (req as any).user.id;
       const { classificationId, wasAccepted, userSelectedAccountId } = req.body;
+
+      // Look up the classification to verify it exists and check company access
+      const existing = await storage.getTransactionClassification(classificationId);
+      if (!existing) {
+        return res.status(404).json({ message: 'Classification not found' });
+      }
+
+      const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
 
       const classification = await storage.updateTransactionClassification(classificationId, {
         wasAccepted,

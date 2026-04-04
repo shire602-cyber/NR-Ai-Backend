@@ -75,10 +75,6 @@ export default function ReconciliationRules() {
   const { companyId: selectedCompanyId } = useDefaultCompany();
   const { canAccess, getRequiredTier } = useSubscription();
 
-  if (!canAccess('bankImport')) {
-    return <UpgradePrompt feature="bankImport" requiredTier={getRequiredTier('bankImport')} />;
-  }
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<ReconciliationRule | null>(null);
 
@@ -213,6 +209,10 @@ export default function ReconciliationRules() {
     } else {
       createMutation.mutate(data);
     }
+  }
+
+  if (!canAccess('bankImport')) {
+    return <UpgradePrompt feature="bankImport" requiredTier={getRequiredTier('bankImport')} />;
   }
 
   if (!selectedCompanyId) {

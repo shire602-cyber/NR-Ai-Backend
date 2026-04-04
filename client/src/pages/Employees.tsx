@@ -89,10 +89,6 @@ export default function Employees() {
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
   const { canAccess, getRequiredTier } = useSubscription();
 
-  if (!canAccess('payroll')) {
-    return <UpgradePrompt feature="payroll" requiredTier={getRequiredTier('payroll')} />;
-  }
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -272,6 +268,10 @@ export default function Employees() {
   const activeCount = employees.filter(e => e.status === 'active').length;
   const onLeaveCount = employees.filter(e => e.status === 'on_leave').length;
   const terminatedCount = employees.filter(e => e.status === 'terminated').length;
+
+  if (!canAccess('payroll')) {
+    return <UpgradePrompt feature="payroll" requiredTier={getRequiredTier('payroll')} />;
+  }
 
   if (isLoadingCompany || isLoading) {
     return (

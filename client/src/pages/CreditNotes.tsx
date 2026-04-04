@@ -78,26 +78,6 @@ export default function CreditNotes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCreditNote, setEditingCreditNote] = useState<CreditNote | null>(null);
 
-  if (subLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!canAccess('creditNotes')) {
-    return (
-      <div className="max-w-2xl mx-auto mt-16">
-        <UpgradePrompt
-          feature="creditNotes"
-          requiredTier={getRequiredTier('creditNotes')}
-          description="Issue credit notes against invoices, manage refunds, and maintain accurate accounting records."
-        />
-      </div>
-    );
-  }
-
   const { data: creditNotes, isLoading } = useQuery<CreditNote[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'credit-notes'],
     enabled: !!selectedCompanyId,
@@ -262,6 +242,26 @@ export default function CreditNotes() {
   const subtotal = watchLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0);
   const vatAmount = watchLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice * line.vatRate), 0);
   const total = subtotal + vatAmount;
+
+  if (subLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!canAccess('creditNotes')) {
+    return (
+      <div className="max-w-2xl mx-auto mt-16">
+        <UpgradePrompt
+          feature="creditNotes"
+          requiredTier={getRequiredTier('creditNotes')}
+          description="Issue credit notes against invoices, manage refunds, and maintain accurate accounting records."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

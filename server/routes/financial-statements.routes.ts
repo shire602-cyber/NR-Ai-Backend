@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 
 interface AccountBreakdown {
@@ -25,7 +26,7 @@ export function registerFinancialStatementRoutes(app: Express) {
   // =====================================
 
   // Profit & Loss (Income Statement)
-  app.get('/api/companies/:companyId/financial-statements/profit-loss', authMiddleware, requireCustomer,
+  app.get('/api/companies/:companyId/financial-statements/profit-loss', authMiddleware, requireCustomer, requireFeature('advancedReports'),
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user.id;
@@ -129,7 +130,7 @@ export function registerFinancialStatementRoutes(app: Express) {
     }));
 
   // Balance Sheet
-  app.get('/api/companies/:companyId/financial-statements/balance-sheet', authMiddleware, requireCustomer,
+  app.get('/api/companies/:companyId/financial-statements/balance-sheet', authMiddleware, requireCustomer, requireFeature('advancedReports'),
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user.id;
@@ -267,7 +268,7 @@ export function registerFinancialStatementRoutes(app: Express) {
     }));
 
   // Cash Flow Statement
-  app.get('/api/companies/:companyId/financial-statements/cash-flow', authMiddleware, requireCustomer,
+  app.get('/api/companies/:companyId/financial-statements/cash-flow', authMiddleware, requireCustomer, requireFeature('advancedReports'),
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user.id;

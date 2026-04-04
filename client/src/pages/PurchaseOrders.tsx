@@ -73,26 +73,6 @@ export default function PurchaseOrders() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
 
-  if (subLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!canAccess('purchaseOrders')) {
-    return (
-      <div className="max-w-2xl mx-auto mt-16">
-        <UpgradePrompt
-          feature="purchaseOrders"
-          requiredTier={getRequiredTier('purchaseOrders')}
-          description="Create and track purchase orders to your vendors. Manage procurement workflows and match POs to invoices."
-        />
-      </div>
-    );
-  }
-
   const { data: purchaseOrders, isLoading } = useQuery<PurchaseOrder[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'purchase-orders'],
     enabled: !!selectedCompanyId,
@@ -252,6 +232,26 @@ export default function PurchaseOrders() {
   const subtotal = watchLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0);
   const vatAmount = watchLines.reduce((sum, line) => sum + (line.quantity * line.unitPrice * line.vatRate), 0);
   const total = subtotal + vatAmount;
+
+  if (subLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!canAccess('purchaseOrders')) {
+    return (
+      <div className="max-w-2xl mx-auto mt-16">
+        <UpgradePrompt
+          feature="purchaseOrders"
+          requiredTier={getRequiredTier('purchaseOrders')}
+          description="Create and track purchase orders to your vendors. Manage procurement workflows and match POs to invoices."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

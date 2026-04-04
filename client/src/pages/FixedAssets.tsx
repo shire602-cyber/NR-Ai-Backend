@@ -136,10 +136,6 @@ export default function FixedAssets() {
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
   const { canAccess, getRequiredTier } = useSubscription();
 
-  if (!canAccess('fixedAssets')) {
-    return <UpgradePrompt feature="fixedAssets" requiredTier={getRequiredTier('fixedAssets')} />;
-  }
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<FixedAsset | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -388,6 +384,10 @@ export default function FixedAssets() {
       (asset.serialNumber?.toLowerCase().includes(q) ?? false)
     );
   });
+
+  if (!canAccess('fixedAssets')) {
+    return <UpgradePrompt feature="fixedAssets" requiredTier={getRequiredTier('fixedAssets')} />;
+  }
 
   if (isLoadingCompany || isLoading) {
     return (

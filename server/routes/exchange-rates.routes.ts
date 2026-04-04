@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 
 export function registerExchangeRateRoutes(app: Express) {
@@ -9,7 +10,7 @@ export function registerExchangeRateRoutes(app: Express) {
   // =====================================
 
   // List all exchange rates for a company
-  app.get('/api/companies/:companyId/exchange-rates', authMiddleware, requireCustomer,
+  app.get('/api/companies/:companyId/exchange-rates', authMiddleware, requireCustomer, requireFeature('multiCurrency'),
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user.id;
@@ -24,7 +25,7 @@ export function registerExchangeRateRoutes(app: Express) {
     }));
 
   // Create a new exchange rate
-  app.post('/api/companies/:companyId/exchange-rates', authMiddleware, requireCustomer,
+  app.post('/api/companies/:companyId/exchange-rates', authMiddleware, requireCustomer, requireFeature('multiCurrency'),
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user.id;
@@ -58,7 +59,7 @@ export function registerExchangeRateRoutes(app: Express) {
     }));
 
   // Delete an exchange rate
-  app.delete('/api/exchange-rates/:id', authMiddleware, requireCustomer,
+  app.delete('/api/exchange-rates/:id', authMiddleware, requireCustomer, requireFeature('multiCurrency'),
     asyncHandler(async (req: Request, res: Response) => {
       const { id } = req.params;
       const userId = (req as any).user.id;
@@ -78,7 +79,7 @@ export function registerExchangeRateRoutes(app: Express) {
     }));
 
   // Convert currency using latest rate
-  app.get('/api/companies/:companyId/exchange-rates/convert', authMiddleware, requireCustomer,
+  app.get('/api/companies/:companyId/exchange-rates/convert', authMiddleware, requireCustomer, requireFeature('multiCurrency'),
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
       const userId = (req as any).user.id;

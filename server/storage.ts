@@ -337,6 +337,7 @@ export interface IStorage {
 
   // Transaction Classifications
   createTransactionClassification(classification: InsertTransactionClassification): Promise<TransactionClassification>;
+  getTransactionClassification(id: string): Promise<TransactionClassification | undefined>;
   getTransactionClassificationsByCompanyId(companyId: string): Promise<TransactionClassification[]>;
   updateTransactionClassification(id: string, data: Partial<InsertTransactionClassification>): Promise<TransactionClassification>;
 
@@ -367,6 +368,7 @@ export interface IStorage {
   getCashFlowForecasts(companyId: string): Promise<CashFlowForecast[]>;
   
   // Notifications
+  getNotification(id: string): Promise<Notification | undefined>;
   getNotificationsByUserId(userId: string): Promise<Notification[]>;
   getUnreadNotificationCount(userId: string): Promise<number>;
   createNotification(notification: InsertNotification): Promise<Notification>;
@@ -379,6 +381,7 @@ export interface IStorage {
   createRegulatoryNews(news: InsertRegulatoryNews): Promise<RegulatoryNews>;
   
   // Reminder Settings
+  getReminderSetting(id: string): Promise<ReminderSetting | undefined>;
   getReminderSettingsByCompanyId(companyId: string): Promise<ReminderSetting[]>;
   createReminderSetting(setting: InsertReminderSetting): Promise<ReminderSetting>;
   updateReminderSetting(id: string, data: Partial<InsertReminderSetting>): Promise<ReminderSetting>;
@@ -1653,6 +1656,14 @@ export class DatabaseStorage implements IStorage {
     return classification;
   }
 
+  async getTransactionClassification(id: string): Promise<TransactionClassification | undefined> {
+    const [classification] = await db
+      .select()
+      .from(transactionClassifications)
+      .where(eq(transactionClassifications.id, id));
+    return classification;
+  }
+
   async getTransactionClassificationsByCompanyId(companyId: string): Promise<TransactionClassification[]> {
     return await db
       .select()
@@ -1809,6 +1820,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Notifications
+  async getNotification(id: string): Promise<Notification | undefined> {
+    const [notification] = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, id));
+    return notification;
+  }
+
   async getNotificationsByUserId(userId: string): Promise<Notification[]> {
     return await db
       .select()
@@ -1883,6 +1902,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Reminder Settings
+  async getReminderSetting(id: string): Promise<ReminderSetting | undefined> {
+    const [setting] = await db
+      .select()
+      .from(reminderSettings)
+      .where(eq(reminderSettings.id, id));
+    return setting;
+  }
+
   async getReminderSettingsByCompanyId(companyId: string): Promise<ReminderSetting[]> {
     return await db
       .select()

@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { generateInvoicePDF } from "../services/pdf-invoice.service";
 import { createInvoicePaymentSession } from "../services/invoice-payment.service";
@@ -18,8 +18,9 @@ export function registerPortalPublicRoutes(app: Express) {
   // =====================================
   // GENERATE PORTAL ACCESS (authenticated)
   // =====================================
-  app.post("/api/portal/generate-access", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/portal/generate-access", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { contactId } = req.body;
+    const userId = (req as any).user?.id;
 
     if (!contactId) {
       return res.status(400).json({ message: 'contactId is required' });
@@ -28,6 +29,12 @@ export function registerPortalPublicRoutes(app: Express) {
     const contact = await storage.getCustomerContact(contactId);
     if (!contact) {
       return res.status(404).json({ message: 'Contact not found' });
+    }
+
+    // Verify the requesting user has access to the contact's company
+    const hasAccess = await storage.hasCompanyAccess(userId, contact.companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     // Generate crypto-random token

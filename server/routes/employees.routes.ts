@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 
 export function registerEmployeeRoutes(app: Express) {
@@ -9,7 +10,7 @@ export function registerEmployeeRoutes(app: Express) {
   // =====================================
 
   // List all employees for a company
-  app.get("/api/companies/:companyId/employees", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/employees", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -23,7 +24,7 @@ export function registerEmployeeRoutes(app: Express) {
   }));
 
   // Get a single employee
-  app.get("/api/employees/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/employees/:id", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -41,7 +42,7 @@ export function registerEmployeeRoutes(app: Express) {
   }));
 
   // Create a new employee
-  app.post("/api/companies/:companyId/employees", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/employees", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -60,7 +61,7 @@ export function registerEmployeeRoutes(app: Express) {
   }));
 
   // Update an employee
-  app.put("/api/employees/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.put("/api/employees/:id", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -80,7 +81,7 @@ export function registerEmployeeRoutes(app: Express) {
   }));
 
   // Delete an employee
-  app.delete("/api/employees/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/employees/:id", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 

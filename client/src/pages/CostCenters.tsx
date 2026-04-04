@@ -95,10 +95,6 @@ export default function CostCenters() {
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
   const { canAccess, getRequiredTier } = useSubscription();
 
-  if (!canAccess('costCenters')) {
-    return <UpgradePrompt feature="costCenters" requiredTier={getRequiredTier('costCenters')} />;
-  }
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCostCenter, setEditingCostCenter] = useState<CostCenter | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -240,6 +236,10 @@ export default function CostCenters() {
   const activeCount = costCenters.filter((cc) => cc.isActive).length;
   const inactiveCount = costCenters.filter((cc) => !cc.isActive).length;
   const selectedCostCenter = costCenters.find((cc) => cc.id === selectedCostCenterId);
+
+  if (!canAccess('costCenters')) {
+    return <UpgradePrompt feature="costCenters" requiredTier={getRequiredTier('costCenters')} />;
+  }
 
   if (isLoadingCompany || isLoading) {
     return (

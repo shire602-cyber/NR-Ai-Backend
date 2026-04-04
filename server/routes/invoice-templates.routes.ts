@@ -25,7 +25,7 @@ export function registerInvoiceTemplateRoutes(app: Express) {
     }));
 
   // Customer-only: Get single template
-  app.get('/api/invoice-templates/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get('/api/invoice-templates/:id', authMiddleware, requireCustomer, requireFeature('invoiceTemplates'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -60,7 +60,7 @@ export function registerInvoiceTemplateRoutes(app: Express) {
     }));
 
   // Customer-only: Update template
-  app.put('/api/invoice-templates/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.put('/api/invoice-templates/:id', authMiddleware, requireCustomer, requireFeature('invoiceTemplates'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -79,7 +79,7 @@ export function registerInvoiceTemplateRoutes(app: Express) {
   }));
 
   // Customer-only: Delete template
-  app.delete('/api/invoice-templates/:id', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.delete('/api/invoice-templates/:id', authMiddleware, requireCustomer, requireFeature('invoiceTemplates'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -98,7 +98,7 @@ export function registerInvoiceTemplateRoutes(app: Express) {
   }));
 
   // Customer-only: Set template as default
-  app.post('/api/invoice-templates/:id/set-default', authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post('/api/invoice-templates/:id/set-default', authMiddleware, requireCustomer, requireFeature('invoiceTemplates'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 

@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 
 export function registerPayrollRoutes(app: Express) {
@@ -9,7 +10,7 @@ export function registerPayrollRoutes(app: Express) {
   // =====================================
 
   // List payroll runs for a company
-  app.get("/api/companies/:companyId/payroll", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/payroll", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -23,7 +24,7 @@ export function registerPayrollRoutes(app: Express) {
   }));
 
   // Get a single payroll run with its lines
-  app.get("/api/payroll/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/payroll/:id", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -57,7 +58,7 @@ export function registerPayrollRoutes(app: Express) {
   }));
 
   // Create a draft payroll run (auto-populate from active employees)
-  app.post("/api/companies/:companyId/payroll", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/payroll", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -136,7 +137,7 @@ export function registerPayrollRoutes(app: Express) {
   }));
 
   // Approve a payroll run
-  app.post("/api/payroll/:id/approve", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/payroll/:id/approve", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -165,7 +166,7 @@ export function registerPayrollRoutes(app: Express) {
   }));
 
   // Generate WPS SIF file for CBUAE
-  app.post("/api/payroll/:id/generate-wps", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/payroll/:id/generate-wps", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -244,7 +245,7 @@ export function registerPayrollRoutes(app: Express) {
   }));
 
   // Delete a payroll run (only draft)
-  app.delete("/api/payroll/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/payroll/:id", authMiddleware, requireCustomer, requireFeature('payroll'), asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 

@@ -13,6 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
+import { useSubscription } from '@/hooks/useSubscription';
+import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { formatCurrency } from '@/lib/format';
 import { 
   BarChart, 
@@ -86,6 +88,7 @@ export default function AdvancedReports() {
   const { t, locale } = useTranslation();
   const { toast } = useToast();
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
+  const { canAccess, getRequiredTier } = useSubscription();
   const [selectedPeriod, setSelectedPeriod] = useState('quarter');
   const [comparisonPeriod, setComparisonPeriod] = useState('previous');
   const [activeTab, setActiveTab] = useState('cashflow');
@@ -193,6 +196,10 @@ export default function AdvancedReports() {
       description: `${reportType} report has been downloaded.`,
     });
   };
+
+  if (!canAccess('advancedReports')) {
+    return <UpgradePrompt feature="advancedReports" requiredTier={getRequiredTier('advancedReports')} />;
+  }
 
   if (isLoadingCompany) {
     return (
