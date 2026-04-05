@@ -268,7 +268,7 @@ export default function Receipts() {
     setEditingReceipt(receipt);
     form.reset({
       merchant: receipt.merchant || '',
-      date: receipt.date || '',
+      date: receipt.date ? String(receipt.date).slice(0, 10) : '',
       amount: receipt.amount || 0,
       vatAmount: receipt.vatAmount || null,
       category: receipt.category || '',
@@ -1256,7 +1256,7 @@ export default function Receipts() {
                     </div>
                     <div>
                       <p className="font-medium">{receipt.merchant || 'Unknown Merchant'}</p>
-                      <p className="text-sm text-muted-foreground">{receipt.date}</p>
+                      <p className="text-sm text-muted-foreground">{receipt.date ? String(receipt.date).slice(0, 10) : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
