@@ -443,46 +443,60 @@ export async function generateClosingEntries(
   // Format period for memo
   const periodLabel = `${periodStart} to ${periodEnd}`;
 
-  // Generate entry number
-  const now = new Date();
-  const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
-  const countResult = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2`,
-    [companyId, `JE-${dateStr}-%`]
-  );
-  const seqNum = parseInt(countResult.rows[0].cnt) + 1;
-  const entryNumber = `JE-${dateStr}-${String(seqNum).padStart(3, '0')}`;
+  // Wrap entry + lines in a transaction to prevent orphaned entries on partial failure
+  const client = await pool.connect();
+  let entry: any;
+  try {
+    await client.query('BEGIN');
 
-  // Create the journal entry
-  const entryResult = await pool.query(
-    `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, created_by)
-     VALUES ($1, $2, $3::date, $4, 'posted', 'system', $5)
-     RETURNING id, entry_number, date, memo`,
-    [companyId, entryNumber, periodEnd, `Closing entries for ${periodLabel}`, userId]
-  );
-
-  const entry = entryResult.rows[0];
-
-  // Create journal lines
-  for (const line of lines) {
-    await pool.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        entry.id,
-        line.accountId,
-        Math.round(line.debit * 100) / 100,
-        Math.round(line.credit * 100) / 100,
-        `Closing entry - ${line.accountName}`,
-      ]
+    // Generate entry number with FOR UPDATE to prevent collisions
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+    const countResult = await client.query(
+      `SELECT COUNT(*) AS cnt FROM journal_entries WHERE company_id = $1 AND entry_number LIKE $2 FOR UPDATE`,
+      [companyId, `JE-${dateStr}-%`]
     );
-  }
+    const seqNum = parseInt(countResult.rows[0].cnt) + 1;
+    const entryNumber = `JE-${dateStr}-${String(seqNum).padStart(3, '0')}`;
 
-  // Update posted_by and posted_at
-  await pool.query(
-    `UPDATE journal_entries SET posted_by = $1, posted_at = now() WHERE id = $2`,
-    [userId, entry.id]
-  );
+    // Create the journal entry
+    const entryResult = await client.query(
+      `INSERT INTO journal_entries (company_id, entry_number, date, memo, status, source, created_by)
+       VALUES ($1, $2, $3::date, $4, 'posted', 'system', $5)
+       RETURNING id, entry_number, date, memo`,
+      [companyId, entryNumber, periodEnd, `Closing entries for ${periodLabel}`, userId]
+    );
+
+    entry = entryResult.rows[0];
+
+    // Create journal lines
+    for (const line of lines) {
+      await client.query(
+        `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          entry.id,
+          line.accountId,
+          Math.round(line.debit * 100) / 100,
+          Math.round(line.credit * 100) / 100,
+          `Closing entry - ${line.accountName}`,
+        ]
+      );
+    }
+
+    // Update posted_by and posted_at
+    await client.query(
+      `UPDATE journal_entries SET posted_by = $1, posted_at = now() WHERE id = $2`,
+      [userId, entry.id]
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return {
     id: entry.id,
