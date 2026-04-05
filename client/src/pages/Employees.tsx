@@ -143,7 +143,7 @@ export default function Employees() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -162,7 +162,7 @@ export default function Employees() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -173,7 +173,7 @@ export default function Employees() {
       toast({ title: 'Employee Deleted', description: 'Employee has been removed.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 

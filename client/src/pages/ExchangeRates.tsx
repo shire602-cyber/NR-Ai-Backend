@@ -83,7 +83,7 @@ export default function ExchangeRates() {
       toast({ title: 'Exchange rate added successfully' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to add rate', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to add rate', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -97,7 +97,7 @@ export default function ExchangeRates() {
       toast({ title: 'Exchange rate deleted' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to delete rate', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to delete rate', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -115,7 +115,7 @@ export default function ExchangeRates() {
       setConvertResult(data);
     },
     onError: (error: Error) => {
-      toast({ title: 'Conversion failed', description: error.message, variant: 'destructive' });
+      toast({ title: 'Conversion failed', description: error?.message, variant: 'destructive' });
       setConvertResult(null);
     },
   });

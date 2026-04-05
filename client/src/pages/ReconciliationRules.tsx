@@ -107,7 +107,7 @@ export default function ReconciliationRules() {
       closeDialog();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -121,7 +121,7 @@ export default function ReconciliationRules() {
       closeDialog();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -134,7 +134,7 @@ export default function ReconciliationRules() {
       toast({ title: 'Rule deleted', description: 'Reconciliation rule has been deleted.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -146,7 +146,7 @@ export default function ReconciliationRules() {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'reconciliation-rules'] });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -163,7 +163,7 @@ export default function ReconciliationRules() {
       });
     },
     onError: (error: Error) => {
-      toast({ title: 'Auto-match failed', description: error.message, variant: 'destructive' });
+      toast({ title: 'Auto-match failed', description: error?.message, variant: 'destructive' });
     },
   });
 

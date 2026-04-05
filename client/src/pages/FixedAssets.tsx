@@ -217,7 +217,7 @@ export default function FixedAssets() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -241,7 +241,7 @@ export default function FixedAssets() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -253,7 +253,7 @@ export default function FixedAssets() {
       toast({ title: 'Asset Deleted', description: 'Fixed asset has been removed.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -267,7 +267,7 @@ export default function FixedAssets() {
       toast({ title: 'Asset Disposed', description: 'Fixed asset has been marked as disposed.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -290,7 +290,7 @@ export default function FixedAssets() {
       });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 

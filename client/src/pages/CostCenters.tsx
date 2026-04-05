@@ -140,7 +140,7 @@ export default function CostCenters() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -158,7 +158,7 @@ export default function CostCenters() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -172,7 +172,7 @@ export default function CostCenters() {
       toast({ title: 'Cost Center Deleted', description: 'Cost center has been removed.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 

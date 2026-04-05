@@ -79,7 +79,7 @@ export default function NotificationPreferences() {
       toast({ title: 'Preferences saved', description: 'Your notification preferences have been updated.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to save preferences', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to save preferences', description: error?.message || 'Please try again.' });
     },
   });
 

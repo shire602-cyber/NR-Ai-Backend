@@ -187,7 +187,7 @@ function ApiKeysTab({ companyId }: { companyId: string }) {
       setNewKeyScopes(['read']);
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create API key', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to create API key', description: error?.message });
     },
   });
 
@@ -199,7 +199,7 @@ function ApiKeysTab({ companyId }: { companyId: string }) {
       toast({ title: 'API key updated' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update API key', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to update API key', description: error?.message });
     },
   });
 
@@ -211,7 +211,7 @@ function ApiKeysTab({ companyId }: { companyId: string }) {
       setDeleteId(null);
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to revoke API key', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to revoke API key', description: error?.message });
     },
   });
 
@@ -485,7 +485,7 @@ function WebhooksTab({ companyId }: { companyId: string }) {
       setNewEvents([]);
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create webhook', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to create webhook', description: error?.message });
     },
   });
 
@@ -497,7 +497,7 @@ function WebhooksTab({ companyId }: { companyId: string }) {
       toast({ title: 'Webhook updated' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update webhook', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to update webhook', description: error?.message });
     },
   });
 
@@ -509,7 +509,7 @@ function WebhooksTab({ companyId }: { companyId: string }) {
       setDeleteId(null);
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete webhook', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to delete webhook', description: error?.message });
     },
   });
 
@@ -530,7 +530,7 @@ function WebhooksTab({ companyId }: { companyId: string }) {
       }
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Test failed', description: error.message });
+      toast({ variant: 'destructive', title: 'Test failed', description: error?.message });
     },
   });
 

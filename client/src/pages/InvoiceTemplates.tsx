@@ -84,7 +84,7 @@ export default function InvoiceTemplates() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create template', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to create template', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -99,7 +99,7 @@ export default function InvoiceTemplates() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update template', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to update template', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -110,7 +110,7 @@ export default function InvoiceTemplates() {
       toast({ title: 'Template deleted', description: 'The template has been deleted.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete template', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to delete template', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -121,7 +121,7 @@ export default function InvoiceTemplates() {
       toast({ title: 'Default template set', description: 'This template will be used for new invoices.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to set default', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to set default', description: error?.message || 'Please try again.' });
     },
   });
 

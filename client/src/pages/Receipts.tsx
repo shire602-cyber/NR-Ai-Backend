@@ -147,13 +147,13 @@ export default function Receipts() {
       toast({
         variant: 'destructive',
         title: 'Failed to update receipt',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
 
   const postExpenseMutation = useMutation({
-    mutationFn: ({ id, accountId, paymentAccountId }: { id: string; accountId: string; paymentAccountId: string }) => 
+    mutationFn: ({ id, accountId, paymentAccountId }: { id: string; accountId: string; paymentAccountId: string }) =>
       apiRequest('POST', `/api/receipts/${id}/post`, { accountId, paymentAccountId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
@@ -171,7 +171,7 @@ export default function Receipts() {
       toast({
         variant: 'destructive',
         title: 'Failed to post expense',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -201,35 +201,35 @@ export default function Receipts() {
       toast({
         variant: 'destructive',
         title: 'Failed to create expense',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
 
   const createAccountMutation = useMutation({
-    mutationFn: (data: any) => 
+    mutationFn: (data: any) =>
       apiRequest('POST', `/api/companies/${companyId}/accounts`, data),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'accounts'] });
       toast({
         title: 'Account created successfully',
-        description: `${data.nameEn} has been added.`,
+        description: `${data?.nameEn || 'Account'} has been added.`,
       });
       setCreateAccountDialogOpen(false);
       setNewAccountCode('');
       setNewAccountName('');
       // Auto-select the new account if it matches the type
       if (newAccountType === 'expense') {
-        setSelectedExpenseAccount(data.id);
+        setSelectedExpenseAccount(data?.id);
       } else if (newAccountType === 'asset') {
-        setSelectedPaymentAccount(data.id);
+        setSelectedPaymentAccount(data?.id);
       }
     },
     onError: (error: any) => {
       toast({
         variant: 'destructive',
         title: 'Failed to create account',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -253,7 +253,7 @@ export default function Receipts() {
       toast({
         variant: 'destructive',
         title: 'Failed to delete expense',
-        description: error.message || 'Please try again.',
+        description: error?.message || 'Please try again.',
       });
     },
   });
@@ -511,7 +511,7 @@ export default function Receipts() {
         updated[index] = { 
           ...updated[index], 
           status: 'error', 
-          error: error.message || 'OCR processing failed. Try a clearer image.',
+          error: error?.message || 'OCR processing failed. Try a clearer image.',
           progress: 0 
         };
         return updated;
@@ -743,7 +743,7 @@ export default function Receipts() {
         console.error('Failed to save receipt:', error);
         
         // Extract error message
-        const errorMessage = error.message || 'Failed to save to database';
+        const errorMessage = error?.message || 'Failed to save to database';
         
         // Mark this receipt as failed to save
         setProcessedReceipts((prev) => {

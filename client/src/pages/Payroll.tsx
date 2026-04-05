@@ -119,7 +119,7 @@ export default function Payroll() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -132,7 +132,7 @@ export default function Payroll() {
       toast({ title: 'Run Approved', description: 'Payroll run has been approved.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -145,7 +145,7 @@ export default function Payroll() {
       toast({ title: 'Run Deleted', description: 'Draft payroll run has been deleted.' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -175,7 +175,7 @@ export default function Payroll() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to generate WPS file');
+        throw new Error(error?.message || 'Failed to generate WPS file');
       }
 
       const blob = await response.blob();

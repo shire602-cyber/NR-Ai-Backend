@@ -124,7 +124,7 @@ export default function CreditNotes() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create credit note', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to create credit note', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -139,7 +139,7 @@ export default function CreditNotes() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update credit note', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to update credit note', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -150,7 +150,7 @@ export default function CreditNotes() {
       toast({ title: 'Credit note deleted', description: 'The credit note has been deleted.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete credit note', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to delete credit note', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -161,7 +161,7 @@ export default function CreditNotes() {
       toast({ title: 'Credit note issued', description: 'The credit note has been issued successfully.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to issue credit note', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to issue credit note', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -172,7 +172,7 @@ export default function CreditNotes() {
       toast({ title: 'Credit note voided', description: 'The credit note has been voided.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to void credit note', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to void credit note', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -206,7 +206,7 @@ export default function CreditNotes() {
       });
       setDialogOpen(true);
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to load credit note details.' });
+      toast({ variant: 'destructive', title: 'Error', description: error?.message || 'Failed to load credit note details.' });
     }
   };
 

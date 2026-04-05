@@ -115,7 +115,7 @@ export default function Quotes() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create quote', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to create quote', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -130,7 +130,7 @@ export default function Quotes() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update quote', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to update quote', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -141,7 +141,7 @@ export default function Quotes() {
       toast({ title: 'Quote deleted', description: 'The quote has been deleted.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete quote', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to delete quote', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -153,7 +153,7 @@ export default function Quotes() {
       toast({ title: 'Quote converted', description: 'The quote has been converted to an invoice.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to convert quote', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to convert quote', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -189,7 +189,7 @@ export default function Quotes() {
       });
       setDialogOpen(true);
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to load quote details.' });
+      toast({ variant: 'destructive', title: 'Error', description: error?.message || 'Failed to load quote details.' });
     }
   };
 

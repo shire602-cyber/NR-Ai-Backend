@@ -115,7 +115,7 @@ export default function PurchaseOrders() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create purchase order', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to create purchase order', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -130,7 +130,7 @@ export default function PurchaseOrders() {
       resetForm();
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update purchase order', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to update purchase order', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -141,7 +141,7 @@ export default function PurchaseOrders() {
       toast({ title: 'Purchase order deleted', description: 'The purchase order has been deleted.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete purchase order', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to delete purchase order', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -158,7 +158,7 @@ export default function PurchaseOrders() {
       toast({ title: 'Status updated', description: 'Purchase order status has been updated.' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update status', description: error.message || 'Please try again.' });
+      toast({ variant: 'destructive', title: 'Failed to update status', description: error?.message || 'Please try again.' });
     },
   });
 
@@ -194,7 +194,7 @@ export default function PurchaseOrders() {
       });
       setDialogOpen(true);
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to load purchase order details.' });
+      toast({ variant: 'destructive', title: 'Error', description: error?.message || 'Failed to load purchase order details.' });
     }
   };
 
