@@ -79,7 +79,7 @@ export default function CustomerContacts() {
       });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Import failed', description: error.message });
+      toast({ variant: 'destructive', title: 'Import failed', description: error?.message });
     },
   });
 
@@ -94,7 +94,7 @@ export default function CustomerContacts() {
       toast({ title: 'Contact created successfully' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to create contact', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to create contact', description: error?.message });
     },
   });
 
@@ -109,7 +109,7 @@ export default function CustomerContacts() {
       toast({ title: 'Contact updated successfully' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to update contact', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to update contact', description: error?.message });
     },
   });
 
@@ -123,7 +123,7 @@ export default function CustomerContacts() {
       toast({ title: 'Contact deleted successfully' });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to delete contact', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to delete contact', description: error?.message });
     },
   });
 

@@ -1,12 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -14,26 +12,37 @@ import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { useI18n } from '@/lib/i18n';
 import {
   MessageCircle,
-  Clock,
-  Send,
-  Users,
-  Search,
-  ExternalLink,
-  Phone,
-  Receipt,
-  Bell,
-  Megaphone,
-  Settings2,
+  Image,
   FileText,
-  CreditCard,
-  CalendarClock,
-  ChevronRight,
-  Plus,
-  Trash2,
-  AlertTriangle,
-  CheckCircle2,
+  Clock,
+  Check,
+  CheckCheck,
+  CheckCircle,
+  X,
+  Loader2,
+  RefreshCw,
+  Phone,
+  Calendar,
+  Send,
+  Bell,
+  Users,
+  HelpCircle,
+  Copy,
+  Settings,
+  Search,
+  MoreVertical,
+  Paperclip,
+  Smile,
+  FileText as FileTextIcon,
+  ArrowLeft
 } from 'lucide-react';
 import { SiWhatsapp } from 'react-icons/si';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -49,67 +58,71 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import type { WhatsappMessage, Invoice, CustomerContact, Notification } from '@shared/schema';
-import {
-  MESSAGE_TEMPLATES,
-  fillTemplate,
-  formatPhoneForWhatsApp,
-  openWhatsApp,
-  type MessageTemplate,
-} from '@/lib/whatsapp-templates';
+import type { WhatsappMessage, Invoice, CustomerContact } from '@shared/schema';
 
-// ─── Rules ────────────────────────────────────────────────
-
-interface WhatsAppRule {
-  id: string;
-  name: string;
-  type: 'before_due' | 'on_due' | 'after_due' | 'on_invoice' | 'on_event';
-  daysOffset: number; // negative = before, 0 = on, positive = after
-  templateId: string;
-  enabled: boolean;
+interface WhatsappConfigResponse {
+  configured: boolean;
+  isActive: boolean;
+  phoneNumberId?: string;
+  businessAccountId?: string;
+  hasAccessToken?: boolean;
+  companyId: string;
+  configId?: string;
 }
-
-const DEFAULT_RULES: WhatsAppRule[] = [
-  { id: 'rule_1', name: 'Invoice Created', type: 'on_invoice', daysOffset: 0, templateId: 'invoice_with_link', enabled: true },
-  { id: 'rule_2', name: '3 days before due', type: 'before_due', daysOffset: -3, templateId: 'payment_reminder', enabled: true },
-  { id: 'rule_3', name: 'On due date', type: 'on_due', daysOffset: 0, templateId: 'payment_reminder', enabled: true },
-  { id: 'rule_4', name: '7 days overdue', type: 'after_due', daysOffset: 7, templateId: 'payment_overdue', enabled: true },
-  { id: 'rule_5', name: '14 days overdue', type: 'after_due', daysOffset: 14, templateId: 'payment_overdue', enabled: false },
-  { id: 'rule_6', name: 'New client welcome', type: 'on_invoice', daysOffset: 0, templateId: 'welcome_client', enabled: false },
-  { id: 'rule_7', name: 'VAT deadline (7 days)', type: 'before_due', daysOffset: -7, templateId: 'vat_deadline_reminder', enabled: true },
-];
-
-// ─── Component ────────────────────────────────────────────
 
 export default function WhatsAppDashboard() {
   const { locale } = useI18n();
   const { toast } = useToast();
   const { company: currentCompany } = useDefaultCompany();
-  const isRTL = locale === 'ar';
-  const en = locale === 'en';
-
-  // State
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSendDialog, setShowSendDialog] = useState(false);
-  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
-  const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
   const [sendTo, setSendTo] = useState('');
   const [sendMessage, setSendMessage] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [selectedInvoice, setSelectedInvoice] = useState<string>('');
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-  const [broadcastMessage, setBroadcastMessage] = useState('');
-  const [rules, setRules] = useState<WhatsAppRule[]>(DEFAULT_RULES);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isRTL = locale === 'ar';
 
-  // Data queries
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<WhatsappMessage[]>({
+  const t = {
+    title: locale === 'en' ? 'WhatsApp' : 'واتساب',
+    search: locale === 'en' ? 'Search' : 'بحث',
+    noConversations: locale === 'en' ? 'No conversations yet' : 'لا توجد محادثات بعد',
+    typeMessage: locale === 'en' ? 'Type a message' : 'اكتب رسالة',
+    send: locale === 'en' ? 'Send' : 'إرسال',
+    sending: locale === 'en' ? 'Sending...' : 'جاري الإرسال...',
+    messageSent: locale === 'en' ? 'Message sent successfully!' : 'تم إرسال الرسالة بنجاح!',
+    replySent: locale === 'en' ? 'Reply sent successfully!' : 'تم إرسال الرد بنجاح!',
+    notConfigured: locale === 'en' ? 'WhatsApp Not Configured' : 'WhatsApp غير مُعد',
+    notConfiguredDesc: locale === 'en'
+      ? 'Please configure WhatsApp integration in the Admin Settings page first'
+      : 'يرجى إعداد تكامل WhatsApp في صفحة إعدادات المسؤول أولاً',
+    goToSettings: locale === 'en' ? 'Go to Admin Settings' : 'الذهاب إلى إعدادات المسؤول',
+    sendMessage: locale === 'en' ? 'Send Message' : 'إرسال رسالة',
+    sendReminder: locale === 'en' ? 'Send Reminder' : 'إرسال تذكير',
+    sendInvoice: locale === 'en' ? 'Send Invoice' : 'إرسال فاتورة',
+    selectCustomer: locale === 'en' ? 'Select Customer' : 'اختر العميل',
+    orEnterPhone: locale === 'en' ? 'Or enter phone number' : 'أو أدخل رقم الهاتف',
+    selectInvoice: locale === 'en' ? 'Select Invoice' : 'اختر الفاتورة',
+    active: locale === 'en' ? 'Active' : 'نشط',
+    inactive: locale === 'en' ? 'Inactive' : 'غير نشط',
+    refresh: locale === 'en' ? 'Refresh' : 'تحديث',
+    settings: locale === 'en' ? 'Settings' : 'الإعدادات',
+    whatsappNumber: locale === 'en' ? 'WhatsApp Number' : 'رقم WhatsApp',
+    copyNumber: locale === 'en' ? 'Copy Number' : 'نسخ الرقم',
+    copied: locale === 'en' ? 'Copied!' : 'تم النسخ!',
+  };
+
+  const { data: whatsappConfig, isLoading: configLoading } = useQuery<WhatsappConfigResponse>({
+    queryKey: ['/api/integrations/whatsapp/config'],
+  });
+
+  const { data: messages = [], isLoading: messagesLoading, refetch: refetchMessages } = useQuery<WhatsappMessage[]>({
     queryKey: ['/api/integrations/whatsapp/messages'],
+    enabled: whatsappConfig?.configured === true,
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const { data: invoices = [] } = useQuery<Invoice[]>({
@@ -124,729 +137,1002 @@ export default function WhatsAppDashboard() {
     enabled: !!currentCompany?.id,
   });
 
-  // Notifications for pending actions
-  const { data: notificationsData } = useQuery<{ notifications: Notification[]; unreadCount: number }>({
-    queryKey: ['/api/notifications'],
-  });
-  const pendingActions = (notificationsData?.notifications || []).filter(
-    (n) => n.type === 'payment_due' && !n.isDismissed && !n.isRead
-  );
+  // Group messages by phone number for conversations
+  const conversations = messages.reduce((acc, msg) => {
+    const phone = (msg.direction === 'inbound' ? msg.from : msg.to) || 'unknown';
+    if (!acc[phone]) {
+      acc[phone] = [];
+    }
+    acc[phone].push(msg);
+    return acc;
+  }, {} as Record<string, WhatsappMessage[]>);
 
-  // Filter messages
-  const filteredMessages = messages.filter(msg => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      msg.content?.toLowerCase().includes(q) ||
-      msg.to?.toLowerCase().includes(q) ||
-      msg.from?.toLowerCase().includes(q)
-    );
-  });
+  const conversationList = Object.entries(conversations)
+    .map(([phone, msgs]) => {
+      const customer = customers.find(c => c.phone === phone);
+      const sortedMessages = msgs.sort((a, b) => new Date(a.createdAt || '').getTime() - new Date(b.createdAt || '').getTime());
+      return {
+        phone,
+        name: customer?.name || phone,
+        messages: sortedMessages,
+        lastMessage: sortedMessages[sortedMessages.length - 1],
+        unreadCount: msgs.filter(m => m.direction === 'inbound' && m.status === 'received').length,
+      };
+    })
+    .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()) || conv.phone.includes(searchQuery))
+    .sort((a, b) => new Date(b.lastMessage.createdAt || '').getTime() - new Date(a.lastMessage.createdAt || '').getTime());
 
-  // Helpers
-  const getCustomerName = (phone: string) => {
-    const customer = customers.find(c => c.phone === phone);
-    return customer?.name || phone;
-  };
+  const selectedConversationMessages = selectedConversation ? conversations[selectedConversation]?.sort((a, b) => 
+    new Date(a.createdAt || '').getTime() - new Date(b.createdAt || '').getTime()
+  ) : [];
 
-  const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString(en ? 'en-AE' : 'ar-AE', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
-  };
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [selectedConversationMessages]);
 
-  const logAndOpen = (phone: string, message: string) => {
-    apiRequest('POST', '/api/integrations/whatsapp/log-message', { to: phone, message }).catch(() => {});
-    openWhatsApp(phone, message);
-    toast({ title: en ? 'Opening WhatsApp...' : 'جاري فتح واتساب...' });
-    setTimeout(() => {
+  const sendMessageMutation = useMutation({
+    mutationFn: async (data: { to: string; message: string }) => {
+      return apiRequest('POST', '/api/integrations/whatsapp/send-message', data);
+    },
+    onSuccess: () => {
+      toast({ title: t.messageSent });
+      setSendTo('');
+      setSendMessage('');
+      setSelectedCustomer('');
+      setShowSendDialog(false);
       queryClient.invalidateQueries({ queryKey: ['/api/integrations/whatsapp/messages'] });
-    }, 1000);
-  };
+    },
+    onError: (error: any) => {
+      toast({
+        title: locale === 'en' ? 'Failed to send message' : 'فشل إرسال الرسالة',
+        description: error?.message || error.error || (locale === 'en' ? 'Please check your WhatsApp configuration' : 'يرجى التحقق من إعدادات WhatsApp'),
+        variant: 'destructive',
+      });
+    },
+  });
 
-  // ─── Handlers ───────────────────────────────────────────
+  const replyMutation = useMutation({
+    mutationFn: async (data: { messageId: string; reply: string }) => {
+      return apiRequest('POST', '/api/integrations/whatsapp/reply', data);
+    },
+    onSuccess: () => {
+      toast({ title: t.replySent });
+      setReplyText('');
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations/whatsapp/messages'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: locale === 'en' ? 'Failed to send reply' : 'فشل إرسال الرد',
+        description: error?.message || error.error || (locale === 'en' ? 'Please check your WhatsApp configuration' : 'يرجى التحقق من إعدادات WhatsApp'),
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const sendReminderMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      return apiRequest('POST', `/api/invoices/${invoiceId}/send-reminder`, { channels: ['whatsapp'] });
+    },
+    onSuccess: () => {
+      toast({ title: locale === 'en' ? 'Reminder sent successfully!' : 'تم إرسال التذكير بنجاح!' });
+      setSelectedInvoice('');
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations/whatsapp/messages'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: locale === 'en' ? 'Failed to send reminder' : 'فشل إرسال التذكير',
+        description: error?.message || error.error || (locale === 'en' ? 'Please check your WhatsApp configuration' : 'يرجى التحقق من إعدادات WhatsApp'),
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleSendMessage = () => {
-    let phone = sendTo;
+    if (!sendMessage.trim()) {
+      toast({
+        title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+        description: locale === 'en' ? 'Message is required' : 'الرسالة مطلوبة',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    let phoneNumber = sendTo;
     if (selectedCustomer) {
-      const cust = customers.find(c => c.id === selectedCustomer);
-      if (cust?.phone) phone = cust.phone;
-      else {
-        toast({ title: en ? 'No phone number' : 'لا يوجد رقم', variant: 'destructive' });
+      const customer = customers.find(c => c.id === selectedCustomer);
+      if (customer?.phone) {
+        phoneNumber = customer.phone;
+      } else {
+        toast({
+          title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+          description: locale === 'en' ? 'Selected customer has no phone number' : 'العميل المحدد ليس لديه رقم هاتف',
+          variant: 'destructive',
+        });
         return;
       }
     }
-    if (!phone.trim()) { toast({ title: en ? 'Phone required' : 'رقم الهاتف مطلوب', variant: 'destructive' }); return; }
-    if (!sendMessage.trim()) { toast({ title: en ? 'Message required' : 'الرسالة مطلوبة', variant: 'destructive' }); return; }
 
-    logAndOpen(phone, sendMessage);
-    setSendTo(''); setSendMessage(''); setSelectedCustomer(''); setSelectedTemplate('');
-    setShowSendDialog(false);
+    if (!phoneNumber) {
+      toast({
+        title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+        description: locale === 'en' ? 'Phone number is required' : 'رقم الهاتف مطلوب',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    sendMessageMutation.mutate({ to: phoneNumber, message: sendMessage });
   };
 
   const handleSendInvoice = () => {
-    if (!selectedInvoice) { toast({ title: en ? 'Select an invoice' : 'اختر فاتورة', variant: 'destructive' }); return; }
-    const inv = invoices.find(i => i.id === selectedInvoice);
-    if (!inv) return;
-    const cust = customers.find(c => c.name === inv.customerName);
-    if (!cust?.phone) { toast({ title: en ? 'No phone number' : 'لا يوجد رقم', variant: 'destructive' }); return; }
-
-    const invoiceDate = new Date(inv.date);
-    const dueDate = new Date(invoiceDate);
-    dueDate.setDate(dueDate.getDate() + (cust.paymentTerms || 30));
-
-    const tpl = MESSAGE_TEMPLATES.find(t => t.id === (selectedTemplate || 'invoice_new'));
-    const templateStr = en ? (tpl?.template || '') : (tpl?.templateAr || '');
-    const message = fillTemplate(templateStr, {
-      customer_name: inv.customerName || 'Customer',
-      invoice_number: inv.number,
-      amount: `AED ${inv.total.toFixed(2)}`,
-      due_date: dueDate.toLocaleDateString(en ? 'en-AE' : 'ar-AE'),
-      company_name: currentCompany?.name || 'Our Company',
-    });
-
-    logAndOpen(cust.phone, message);
-    setSelectedInvoice(''); setSelectedTemplate(''); setShowInvoiceDialog(false);
-  };
-
-  const handleBroadcast = () => {
-    if (!broadcastMessage.trim()) { toast({ title: en ? 'Message required' : 'الرسالة مطلوبة', variant: 'destructive' }); return; }
-    const withPhone = customers.filter(c => c.phone);
-    if (withPhone.length === 0) { toast({ title: en ? 'No customers with phone numbers' : 'لا يوجد عملاء بأرقام', variant: 'destructive' }); return; }
-
-    // Open WhatsApp for each customer one by one
-    withPhone.forEach((cust, i) => {
-      const tpl = MESSAGE_TEMPLATES.find(t => t.id === 'news_update');
-      const templateStr = en ? (tpl?.template || '') : (tpl?.templateAr || '');
-      const msg = fillTemplate(templateStr, {
-        customer_name: cust.name,
-        message: broadcastMessage,
-        company_name: currentCompany?.name || 'Our Company',
+    if (!selectedInvoice) {
+      toast({
+        title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+        description: locale === 'en' ? 'Please select an invoice' : 'يرجى اختيار فاتورة',
+        variant: 'destructive',
       });
-
-      apiRequest('POST', '/api/integrations/whatsapp/log-message', { to: cust.phone, message: msg }).catch(() => {});
-
-      // Stagger opening to avoid browser blocking popups
-      setTimeout(() => openWhatsApp(cust.phone!, msg), i * 800);
-    });
-
-    toast({ title: en ? `Opening WhatsApp for ${withPhone.length} customer(s)...` : `جاري فتح واتساب لـ ${withPhone.length} عميل...` });
-    setBroadcastMessage(''); setShowBroadcastDialog(false);
-    setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ['/api/integrations/whatsapp/messages'] });
-    }, withPhone.length * 800 + 1000);
-  };
-
-  const handleQuickMessage = (customer: CustomerContact) => {
-    if (!customer.phone) { toast({ title: en ? 'No phone number' : 'لا يوجد رقم', variant: 'destructive' }); return; }
-    setSelectedCustomer(customer.id);
-    setSendTo(customer.phone);
-    setSendMessage('');
-    setShowSendDialog(true);
-  };
-
-  const toggleRule = (ruleId: string) => {
-    setRules(prev => prev.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r));
-    // Save rules to backend
-    apiRequest('POST', '/api/integrations/whatsapp/save-rules', {
-      rules: rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r),
-    }).catch(() => {});
-  };
-
-  const handleActionNotification = (notification: Notification) => {
-    // Find the related invoice to get customer details
-    const inv = notification.relatedEntityId
-      ? invoices.find((i) => i.id === notification.relatedEntityId)
-      : null;
-
-    if (inv) {
-      const cust = customers.find((c) => c.name === inv.customerName);
-      if (cust?.phone) {
-        const tpl = MESSAGE_TEMPLATES.find((t) => t.id === 'payment_reminder');
-        const invoiceDate = new Date(inv.date);
-        const dueDate = new Date(invoiceDate);
-        dueDate.setDate(dueDate.getDate() + (cust.paymentTerms || 30));
-
-        const templateStr = en ? (tpl?.template || '') : (tpl?.templateAr || '');
-        const message = fillTemplate(templateStr, {
-          customer_name: inv.customerName || 'Customer',
-          invoice_number: inv.number,
-          amount: `AED ${inv.total.toFixed(2)}`,
-          due_date: dueDate.toLocaleDateString(en ? 'en-AE' : 'ar-AE'),
-          company_name: currentCompany?.name || 'Our Company',
-        });
-
-        logAndOpen(cust.phone, message);
-      } else {
-        toast({ title: en ? 'No phone number for this customer' : 'لا يوجد رقم هاتف لهذا العميل', variant: 'destructive' });
-      }
+      return;
     }
 
-    // Mark notification as read
-    apiRequest('PATCH', `/api/notifications/${notification.id}/read`, {}).catch(() => {});
-    queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-  };
+    const invoice = invoices.find(i => i.id === selectedInvoice);
+    if (!invoice) return;
 
-  const dismissNotification = (notificationId: string) => {
-    apiRequest('PATCH', `/api/notifications/${notificationId}/dismiss`, {}).catch(() => {});
-    queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-  };
+    const customer = customers.find(c => c.name === invoice.customerName);
+    if (!customer?.phone) {
+      toast({
+        title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+        description: locale === 'en' ? 'Customer has no phone number' : 'العميل ليس لديه رقم هاتف',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  const applyTemplate = (templateId: string) => {
-    const tpl = MESSAGE_TEMPLATES.find(t => t.id === templateId);
-    if (!tpl) return;
+    // Calculate due date correctly: invoice date + payment terms (default 30 days)
+    const invoiceDate = new Date(invoice.date);
+    const paymentTerms = customer.paymentTerms || 30;
+    const dueDate = new Date(invoiceDate);
+    dueDate.setDate(dueDate.getDate() + paymentTerms);
 
-    const custName = selectedCustomer
-      ? customers.find(c => c.id === selectedCustomer)?.name || ''
-      : '';
+    const message = locale === 'en'
+      ? `Hello ${invoice.customerName},\n\nYour invoice ${invoice.number} for AED ${invoice.total.toFixed(2)} is ready.\n\nDue Date: ${dueDate.toLocaleDateString()}\n\nThank you for your business!`
+      : `مرحباً ${invoice.customerName},\n\nفاتورتك ${invoice.number} بمبلغ ${invoice.total.toFixed(2)} درهم جاهزة.\n\nتاريخ الاستحقاق: ${dueDate.toLocaleDateString()}\n\nشكراً لتعاملك معنا!`;
 
-    const templateStr = en ? tpl.template : tpl.templateAr;
-    const msg = fillTemplate(templateStr, {
-      customer_name: custName || (en ? '[Customer Name]' : '[اسم العميل]'),
-      message: en ? '[Your message here]' : '[رسالتك هنا]',
-      company_name: currentCompany?.name || 'Our Company',
-      invoice_number: '[INV-XXX]',
-      amount: '[AED X,XXX.XX]',
-      due_date: '[Date]',
+    sendMessageMutation.mutate({ to: customer.phone, message }, {
+      onSuccess: () => {
+        setShowInvoiceDialog(false);
+        setSelectedInvoice('');
+      }
     });
-    setSendMessage(msg);
   };
 
-  // ─── Render ─────────────────────────────────────────────
+  const handleReply = (message?: WhatsappMessage) => {
+    if (!selectedConversation) {
+      toast({
+        title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+        description: locale === 'en' ? 'No conversation selected' : 'لم يتم اختيار محادثة',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (!replyText.trim()) {
+      toast({
+        title: locale === 'en' ? 'Validation Error' : 'خطأ في التحقق',
+        description: locale === 'en' ? 'Reply text is required' : 'نص الرد مطلوب',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const conversationMessages = conversations[selectedConversation];
+    const lastInboundMessage = message || conversationMessages
+      ?.filter(m => m.direction === 'inbound')
+      .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())[0];
+    
+    if (!lastInboundMessage) {
+      // If no inbound message, send as a new message to the conversation
+      sendMessageMutation.mutate({ 
+        to: selectedConversation, 
+        message: replyText 
+      });
+      setReplyText('');
+      return;
+    }
+
+    replyMutation.mutate({ messageId: lastInboundMessage.id, reply: replyText });
+  };
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString(locale === 'ar' ? 'ar-AE' : 'en-AE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return locale === 'en' ? 'Today' : 'اليوم';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return locale === 'en' ? 'Yesterday' : 'أمس';
+    } else {
+      return date.toLocaleDateString(locale === 'ar' ? 'ar-AE' : 'en-AE', {
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+      });
+    }
+  };
+
+  const copyPhoneNumber = () => {
+    if (whatsappConfig?.phoneNumberId) {
+      navigator.clipboard.writeText(whatsappConfig.phoneNumberId);
+      toast({ title: t.copied });
+    }
+  };
+
+  const [testPhoneNumber, setTestPhoneNumber] = useState('');
+  const [showTestDialog, setShowTestDialog] = useState(false);
+  const [showDiagnosticDialog, setShowDiagnosticDialog] = useState(false);
+  const [diagnosticData, setDiagnosticData] = useState<any>(null);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+
+  const testWhatsappMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      if (!phoneNumber) {
+        throw new Error(locale === 'en' ? 'Phone number is required' : 'رقم الهاتف مطلوب');
+      }
+      return apiRequest('POST', '/api/integrations/whatsapp/test', { testPhoneNumber: phoneNumber });
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: locale === 'en' ? 'Test Successful!' : 'نجح الاختبار!',
+        description: data.message || (locale === 'en' ? 'WhatsApp integration is working correctly' : 'تكامل WhatsApp يعمل بشكل صحيح'),
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: locale === 'en' ? 'Test Failed' : 'فشل الاختبار',
+        description: error?.message || error.error || (locale === 'en' ? 'Please check your WhatsApp configuration' : 'يرجى التحقق من إعدادات WhatsApp'),
+        variant: 'destructive',
+      });
+    },
+  });
+
+  if (configLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!whatsappConfig?.configured) {
+    return (
+      <div className={`container max-w-4xl mx-auto py-8 px-4 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+              <SiWhatsapp className="w-8 h-8 text-green-500" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">{t.notConfigured}</h2>
+            <p className="text-muted-foreground mb-6 max-w-md">{t.notConfiguredDesc}</p>
+            <Button onClick={() => window.location.href = '/admin'} data-testid="button-go-settings">
+              <Settings className="w-4 h-4 mr-2" />
+              {t.goToSettings}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const selectedConv = conversationList.find(c => c.phone === selectedConversation);
 
   return (
-    <div className={`container max-w-6xl mx-auto py-6 px-4 space-y-6 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className={`h-[calc(100vh-8rem)] flex flex-col ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* WhatsApp-style header */}
+      <div className="bg-[#075E54] text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-            <SiWhatsapp className="w-6 h-6 text-green-500" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">{en ? 'WhatsApp' : 'واتساب'}</h1>
-            <p className="text-sm text-muted-foreground">
-              {en ? 'Send messages, invoices & reminders via your personal WhatsApp' : 'أرسل رسائل وفواتير وتذكيرات عبر واتساب الشخصي'}
+          <SiWhatsapp className="w-8 h-8" />
+        <div>
+            <h1 className="text-lg font-semibold">{t.title}</h1>
+            <p className="text-xs text-white/80">
+              {whatsappConfig.isActive ? t.active : t.inactive}
             </p>
           </div>
         </div>
-
-        <div className="flex gap-2 flex-wrap">
-          {/* Broadcast */}
-          <Dialog open={showBroadcastDialog} onOpenChange={setShowBroadcastDialog}>
+        <div className="flex items-center gap-2">
+          <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
             <DialogTrigger asChild>
-              <Button variant="outline" data-testid="button-broadcast">
-                <Megaphone className="w-4 h-4 mr-2" />
-                {en ? 'Broadcast News' : 'بث أخبار'}
-              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+                title={locale === 'en' ? 'Test WhatsApp Connection' : 'اختبار اتصال WhatsApp'}
+              >
+                <CheckCircle className="w-4 h-4" />
+          </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>{en ? 'Broadcast to All Clients' : 'بث لجميع العملاء'}</DialogTitle>
+                <DialogTitle>{locale === 'en' ? 'Test WhatsApp Connection' : 'اختبار اتصال WhatsApp'}</DialogTitle>
                 <DialogDescription>
-                  {en
-                    ? `Send a news or announcement to all ${customers.filter(c => c.phone).length} customer(s) with phone numbers`
-                    : `أرسل خبر أو إعلان لجميع ${customers.filter(c => c.phone).length} عميل لديهم أرقام هواتف`}
+                  {locale === 'en' 
+                    ? 'Enter a phone number to send a test message. Use international format without + (e.g., 971501234567)'
+                    : 'أدخل رقم هاتف لإرسال رسالة اختبار. استخدم التنسيق الدولي بدون + (مثال: 971501234567)'}
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <Textarea
-                  placeholder={en ? 'Type your announcement...' : 'اكتب إعلانك...'}
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  rows={5}
-                  data-testid="input-broadcast"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {en
-                    ? 'This will open WhatsApp for each customer. Your browser may ask to allow popups.'
-                    : 'سيتم فتح واتساب لكل عميل. قد يطلب المتصفح السماح بالنوافذ المنبثقة.'}
-                </p>
-                <Button onClick={handleBroadcast} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-send-broadcast">
-                  <Megaphone className="w-4 h-4 mr-2" />
-                  {en ? `Send to ${customers.filter(c => c.phone).length} Client(s)` : `إرسال لـ ${customers.filter(c => c.phone).length} عميل`}
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {locale === 'en' ? 'Phone Number' : 'رقم الهاتف'}
+                  </label>
+                  <Input
+                    type="tel"
+                    placeholder="971501234567"
+                    value={testPhoneNumber}
+                    onChange={(e) => setTestPhoneNumber(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {locale === 'en' 
+                      ? 'International format without + sign'
+                      : 'التنسيق الدولي بدون علامة +'}
+                  </p>
+        </div>
+                <Button
+                  onClick={() => {
+                    if (testPhoneNumber.trim()) {
+                      testWhatsappMutation.mutate(testPhoneNumber.trim(), {
+                        onSuccess: () => {
+                          setShowTestDialog(false);
+                          setTestPhoneNumber('');
+                        }
+                      });
+                    }
+                  }}
+                  disabled={!testPhoneNumber.trim() || testWhatsappMutation.isPending}
+                  className="w-full"
+                >
+                  {testWhatsappMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {locale === 'en' ? 'Sending...' : 'جاري الإرسال...'}
+                    </>
+                  ) : (
+                    locale === 'en' ? 'Send Test Message' : 'إرسال رسالة اختبار'
+                  )}
                 </Button>
-              </div>
+      </div>
             </DialogContent>
           </Dialog>
-
-          {/* Invoice Reminder */}
-          <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
-            <DialogTrigger asChild>
-              <Button variant="outline" data-testid="button-send-invoice">
-                <Receipt className="w-4 h-4 mr-2" />
-                {en ? 'Invoice Reminder' : 'تذكير فاتورة'}
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{en ? 'Send Invoice Reminder' : 'إرسال تذكير فاتورة'}</DialogTitle>
-                <DialogDescription>
-                  {en ? 'Select an invoice and template to send via WhatsApp' : 'اختر فاتورة وقالب للإرسال عبر واتساب'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label className="mb-1.5 block">{en ? 'Invoice' : 'الفاتورة'}</Label>
-                  <Select value={selectedInvoice} onValueChange={setSelectedInvoice}>
-                    <SelectTrigger data-testid="select-invoice">
-                      <SelectValue placeholder={en ? 'Select an invoice' : 'اختر فاتورة'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {invoices
-                        .filter(inv => inv.status !== 'paid')
-                        .map(inv => (
-                          <SelectItem key={inv.id} value={inv.id}>
-                            {inv.number} - {inv.customerName} - AED {inv.total.toFixed(2)}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className="mb-1.5 block">{en ? 'Template' : 'القالب'}</Label>
-                  <Select value={selectedTemplate || 'invoice_new'} onValueChange={setSelectedTemplate}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MESSAGE_TEMPLATES.filter(t => ['invoice', 'payment'].includes(t.category)).map(tpl => (
-                        <SelectItem key={tpl.id} value={tpl.id}>
-                          {en ? tpl.name : tpl.nameAr}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedInvoice && (() => {
-                  const inv = invoices.find(i => i.id === selectedInvoice);
-                  const cust = inv ? customers.find(c => c.name === inv.customerName) : null;
-                  return inv ? (
-                    <div className="p-3 rounded-lg bg-muted text-sm space-y-1">
-                      <p><strong>{en ? 'Customer' : 'العميل'}:</strong> {inv.customerName}</p>
-                      <p><strong>{en ? 'Amount' : 'المبلغ'}:</strong> AED {inv.total.toFixed(2)}</p>
-                      <p><strong>{en ? 'Phone' : 'الهاتف'}:</strong> {cust?.phone || (en ? 'No phone' : 'لا يوجد رقم')}</p>
-                    </div>
-                  ) : null;
-                })()}
-
-                <Button onClick={handleSendInvoice} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-open-whatsapp-invoice">
-                  <SiWhatsapp className="w-4 h-4 mr-2" />
-                  {en ? 'Open in WhatsApp' : 'فتح في واتساب'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Send Message */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refetchMessages()}
+            className="text-white hover:bg-white/10"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
           <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
             <DialogTrigger asChild>
-              <Button className="bg-green-600 hover:bg-green-700" data-testid="button-send-message">
-                <Send className="w-4 h-4 mr-2" />
-                {en ? 'Send Message' : 'إرسال رسالة'}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+              >
+                <Send className="w-4 h-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent>
               <DialogHeader>
-                <DialogTitle>{en ? 'Send WhatsApp Message' : 'إرسال رسالة واتساب'}</DialogTitle>
+                <DialogTitle>{t.sendMessage}</DialogTitle>
                 <DialogDescription>
-                  {en ? 'Compose a message — it will open in your WhatsApp app' : 'اكتب رسالة — ستفتح في تطبيق واتساب'}
+                  {locale === 'en' ? 'Send a message to a customer' : 'إرسال رسالة إلى عميل'}
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label className="mb-1.5 block">{en ? 'Customer' : 'العميل'}</Label>
-                  <Select value={selectedCustomer} onValueChange={(val) => {
-                    setSelectedCustomer(val);
-                    const cust = customers.find(c => c.id === val);
-                    if (cust?.phone) setSendTo(cust.phone);
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t.selectCustomer}</label>
+                  <Select value={selectedCustomer} onValueChange={(value) => {
+                    setSelectedCustomer(value);
+                    const customer = customers.find(c => c.id === value);
+                    if (customer?.phone) {
+                      setSendTo(customer.phone);
+                    }
                   }}>
-                    <SelectTrigger data-testid="select-customer">
-                      <SelectValue placeholder={en ? 'Select a customer' : 'اختر عميل'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.filter(c => c.phone).map(c => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} ({c.phone})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className="mb-1.5 block">{en ? 'Or enter phone number' : 'أو أدخل رقم الهاتف'}</Label>
-                  <Input
-                    placeholder={en ? 'e.g. 971501234567' : 'مثال: 971501234567'}
-                    value={sendTo}
-                    onChange={(e) => { setSendTo(e.target.value); setSelectedCustomer(''); }}
-                    data-testid="input-phone"
-                  />
-                </div>
-
-                <div>
-                  <Label className="mb-1.5 block">{en ? 'Template (optional)' : 'قالب (اختياري)'}</Label>
-                  <Select value={selectedTemplate} onValueChange={(val) => { setSelectedTemplate(val); applyTemplate(val); }}>
                     <SelectTrigger>
-                      <SelectValue placeholder={en ? 'Choose a template...' : 'اختر قالب...'} />
+                      <SelectValue placeholder={t.selectCustomer} />
                     </SelectTrigger>
                     <SelectContent>
-                      {MESSAGE_TEMPLATES.map(tpl => (
-                        <SelectItem key={tpl.id} value={tpl.id}>
-                          {en ? tpl.name : tpl.nameAr}
+                      {customers.filter(c => c.phone).map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name} ({customer.phone})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div>
-                  <Label className="mb-1.5 block">{en ? 'Message' : 'الرسالة'}</Label>
+              </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t.orEnterPhone}</label>
+                  <Input
+                    placeholder="+971501234567"
+                    value={sendTo}
+                    onChange={(e) => {
+                      setSendTo(e.target.value);
+                      setSelectedCustomer('');
+                    }}
+                  />
+            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{locale === 'en' ? 'Message' : 'الرسالة'}</label>
                   <Textarea
-                    placeholder={en ? 'Type your message...' : 'اكتب رسالتك...'}
+                    placeholder={locale === 'en' ? 'Type your message...' : 'اكتب رسالتك...'}
                     value={sendMessage}
                     onChange={(e) => setSendMessage(e.target.value)}
-                    rows={6}
-                    data-testid="input-message"
+                    rows={4}
                   />
-                </div>
-
-                <Button onClick={handleSendMessage} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-open-whatsapp">
-                  <SiWhatsapp className="w-4 h-4 mr-2" />
-                  {en ? 'Open in WhatsApp' : 'فتح في واتساب'}
-                </Button>
               </div>
+                <Button
+                  className="w-full"
+                  onClick={handleSendMessage}
+                  disabled={sendMessageMutation.isPending}
+                >
+                  {sendMessageMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {t.sending}
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      {t.send}
+                    </>
+                  )}
+                </Button>
+            </div>
             </DialogContent>
           </Dialog>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => window.location.href = '/admin'}>
+                <Settings className="w-4 h-4 mr-2" />
+                {t.settings}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={copyPhoneNumber}>
+                <Copy className="w-4 h-4 mr-2" />
+                {t.copyNumber}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={async () => {
+                setShowDiagnosticDialog(true);
+                setDiagnosticLoading(true);
+                try {
+                  const response = await apiRequest('GET', '/api/integrations/whatsapp/diagnose');
+                  setDiagnosticData(response);
+                } catch (error: any) {
+                  setDiagnosticData({
+                    error: error?.message || error.error || 'Failed to run diagnostics',
+                    issues: ['Could not connect to diagnostic endpoint']
+                  });
+                } finally {
+                  setDiagnosticLoading(false);
+                }
+              }}>
+                <HelpCircle className="w-4 h-4 mr-2" />
+                {locale === 'en' ? 'Run Diagnostics' : 'تشغيل التشخيص'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+              </div>
+            </div>
+
+      {/* Main chat area - WhatsApp style */}
+      <div className="flex-1 flex overflow-hidden bg-[#ECE5DD]">
+        {/* Left sidebar - Conversations */}
+        <div className="w-1/3 border-r border-gray-300 bg-white flex flex-col">
+          {/* Search bar */}
+          <div className="p-3 bg-[#F0F2F5]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder={t.search}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-white"
+              />
+              </div>
+      </div>
+
+          {/* Conversations list */}
+          <ScrollArea className="flex-1">
+              {messagesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            ) : conversationList.length === 0 ? (
+              <div className="text-center py-12 px-4">
+                  <MessageCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-sm text-muted-foreground">{t.noConversations}</p>
+                </div>
+              ) : (
+              <div>
+                {conversationList.map((conv) => (
+                  <div
+                    key={conv.phone}
+                    className={`p-3 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${
+                      selectedConversation === conv.phone ? 'bg-gray-100' : ''
+                    }`}
+                    onClick={() => setSelectedConversation(conv.phone)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center text-white font-semibold">
+                        {conv.name.charAt(0).toUpperCase()}
+                            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-sm truncate">{conv.name}</span>
+                          <span className="text-xs text-gray-500">
+                            {formatTime(conv.lastMessage.createdAt?.toString() || '')}
+                                </span>
+                              </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-gray-600 truncate">
+                            {conv.lastMessage.content || `[${conv.lastMessage.messageType}]`}
+                          </p>
+                          {conv.unreadCount > 0 && (
+                            <Badge className="bg-[#25D366] text-white text-xs min-w-[20px] h-5 flex items-center justify-center">
+                              {conv.unreadCount}
+                            </Badge>
+                          )}
+                              </div>
+                            </div>
+                          </div>
+                  </div>
+                ))}
+                  </div>
+            )}
+          </ScrollArea>
+
+          {/* Quick actions at bottom of sidebar */}
+          <div className="p-3 border-t border-gray-200 bg-white">
+            <div className="grid grid-cols-2 gap-2">
+                            <Button
+                variant="outline"
+                              size="sm"
+                className="w-full text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSendDialog(true);
+                }}
+              >
+                <Send className="w-3 h-3 mr-1" />
+                {t.sendMessage}
+              </Button>
+              <Dialog>
+                  <DialogTrigger asChild>
+                  <Button
+                              variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                    }}
+                  >
+                    <Bell className="w-3 h-3 mr-1" />
+                    {t.sendReminder}
+                            </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                    <DialogTitle>{t.sendReminder}</DialogTitle>
+                    <DialogDescription>
+                      {locale === 'en' ? 'Send payment reminder via WhatsApp' : 'إرسال تذكير دفع عبر WhatsApp'}
+                    </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                      <label className="text-sm font-medium">{t.selectInvoice}</label>
+                      <Select value={selectedInvoice} onValueChange={setSelectedInvoice}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t.selectInvoice} />
+                          </SelectTrigger>
+                          <SelectContent>
+                          {invoices.filter(inv => {
+                            const customer = customers.find(c => c.name === inv.customerName);
+                            return customer?.phone;
+                          }).map((invoice) => (
+                            <SelectItem key={invoice.id} value={invoice.id}>
+                              {invoice.number} - {invoice.customerName} - AED {invoice.total.toFixed(2)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                  </div>
+                    <Button
+                      className="w-full"
+                      onClick={() => selectedInvoice && sendReminderMutation.mutate(selectedInvoice)}
+                      disabled={!selectedInvoice || sendReminderMutation.isPending}
+                    >
+                      {sendReminderMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t.sending}
+                        </>
+                      ) : (
+                        <>
+                          <Bell className="w-4 h-4 mr-2" />
+                          {t.sendReminder}
+                        </>
+                      )}
+                    </Button>
+        </div>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
+                  <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs col-span-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <FileTextIcon className="w-3 h-3 mr-1" />
+                    {t.sendInvoice}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                    <DialogTitle>{t.sendInvoice}</DialogTitle>
+                    <DialogDescription>
+                      {locale === 'en' ? 'Send invoice details via WhatsApp' : 'إرسال تفاصيل الفاتورة عبر WhatsApp'}
+                    </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                      <label className="text-sm font-medium">{t.selectInvoice}</label>
+                      <Select value={selectedInvoice} onValueChange={setSelectedInvoice}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t.selectInvoice} />
+                          </SelectTrigger>
+                          <SelectContent>
+                          {invoices.filter(inv => {
+                            const customer = customers.find(c => c.name === inv.customerName);
+                            return customer?.phone;
+                          }).map((invoice) => (
+                            <SelectItem key={invoice.id} value={invoice.id}>
+                              {invoice.number} - {invoice.customerName} - AED {invoice.total.toFixed(2)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                      className="w-full"
+                      onClick={handleSendInvoice}
+                      disabled={!selectedInvoice || sendMessageMutation.isPending}
+                    >
+                      {sendMessageMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t.sending}
+                        </>
+                      ) : (
+                        <>
+                          <FileTextIcon className="w-4 h-4 mr-2" />
+                          {t.sendInvoice}
+                        </>
+                        )}
+                      </Button>
+                  </div>
+                  </DialogContent>
+                </Dialog>
+            </div>
+          </div>
+                  </div>
+
+        {/* Right side - Chat view */}
+        <div className="flex-1 flex flex-col bg-[#ECE5DD]">
+          {selectedConversation ? (
+            <>
+              {/* Chat header */}
+              <div className="bg-[#075E54] text-white px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10 md:hidden"
+                    onClick={() => setSelectedConversation(null)}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center text-white font-semibold">
+                    {selectedConv?.name.charAt(0).toUpperCase() || '?'}
+                  </div>
+                  <div>
+                    <h2 className="font-semibold">{selectedConv?.name || selectedConversation}</h2>
+                    <p className="text-xs text-white/80">{selectedConversation}</p>
+                  </div>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-white hover:bg-white/10"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => {
+                      const customer = customers.find(c => c.phone === selectedConversation);
+                      if (customer && customer.phone) {
+                        setSelectedCustomer(customer.id);
+                        setSendTo(customer.phone);
+                        setShowSendDialog(true);
+                      }
+                    }}>
+                      <Send className="w-4 h-4 mr-2" />
+                      {t.sendMessage}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Messages area */}
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-2">
+                  {selectedConversationMessages?.map((message, index) => {
+                    const prevMessage = index > 0 ? selectedConversationMessages[index - 1] : null;
+                    const showDate = !prevMessage || 
+                      new Date(message.createdAt || '').toDateString() !== new Date(prevMessage.createdAt || '').toDateString();
+                    
+                    return (
+                      <div key={message.id}>
+                        {showDate && (
+                          <div className="text-center my-4">
+                            <span className="bg-white/80 px-3 py-1 rounded-full text-xs text-gray-600">
+                              {formatDate(message.createdAt?.toString() || '')}
+                            </span>
+                          </div>
+                        )}
+                        <div className={`flex ${message.direction === 'inbound' ? 'justify-start' : 'justify-end'} mb-1`}>
+                          <div
+                            className={`max-w-[70%] rounded-lg px-3 py-2 ${
+                              message.direction === 'inbound'
+                                ? 'bg-white rounded-tl-none'
+                                : 'bg-[#DCF8C6] rounded-tr-none'
+                            }`}
+                          >
+                            <p className="text-sm whitespace-pre-wrap break-words">
+                              {message.content || `[${message.messageType}]`}
+                            </p>
+                            <div className={`flex items-center justify-end gap-1 mt-1 ${
+                              message.direction === 'inbound' ? 'text-gray-500' : 'text-gray-600'
+                            }`}>
+                              <span className="text-xs">
+                                {formatTime(message.createdAt?.toString() || '')}
+                              </span>
+                              {message.direction === 'outbound' && (
+                                message.status === 'sent' ? (
+                                  <CheckCheck className="w-3 h-3 text-blue-500" />
+                                ) : (
+                                  <Check className="w-3 h-3" />
+                                )
+                              )}
+                  </div>
+                  </div>
+                  </div>
+                  </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
+
+              {/* Input area */}
+              <div className="bg-[#F0F2F5] p-3 border-t border-gray-300">
+                <div className="flex items-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-600 hover:bg-gray-200"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </Button>
+                  <div className="flex-1 relative">
+                    <Textarea
+                      placeholder={t.typeMessage}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleReply();
+                        }
+                      }}
+                      rows={1}
+                      className="resize-none min-h-[44px] max-h-32 pr-10"
+                    />
+                </div>
+                  <Button
+                    onClick={() => handleReply()}
+                    disabled={!replyText.trim() || replyMutation.isPending}
+                    className="bg-[#25D366] hover:bg-[#20BA5A] text-white rounded-full w-11 h-11 p-0"
+                  >
+                    {replyMutation.isPending ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
+                  </Button>
+        </div>
+      </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <SiWhatsapp className="w-24 h-24 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-xl font-semibold text-gray-500 mb-2">
+                  {locale === 'en' ? 'Select a conversation' : 'اختر محادثة'}
+                </h3>
+                <p className="text-sm text-gray-400">
+                  {locale === 'en' 
+                    ? 'Choose a conversation from the list to start chatting'
+                    : 'اختر محادثة من القائمة لبدء المحادثة'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Main Content */}
-      <Tabs defaultValue="messages" className="w-full">
-        <TabsList>
-          <TabsTrigger value="messages">
-            <MessageCircle className="w-4 h-4 mr-1.5" />
-            {en ? 'Messages' : 'الرسائل'}
-          </TabsTrigger>
-          <TabsTrigger value="customers">
-            <Users className="w-4 h-4 mr-1.5" />
-            {en ? 'Customers' : 'العملاء'}
-          </TabsTrigger>
-          <TabsTrigger value="rules">
-            <Settings2 className="w-4 h-4 mr-1.5" />
-            {en ? 'Rules' : 'القواعد'}
-          </TabsTrigger>
-          <TabsTrigger value="templates">
-            <FileText className="w-4 h-4 mr-1.5" />
-            {en ? 'Templates' : 'القوالب'}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ─── Messages Tab ─────────────────────────────── */}
-        <TabsContent value="messages" className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder={en ? 'Search messages...' : 'بحث في الرسائل...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-              data-testid="input-search"
-            />
-          </div>
-
-          {messagesLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full" />
+      {/* Diagnostic Dialog */}
+      <Dialog open={showDiagnosticDialog} onOpenChange={setShowDiagnosticDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{locale === 'en' ? 'WhatsApp Diagnostics' : 'تشخيص WhatsApp'}</DialogTitle>
+            <DialogDescription>
+              {locale === 'en' 
+                ? 'Check your WhatsApp integration configuration and connection status'
+                : 'تحقق من إعدادات تكامل WhatsApp وحالة الاتصال'}
+            </DialogDescription>
+          </DialogHeader>
+          {diagnosticLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
-          ) : filteredMessages.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-                  <SiWhatsapp className="w-8 h-8 text-green-500" />
+          ) : diagnosticData ? (
+            <div className="space-y-4 py-4">
+              {/* Status Overview */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`p-4 rounded-lg border ${diagnosticData.configured ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                  <div className="text-sm font-medium mb-1">{locale === 'en' ? 'Configuration' : 'الإعدادات'}</div>
+                  <div className={`text-lg font-bold ${diagnosticData.configured ? 'text-green-700' : 'text-red-700'}`}>
+                    {diagnosticData.configured ? (locale === 'en' ? 'Configured' : 'مُعد') : (locale === 'en' ? 'Not Configured' : 'غير مُعد')}
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{en ? 'No messages yet' : 'لا توجد رسائل بعد'}</h3>
-                <p className="text-muted-foreground mb-6 max-w-md">
-                  {en ? 'Start by sending a message, invoice reminder, or broadcast to your clients' : 'ابدأ بإرسال رسالة أو تذكير فاتورة أو بث لعملائك'}
-                </p>
-                <Button onClick={() => setShowSendDialog(true)} className="bg-green-600 hover:bg-green-700">
-                  <Send className="w-4 h-4 mr-2" />
-                  {en ? 'Send Message' : 'إرسال رسالة'}
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {filteredMessages
-                .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())
-                .map((msg) => (
-                  <Card key={msg.id} className="hover:bg-accent/50 transition-colors">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
-                            <SiWhatsapp className="w-5 h-5 text-green-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium text-sm">
-                                {msg.direction === 'outbound'
-                                  ? `→ ${getCustomerName(msg.to || '')}`
-                                  : `← ${getCustomerName(msg.from || '')}`}
-                              </span>
-                              <Badge variant={msg.direction === 'outbound' ? 'default' : 'secondary'} className="text-xs">
-                                {msg.direction === 'outbound' ? (en ? 'Sent' : 'مرسل') : (en ? 'Received' : 'مستلم')}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-line">{msg.content}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <Clock className="w-3 h-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                {msg.createdAt ? formatTime(String(msg.createdAt)) : ''}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        {msg.to && (
-                          <Button variant="ghost" size="sm" className="text-green-600 shrink-0" onClick={() => openWhatsApp(msg.to!, '')}>
-                            <ExternalLink className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-            </div>
-          )}
-        </TabsContent>
+                <div className={`p-4 rounded-lg border ${diagnosticData.isActive ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                  <div className="text-sm font-medium mb-1">{locale === 'en' ? 'Status' : 'الحالة'}</div>
+                  <div className={`text-lg font-bold ${diagnosticData.isActive ? 'text-green-700' : 'text-yellow-700'}`}>
+                    {diagnosticData.isActive ? (locale === 'en' ? 'Active' : 'نشط') : (locale === 'en' ? 'Inactive' : 'غير نشط')}
+                  </div>
+                </div>
+              </div>
 
-        {/* ─── Customers Tab ────────────────────────────── */}
-        <TabsContent value="customers">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customers.map((customer) => (
-              <Card key={customer.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{customer.name}</p>
-                      {customer.phone ? (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {customer.phone}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground italic">{en ? 'No phone' : 'لا يوجد رقم'}</p>
+              {/* Issues */}
+              {diagnosticData.issues && diagnosticData.issues.length > 0 && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200">
+                  <div className="text-sm font-semibold text-red-800 mb-2">
+                    {locale === 'en' ? 'Issues Found' : 'المشاكل المكتشفة'}
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-red-700">
+                    {diagnosticData.issues.map((issue: string, idx: number) => (
+                      <li key={idx}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Recommendations */}
+              {diagnosticData.recommendations && diagnosticData.recommendations.length > 0 && (
+                <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="text-sm font-semibold text-blue-800 mb-2">
+                    {locale === 'en' ? 'Recommendations' : 'التوصيات'}
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
+                    {diagnosticData.recommendations.map((rec: string, idx: number) => (
+                      <li key={idx}>{rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* API Connection Status */}
+              {diagnosticData.apiConnection && (
+                <div className={`p-4 rounded-lg border ${
+                  diagnosticData.apiConnection === 'Connected' 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="text-sm font-semibold mb-2">
+                    {locale === 'en' ? 'API Connection' : 'اتصال API'}
+                  </div>
+                  <div className={`text-sm ${diagnosticData.apiConnection === 'Connected' ? 'text-green-700' : 'text-red-700'}`}>
+                    {diagnosticData.apiConnection === 'Connected' 
+                      ? (locale === 'en' ? '✓ Connected to Meta API' : '✓ متصل بـ Meta API')
+                      : (locale === 'en' ? `✗ Connection failed: ${diagnosticData.apiError || 'Unknown error'}` : `✗ فشل الاتصال: ${diagnosticData.apiError || 'خطأ غير معروف'}`)
+                    }
+                  </div>
+                  {diagnosticData.phoneNumberInfo && (
+                    <div className="mt-2 text-xs text-gray-600">
+                      <div>{locale === 'en' ? 'Phone Number' : 'رقم الهاتف'}: {diagnosticData.phoneNumberInfo.displayPhoneNumber}</div>
+                      {diagnosticData.phoneNumberInfo.verifiedName && (
+                        <div>{locale === 'en' ? 'Verified Name' : 'الاسم المُتحقق'}: {diagnosticData.phoneNumberInfo.verifiedName}</div>
                       )}
                     </div>
-                    {customer.phone && (
-                      <Button variant="ghost" size="sm" className="text-green-600 shrink-0" onClick={() => handleQuickMessage(customer)}>
-                        <SiWhatsapp className="w-5 h-5" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {customers.length === 0 && (
-              <Card className="col-span-full border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                  <Users className="w-12 h-12 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">
-                    {en ? 'No customers yet. Add contacts to message them via WhatsApp.' : 'لا يوجد عملاء بعد. أضف جهات اتصال لمراسلتهم عبر واتساب.'}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        {/* ─── Rules Tab ────────────────────────────────── */}
-        <TabsContent value="rules" className="space-y-4">
-          {/* Pending Actions */}
-          {pendingActions.length > 0 && (
-            <Card className="border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/20">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-orange-500" />
-                  <CardTitle className="text-lg">
-                    {en ? `Pending Actions (${pendingActions.length})` : `إجراءات معلقة (${pendingActions.length})`}
-                  </CardTitle>
+                  )}
                 </div>
-                <CardDescription>
-                  {en
-                    ? 'These notifications were created by the scheduler. Click "Send via WhatsApp" to open a pre-filled message.'
-                    : 'تم إنشاء هذه الإشعارات بواسطة المجدول. انقر "إرسال عبر واتساب" لفتح رسالة جاهزة.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {pendingActions.slice(0, 10).map((notification) => {
-                  const relatedInv = notification.relatedEntityId
-                    ? invoices.find((i) => i.id === notification.relatedEntityId)
-                    : null;
-                  const cust = relatedInv ? customers.find((c) => c.name === relatedInv.customerName) : null;
+              )}
 
-                  return (
-                    <div
-                      key={notification.id}
-                      className="flex items-center justify-between p-3 border rounded-lg bg-background hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          notification.priority === 'urgent' ? 'bg-red-500/10' :
-                          notification.priority === 'high' ? 'bg-orange-500/10' : 'bg-yellow-500/10'
-                        }`}>
-                          <CreditCard className={`w-4 h-4 ${
-                            notification.priority === 'urgent' ? 'text-red-600' :
-                            notification.priority === 'high' ? 'text-orange-600' : 'text-yellow-600'
-                          }`} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm truncate">{notification.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">{notification.message}</p>
-                          {relatedInv && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {relatedInv.customerName} {cust?.phone ? `(${cust.phone})` : ''}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {cust?.phone && (
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-xs h-8"
-                            onClick={() => handleActionNotification(notification)}
-                          >
-                            <SiWhatsapp className="w-3.5 h-3.5 mr-1" />
-                            {en ? 'Send' : 'إرسال'}
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground h-8 w-8 p-0"
-                          onClick={() => dismissNotification(notification.id)}
-                          title={en ? 'Dismiss' : 'تجاهل'}
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {pendingActions.length > 10 && (
-                  <p className="text-xs text-muted-foreground text-center pt-1">
-                    {en
-                      ? `+ ${pendingActions.length - 10} more pending actions`
-                      : `+ ${pendingActions.length - 10} إجراء معلق آخر`}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Reminder Rules */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">{en ? 'Reminder Rules' : 'قواعد التذكيرات'}</CardTitle>
-              <CardDescription>
-                {en
-                  ? 'Configure when WhatsApp reminders should be triggered. When a rule matches, you\'ll be prompted to send via WhatsApp.'
-                  : 'حدد متى يجب تفعيل تذكيرات واتساب. عند تطابق قاعدة، سيتم إعلامك للإرسال عبر واتساب.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {rules.map((rule) => {
-                const tpl = MESSAGE_TEMPLATES.find(t => t.id === rule.templateId);
-                const Icon = tpl?.icon || Bell;
-                return (
-                  <div key={rule.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${rule.enabled ? 'bg-green-500/10' : 'bg-muted'}`}>
-                        <Icon className={`w-5 h-5 ${rule.enabled ? 'text-green-600' : 'text-muted-foreground'}`} />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{rule.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {en ? 'Template' : 'القالب'}: {en ? tpl?.name : tpl?.nameAr}
-                          {rule.type === 'before_due' && ` • ${Math.abs(rule.daysOffset)} ${en ? 'days before due' : 'أيام قبل الاستحقاق'}`}
-                          {rule.type === 'on_due' && ` • ${en ? 'On due date' : 'في تاريخ الاستحقاق'}`}
-                          {rule.type === 'after_due' && ` • ${rule.daysOffset} ${en ? 'days after due' : 'أيام بعد الاستحقاق'}`}
-                          {rule.type === 'on_invoice' && ` • ${en ? 'When invoice is created' : 'عند إنشاء الفاتورة'}`}
-                          {rule.type === 'on_event' && ` • ${en ? 'When event occurs' : 'عند حدوث الحدث'}`}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={rule.enabled}
-                      onCheckedChange={() => toggleRule(rule.id)}
-                      data-testid={`switch-rule-${rule.id}`}
-                    />
+              {/* Webhook Setup */}
+              {diagnosticData.webhookSetup && (
+                <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                  <div className="text-sm font-semibold mb-2">
+                    {locale === 'en' ? 'Webhook Configuration' : 'إعدادات Webhook'}
                   </div>
-                );
-              })}
-
-              <div className="pt-2">
-                <p className="text-xs text-muted-foreground">
-                  {en
-                    ? '* Rules will prompt you to send messages — they open WhatsApp on your device. No messages are sent automatically.'
-                    : '* القواعد ستطلب منك إرسال الرسائل — تفتح واتساب على جهازك. لا يتم إرسال رسائل تلقائياً.'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Templates Tab ────────────────────────────── */}
-        <TabsContent value="templates" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {MESSAGE_TEMPLATES.map((tpl) => {
-              const Icon = tpl.icon;
-              return (
-                <Card key={tpl.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{en ? tpl.name : tpl.nameAr}</CardTitle>
-                        <Badge variant="outline" className="text-xs mt-1">
-                          {tpl.category === 'invoice' ? (en ? 'Invoice' : 'فاتورة') :
-                           tpl.category === 'payment' ? (en ? 'Payment' : 'دفع') :
-                           tpl.category === 'onboarding' ? (en ? 'Onboarding' : 'تسجيل') :
-                           tpl.category === 'service' ? (en ? 'Service' : 'خدمة') :
-                           tpl.category === 'alert' ? (en ? 'Alert' : 'تنبيه') :
-                           tpl.category === 'engagement' ? (en ? 'Engagement' : 'تواصل') :
-                           (en ? 'Other' : 'أخرى')}
-                        </Badge>
-                      </div>
+                  <div className="text-xs text-gray-700 space-y-2">
+                    <div>
+                      <strong>{locale === 'en' ? 'Webhook URL' : 'رابط Webhook'}:</strong>
+                      <div className="font-mono bg-white p-2 rounded mt-1 break-all">{diagnosticData.webhookSetup.url}</div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans bg-muted/50 p-3 rounded-lg max-h-32 overflow-y-auto">
-                      {en ? tpl.template : tpl.templateAr}
-                    </pre>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 w-full"
-                      onClick={() => {
-                        setSelectedTemplate(tpl.id);
-                        applyTemplate(tpl.id);
-                        setShowSendDialog(true);
-                      }}
-                    >
-                      <Send className="w-3 h-3 mr-1.5" />
-                      {en ? 'Use Template' : 'استخدم القالب'}
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </TabsContent>
-      </Tabs>
+                    <div>
+                      <strong>{locale === 'en' ? 'Verify Token' : 'رمز التحقق'}:</strong> {diagnosticData.webhookSetup.verifyToken}
+                    </div>
+                    <div className="mt-3">
+                      <strong>{locale === 'en' ? 'Setup Instructions' : 'تعليمات الإعداد'}:</strong>
+                      <ol className="list-decimal list-inside space-y-1 mt-1">
+                        {diagnosticData.webhookSetup.instructions.map((instruction: string, idx: number) => (
+                          <li key={idx} className="text-xs">{instruction}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Configuration Details */}
+              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <div className="text-sm font-semibold mb-2">
+                  {locale === 'en' ? 'Configuration Details' : 'تفاصيل الإعدادات'}
+                </div>
+                <div className="text-xs text-gray-700 space-y-1">
+                  <div><strong>{locale === 'en' ? 'Phone Number ID' : 'معرف رقم الهاتف'}:</strong> {diagnosticData.phoneNumberId || (locale === 'en' ? 'Not set' : 'غير مُعد')}</div>
+                  <div><strong>{locale === 'en' ? 'Has Access Token' : 'يحتوي على رمز الوصول'}:</strong> {diagnosticData.hasAccessToken ? (locale === 'en' ? 'Yes' : 'نعم') : (locale === 'en' ? 'No' : 'لا')}</div>
+                  <div><strong>{locale === 'en' ? 'Has Business Account ID' : 'يحتوي على معرف حساب الأعمال'}:</strong> {diagnosticData.hasBusinessAccountId ? (locale === 'en' ? 'Yes' : 'نعم') : (locale === 'en' ? 'No' : 'لا')}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
