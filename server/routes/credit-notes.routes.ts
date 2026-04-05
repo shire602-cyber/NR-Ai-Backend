@@ -230,6 +230,13 @@ export function registerCreditNoteRoutes(app: Express) {
     const vatAmount = Number(creditNote.vatAmount);
     const total = Number(creditNote.total);
 
+    // Fail-fast: if credit note has VAT, the VAT account must exist to prevent unbalanced JE
+    if (vatAmount > 0 && !vatPayable) {
+      return res.status(500).json({
+        message: `VAT Payable account (${ACCOUNT_CODES.VAT_PAYABLE_OUTPUT}) not found. Add it to your chart of accounts before posting credit notes with VAT.`
+      });
+    }
+
     const posted = await (db as any).transaction(async (tx: any) => {
       // Generate entry number
       const entryNumber = await storage.generateEntryNumber(companyId, creditNote.date, tx);

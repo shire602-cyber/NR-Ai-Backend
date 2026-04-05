@@ -156,6 +156,12 @@ export function registerInvoiceRoutes(app: Express) {
       return res.status(500).json({ message: `Required accounts not found in chart of accounts for company ${companyId}. Ensure Accounts Receivable (${ACCOUNT_CODES.ACCOUNTS_RECEIVABLE}) and Product Sales (${ACCOUNT_CODES.PRODUCT_SALES}) exist.` });
     }
 
+    // Fail-fast: if invoice has VAT, the VAT account must exist to prevent unbalanced JE
+    const vatAmount = Number(invoiceData.vatAmount) || 0;
+    if (vatAmount > 0 && !vatPayable) {
+      return res.status(500).json({ message: `VAT Payable account (${ACCOUNT_CODES.VAT_PAYABLE_OUTPUT}) not found. Add it to your chart of accounts before creating invoices with VAT.` });
+    }
+
     // Multi-currency support: determine exchange rate
     const invoiceCurrency = invoiceData.currency || 'AED';
     let exchangeRate = 1.0;
@@ -187,9 +193,10 @@ export function registerInvoiceRoutes(app: Express) {
       const entryNumber = await storage.generateEntryNumber(companyId, invoiceDate, tx);
 
       // Convert amounts to base currency (AED) for GL
+      // Derive baseVatAmount from difference to prevent floating-point rounding imbalance
       const baseTotal = invoiceCurrency !== 'AED' ? total * exchangeRate : total;
       const baseSubtotal = invoiceCurrency !== 'AED' ? subtotal * exchangeRate : subtotal;
-      const baseVatAmount = invoiceCurrency !== 'AED' ? vatAmount * exchangeRate : vatAmount;
+      const baseVatAmount = baseTotal - baseSubtotal;
 
       // Create journal entry for revenue recognition
       const [entry] = await tx.insert(journalEntries).values({

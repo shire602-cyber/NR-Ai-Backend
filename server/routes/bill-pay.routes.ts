@@ -445,6 +445,14 @@ export function registerBillPayRoutes(app: Express) {
         );
       }
 
+      // Fail-fast: if bill has VAT, the VAT account must exist to prevent unbalanced JE
+      if ((Number(bill.vat_amount) || 0) > 0 && !vatReceivableAccount) {
+        throw Object.assign(
+          new Error(`VAT Receivable account (${ACCOUNT_CODES.VAT_RECEIVABLE_INPUT}) not found. Add it to your chart of accounts before approving bills with VAT.`),
+          { statusCode: 500 }
+        );
+      }
+
       // Update bill status to approved (AFTER all validations pass)
       const updateResult = await client.query(
         `UPDATE vendor_bills
