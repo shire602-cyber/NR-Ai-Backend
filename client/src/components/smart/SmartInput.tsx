@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Loader2, HelpCircle, Sparkles, Check } from 'lucide-react';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { useTranslation } from '@/lib/i18n';
+import { getAuthHeaders } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
 interface SmartInputProps {
@@ -95,9 +96,7 @@ export function SmartInput({
         params.set('type', accountType);
       }
       const res = await fetch(`${endpointMap[type]}?${params}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error('Failed to fetch suggestions');
       return res.json();
@@ -344,9 +343,7 @@ export function SmartAccountSelect({
         params.set('type', accountType);
       }
       const res = await fetch(`/api/autocomplete/accounts?${params}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error('Failed to fetch accounts');
       return res.json();
