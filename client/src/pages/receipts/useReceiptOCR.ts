@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useToast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/api';
+import { getAuthHeaders } from '@/lib/auth';
 import type { ExtractedData, ProcessedReceipt } from './receipts-types';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -104,7 +105,7 @@ async function categorizeWithAI(companyId: string, data: ExtractedData): Promise
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         companyId,
@@ -140,8 +141,7 @@ async function convertPdfToImage(file: File): Promise<{ blob: Blob; preview: str
   await page.render({
     canvasContext: context,
     viewport: viewport,
-    canvas: canvas,
-  } as any).promise;
+  }).promise;
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => {
@@ -155,6 +155,10 @@ export function useReceiptOCR(companyId: string | undefined) {
   const { toast } = useToast();
   const [processedReceipts, setProcessedReceipts] = useState<ProcessedReceipt[]>([]);
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+
+  // Use a ref to always have the latest processedReceipts in async callbacks
+  const receiptsRef = useRef(processedReceipts);
+  receiptsRef.current = processedReceipts;
 
   const handleFilesSelect = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
@@ -214,7 +218,8 @@ export function useReceiptOCR(companyId: string | undefined) {
   }, [toast]);
 
   const processReceipt = useCallback(async (index: number) => {
-    const receipt = processedReceipts[index];
+    // Read from ref to get the latest state, not a stale closure
+    const receipt = receiptsRef.current[index];
     if (!receipt) return;
 
     setProcessedReceipts((prev) => {
@@ -229,7 +234,9 @@ export function useReceiptOCR(companyId: string | undefined) {
           if (m.status === 'recognizing text') {
             setProcessedReceipts((prev) => {
               const updated = [...prev];
-              updated[index] = { ...updated[index], progress: Math.round(m.progress * 100) };
+              if (updated[index]) {
+                updated[index] = { ...updated[index], progress: Math.round(m.progress * 100) };
+              }
               return updated;
             });
           }
@@ -279,13 +286,15 @@ export function useReceiptOCR(companyId: string | undefined) {
         return updated;
       });
     }
-  }, [processedReceipts, companyId]);
+  }, [companyId]);
 
   const processAllReceipts = useCallback(async () => {
     setIsProcessingBulk(true);
 
-    for (let i = 0; i < processedReceipts.length; i++) {
-      if (processedReceipts[i].status === 'pending') {
+    // Read from ref to get the latest state for each iteration
+    const currentReceipts = receiptsRef.current;
+    for (let i = 0; i < currentReceipts.length; i++) {
+      if (currentReceipts[i].status === 'pending') {
         await processReceipt(i);
       }
     }
@@ -293,9 +302,9 @@ export function useReceiptOCR(companyId: string | undefined) {
     setIsProcessingBulk(false);
     toast({
       title: 'Processing Complete',
-      description: `Processed ${processedReceipts.length} receipt(s)`,
+      description: `Processed ${receiptsRef.current.length} receipt(s)`,
     });
-  }, [processedReceipts, processReceipt, toast]);
+  }, [processReceipt, toast]);
 
   const removeReceipt = useCallback((index: number) => {
     setProcessedReceipts((prev) => prev.filter((_, i) => i !== index));
@@ -304,7 +313,7 @@ export function useReceiptOCR(companyId: string | undefined) {
   const updateReceiptData = useCallback((index: number, updates: Partial<ExtractedData>) => {
     setProcessedReceipts((prev) => {
       const updated = [...prev];
-      if (updated[index].data) {
+      if (updated[index]?.data) {
         updated[index] = {
           ...updated[index],
           data: { ...updated[index].data!, ...updates },
