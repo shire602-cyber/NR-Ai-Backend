@@ -159,42 +159,25 @@ export function registerCreditNoteRoutes(app: Express) {
     }
 
     const now = new Date();
-    const entryNumber = await storage.generateEntryNumber(creditNote.companyId, now);
 
-    const entry = await storage.createJournalEntry({
-      companyId: creditNote.companyId,
-      date: now,
-      memo: `Credit Note ${creditNote.number} - ${creditNote.customerName}`,
-      entryNumber,
-      status: 'posted',
-      source: 'credit_note',
-      sourceId: creditNote.id,
-      createdBy: userId,
-      postedBy: userId,
-    });
+    // Build lines array conditionally
+    const lines: Array<{ accountId: string; debit: number; credit: number; description: string }> = [
+      {
+        accountId: salesRevenue.id,
+        debit: creditNote.subtotal,
+        credit: 0,
+        description: `Credit note ${creditNote.number} - reverse sales revenue`,
+      },
+      {
+        accountId: accountsReceivable.id,
+        debit: 0,
+        credit: creditNote.total,
+        description: `Credit note ${creditNote.number} - reduce A/R`,
+      },
+    ];
 
-    // Debit: Sales Revenue (subtotal) - reverse the original revenue
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: salesRevenue.id,
-      debit: creditNote.subtotal,
-      credit: 0,
-      description: `Credit note ${creditNote.number} - reverse sales revenue`,
-    });
-
-    // Credit: Accounts Receivable (total) - reduce what customer owes
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: accountsReceivable.id,
-      debit: 0,
-      credit: creditNote.total,
-      description: `Credit note ${creditNote.number} - reduce A/R`,
-    });
-
-    // Debit: VAT Payable (if VAT amount > 0) - reverse VAT obligation
     if (creditNote.vatAmount > 0 && vatPayable) {
-      await storage.createJournalLine({
-        entryId: entry.id,
+      lines.push({
         accountId: vatPayable.id,
         debit: creditNote.vatAmount,
         credit: 0,
@@ -202,13 +185,27 @@ export function registerCreditNoteRoutes(app: Express) {
       });
     }
 
+    const { entry } = await storage.createJournalEntryWithLines(
+      creditNote.companyId,
+      now,
+      {
+        memo: `Credit Note ${creditNote.number} - ${creditNote.customerName}`,
+        status: 'posted',
+        source: 'credit_note',
+        sourceId: creditNote.id,
+        createdBy: userId,
+        postedBy: userId,
+      },
+      lines,
+    );
+
     // Mark credit note as issued and link journal entry
     const updated = await storage.updateCreditNote(id, {
       status: 'issued',
       journalEntryId: entry.id,
     });
 
-    console.log('[CreditNotes] Credit note issued:', id, 'journal entry:', entryNumber);
+    console.log('[CreditNotes] Credit note issued:', id, 'journal entry:', entry.entryNumber);
     res.json({ ...updated, journalEntryId: entry.id, message: 'Credit note issued with reversing journal entry' });
   }));
 

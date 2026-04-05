@@ -168,51 +168,29 @@ export function registerInvoiceRoutes(app: Express) {
     const vatPayable = accounts.find(a => a.nameEn === 'VAT Payable');
 
     if (accountsReceivable && salesRevenue) {
-      // Generate entry number atomically via storage helper
-      const entryNumber = await storage.generateEntryNumber(companyId, invoiceDate);
-
-      const entry = await storage.createJournalEntry({
-        companyId: companyId,
-        date: invoiceDate,
-        memo: `Sales Invoice ${invoice.number} - ${invoice.customerName}`,
-        entryNumber,
-        status: 'draft', // Wait for manual posting
-        source: 'invoice',
-        sourceId: invoice.id,
-        createdBy: userId,
-        postedBy: null,
-      });
-
-      // Debit: Accounts Receivable (total)
-      await storage.createJournalLine({
-        entryId: entry.id,
-        accountId: accountsReceivable.id,
-        debit: total,
-        credit: 0,
-        description: `Invoice ${invoice.number} - ${invoice.customerName}`,
-      });
-
-      // Credit: Sales Revenue (subtotal)
-      await storage.createJournalLine({
-        entryId: entry.id,
-        accountId: salesRevenue.id,
-        debit: 0,
-        credit: subtotal,
-        description: `Sales revenue - Invoice ${invoice.number}`,
-      });
-
-      // Credit: VAT Payable (vat amount) - if there's VAT
+      const journalLines: Array<{ accountId: string; debit: number; credit: number; description: string | null }> = [
+        { accountId: accountsReceivable.id, debit: total, credit: 0, description: `Invoice ${invoice.number} - ${invoice.customerName}` },
+        { accountId: salesRevenue.id, debit: 0, credit: subtotal, description: `Sales revenue - Invoice ${invoice.number}` },
+      ];
       if (vatAmount > 0 && vatPayable) {
-        await storage.createJournalLine({
-          entryId: entry.id,
-          accountId: vatPayable.id,
-          debit: 0,
-          credit: vatAmount,
-          description: `VAT output - Invoice ${invoice.number}`,
-        });
+        journalLines.push({ accountId: vatPayable.id, debit: 0, credit: vatAmount, description: `VAT output - Invoice ${invoice.number}` });
       }
 
-      console.log('[Invoices] Revenue recognition journal entry created:', entryNumber, 'for invoice:', invoice.id);
+      const { entry } = await storage.createJournalEntryWithLines(
+        companyId,
+        invoiceDate,
+        {
+          memo: `Sales Invoice ${invoice.number} - ${invoice.customerName}`,
+          status: 'draft',
+          source: 'invoice',
+          sourceId: invoice.id,
+          createdBy: userId,
+          postedBy: null,
+        },
+        journalLines,
+      );
+
+      console.log('[Invoices] Revenue recognition journal entry created:', entry.entryNumber, 'for invoice:', invoice.id);
     } else {
       console.warn('[Invoices] Could not create revenue recognition entry - missing accounts');
     }
@@ -386,41 +364,35 @@ export function registerInvoiceRoutes(app: Express) {
       const accountsReceivable = accounts.find(a => a.nameEn === 'Accounts Receivable');
 
       if (accountsReceivable) {
-        // Generate entry number atomically via storage helper
         const now = new Date();
-        const entryNumber = await storage.generateEntryNumber(invoice.companyId, now);
+        const { entry } = await storage.createJournalEntryWithLines(
+          invoice.companyId,
+          now,
+          {
+            memo: `Payment received for Invoice ${invoice.number}`,
+            status: 'draft',
+            source: 'payment',
+            sourceId: invoice.id,
+            createdBy: userId,
+            postedBy: null,
+          },
+          [
+            {
+              accountId: paymentAccountId,
+              debit: invoice.total,
+              credit: 0,
+              description: `Payment received - Invoice ${invoice.number}`,
+            },
+            {
+              accountId: accountsReceivable.id,
+              debit: 0,
+              credit: invoice.total,
+              description: `Clear A/R - Invoice ${invoice.number}`,
+            },
+          ],
+        );
 
-        const entry = await storage.createJournalEntry({
-          companyId: invoice.companyId,
-          date: now,
-          memo: `Payment received for Invoice ${invoice.number}`,
-          entryNumber,
-          status: 'draft',
-          source: 'payment',
-          sourceId: invoice.id,
-          createdBy: userId,
-          postedBy: null,
-        });
-
-        // Debit: Selected payment account (total)
-        await storage.createJournalLine({
-          entryId: entry.id,
-          accountId: paymentAccountId,
-          debit: invoice.total,
-          credit: 0,
-          description: `Payment received - Invoice ${invoice.number}`,
-        });
-
-        // Credit: Accounts Receivable (total)
-        await storage.createJournalLine({
-          entryId: entry.id,
-          accountId: accountsReceivable.id,
-          debit: 0,
-          credit: invoice.total,
-          description: `Clear A/R - Invoice ${invoice.number}`,
-        });
-
-        console.log('[Invoices] Payment journal entry created:', entryNumber, 'for invoice:', id, 'to account:', paymentAccount.nameEn);
+        console.log('[Invoices] Payment journal entry created:', entry.entryNumber, 'for invoice:', id, 'to account:', paymentAccount.nameEn);
       } else {
         return res.status(500).json({ message: 'Accounts Receivable account not found' });
       }

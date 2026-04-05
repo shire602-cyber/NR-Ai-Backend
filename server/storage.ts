@@ -250,8 +250,14 @@ export interface IStorage {
   createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry>;
   updateJournalEntry(id: string, data: Partial<InsertJournalEntry>): Promise<JournalEntry>;
   deleteJournalEntry(id: string): Promise<void>;
-  generateEntryNumber(companyId: string, date: Date): Promise<string>;
-  
+  generateEntryNumber(companyId: string, date: Date, tx?: any): Promise<string>;
+  createJournalEntryWithLines(
+    companyId: string,
+    date: Date,
+    entryData: Omit<InsertJournalEntry, 'entryNumber' | 'companyId' | 'date'>,
+    lines: Array<Omit<InsertJournalLine, 'entryId'>>,
+  ): Promise<{ entry: JournalEntry; lines: JournalLine[] }>;
+
   // Journal Lines
   createJournalLine(line: InsertJournalLine): Promise<JournalLine>;
   getJournalLinesByEntryId(entryId: string): Promise<JournalLine[]>;
@@ -1070,12 +1076,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(journalEntries).where(eq(journalEntries.id, id));
   }
 
-  async generateEntryNumber(companyId: string, date: Date): Promise<string> {
+  async generateEntryNumber(companyId: string, date: Date, tx?: any): Promise<string> {
+    const executor = tx || db;
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     const prefix = `JE-${dateStr}`;
 
-    // Use SQL COUNT with LIKE for atomicity — avoids fetching all entries into JS
-    const [result] = await db
+    const [result] = await executor
       .select({ count: sql<number>`count(*)` })
       .from(journalEntries)
       .where(
@@ -1087,6 +1093,48 @@ export class DatabaseStorage implements IStorage {
 
     const nextNumber = (Number(result?.count) || 0) + 1;
     return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+  }
+
+  async createJournalEntryWithLines(
+    companyId: string,
+    date: Date,
+    entryData: Omit<InsertJournalEntry, 'entryNumber' | 'companyId' | 'date'>,
+    lines: Array<Omit<InsertJournalLine, 'entryId'>>,
+  ): Promise<{ entry: JournalEntry; lines: JournalLine[] }> {
+    return await db.transaction(async (tx: any) => {
+      // Generate entry number inside transaction
+      const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+      const prefix = `JE-${dateStr}`;
+      const [result] = await tx
+        .select({ count: sql<number>`count(*)` })
+        .from(journalEntries)
+        .where(
+          and(
+            eq(journalEntries.companyId, companyId),
+            sql`${journalEntries.entryNumber} LIKE ${prefix + '%'}`
+          )
+        );
+      const nextNumber = (Number(result?.count) || 0) + 1;
+      const entryNumber = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+
+      // Create journal entry
+      const [entry] = await tx
+        .insert(journalEntries)
+        .values({ ...entryData, companyId, date, entryNumber })
+        .returning();
+
+      // Create journal lines
+      const createdLines: JournalLine[] = [];
+      for (const line of lines) {
+        const [created] = await tx
+          .insert(journalLines)
+          .values({ ...line, entryId: entry.id })
+          .returning();
+        createdLines.push(created);
+      }
+
+      return { entry, lines: createdLines };
+    });
   }
 
   // Journal Lines

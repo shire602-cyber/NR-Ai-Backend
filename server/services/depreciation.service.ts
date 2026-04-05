@@ -107,39 +107,32 @@ export async function postDepreciationEntry(
     throw new Error('Asset missing depreciation accounts');
   }
 
-  // Generate entry number
-  const entryNumber = await storage.generateEntryNumber(asset.companyId, schedule.periodEnd);
-
-  // Create journal entry
-  const entry = await storage.createJournalEntry({
-    companyId: asset.companyId,
-    entryNumber,
-    date: schedule.periodEnd,
-    memo: `Depreciation: ${asset.name} (${asset.assetCode}) — ${schedule.periodStart.toISOString().slice(0, 7)}`,
-    status: 'posted',
-    source: 'system',
-    sourceId: asset.id,
-    createdBy: userId,
-    postedBy: userId,
-  });
-
-  // Debit depreciation expense
-  await storage.createJournalLine({
-    entryId: entry.id,
-    accountId: asset.depreciationExpenseAccountId,
-    debit: schedule.depreciationAmount,
-    credit: 0,
-    description: `Depreciation expense: ${asset.name}`,
-  });
-
-  // Credit accumulated depreciation
-  await storage.createJournalLine({
-    entryId: entry.id,
-    accountId: asset.accumulatedDepAccountId,
-    debit: 0,
-    credit: schedule.depreciationAmount,
-    description: `Accumulated depreciation: ${asset.name}`,
-  });
+  const { entry } = await storage.createJournalEntryWithLines(
+    asset.companyId,
+    schedule.periodEnd,
+    {
+      memo: `Depreciation: ${asset.name} (${asset.assetCode}) — ${schedule.periodStart.toISOString().slice(0, 7)}`,
+      status: 'posted',
+      source: 'system',
+      sourceId: asset.id,
+      createdBy: userId,
+      postedBy: userId,
+    },
+    [
+      {
+        accountId: asset.depreciationExpenseAccountId,
+        debit: schedule.depreciationAmount,
+        credit: 0,
+        description: `Depreciation expense: ${asset.name}`,
+      },
+      {
+        accountId: asset.accumulatedDepAccountId,
+        debit: 0,
+        credit: schedule.depreciationAmount,
+        description: `Accumulated depreciation: ${asset.name}`,
+      },
+    ],
+  );
 
   // Update schedule
   await storage.updateDepreciationSchedule(scheduleId, {
@@ -207,29 +200,15 @@ export async function disposeAsset(
   const bookValue = asset.purchasePrice - accumulatedDep;
   const gainLoss = disposalPrice - bookValue;
 
-  const entryNumber = await storage.generateEntryNumber(asset.companyId, disposalDate);
-
   // Gain/loss account: use the depreciation expense account as a reasonable default
   const gainLossAccountId = asset.depreciationExpenseAccountId || asset.accumulatedDepAccountId;
 
-  // Create disposal journal entry
-  const entry = await storage.createJournalEntry({
-    companyId: asset.companyId,
-    entryNumber,
-    date: disposalDate,
-    memo: `Disposal of asset: ${asset.name} (${asset.assetCode})` +
-      (gainLoss !== 0 ? ` — ${gainLoss > 0 ? 'gain' : 'loss'} of ${Math.abs(gainLoss).toFixed(2)} recorded to depreciation expense account` : ''),
-    status: 'posted',
-    source: 'system',
-    sourceId: asset.id,
-    createdBy: userId,
-    postedBy: userId,
-  });
+  // Build lines conditionally
+  const disposalLines: Array<{ accountId: string; debit: number; credit: number; description: string }> = [];
 
   // Debit accumulated depreciation (remove contra-asset)
   if (accumulatedDep > 0) {
-    await storage.createJournalLine({
-      entryId: entry.id,
+    disposalLines.push({
       accountId: asset.accumulatedDepAccountId,
       debit: accumulatedDep,
       credit: 0,
@@ -237,11 +216,9 @@ export async function disposeAsset(
     });
   }
 
-  // Debit cash/bank for disposal proceeds (using asset account as placeholder —
-  // user should adjust to proper cash account)
+  // Debit cash/bank for disposal proceeds
   if (disposalPrice > 0) {
-    await storage.createJournalLine({
-      entryId: entry.id,
+    disposalLines.push({
       accountId: asset.assetAccountId,
       debit: disposalPrice,
       credit: 0,
@@ -250,34 +227,44 @@ export async function disposeAsset(
   }
 
   // Credit the asset account (remove the asset at purchase price)
-  await storage.createJournalLine({
-    entryId: entry.id,
+  disposalLines.push({
     accountId: asset.assetAccountId,
     debit: 0,
     credit: asset.purchasePrice,
     description: `Dispose asset: ${asset.name}`,
   });
 
-  // Record gain or loss to balance the journal entry
-  // Gain (proceeds > bookValue): credit the gain/loss account
-  // Loss (proceeds < bookValue): debit the gain/loss account
+  // Record gain or loss
   if (gainLoss > 0) {
-    await storage.createJournalLine({
-      entryId: entry.id,
+    disposalLines.push({
       accountId: gainLossAccountId,
       debit: 0,
       credit: gainLoss,
       description: `Gain on disposal: ${asset.name}`,
     });
   } else if (gainLoss < 0) {
-    await storage.createJournalLine({
-      entryId: entry.id,
+    disposalLines.push({
       accountId: gainLossAccountId,
       debit: Math.abs(gainLoss),
       credit: 0,
       description: `Loss on disposal: ${asset.name}`,
     });
   }
+
+  const { entry } = await storage.createJournalEntryWithLines(
+    asset.companyId,
+    disposalDate,
+    {
+      memo: `Disposal of asset: ${asset.name} (${asset.assetCode})` +
+        (gainLoss !== 0 ? ` — ${gainLoss > 0 ? 'gain' : 'loss'} of ${Math.abs(gainLoss).toFixed(2)} recorded to depreciation expense account` : ''),
+      status: 'posted',
+      source: 'system',
+      sourceId: asset.id,
+      createdBy: userId,
+      postedBy: userId,
+    },
+    disposalLines,
+  );
 
   // Delete remaining pending schedules
   await storage.deleteDepreciationSchedulesByAssetId(assetId);

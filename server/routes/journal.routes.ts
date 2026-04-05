@@ -79,36 +79,28 @@ export function registerJournalRoutes(app: Express) {
     // Convert date string to Date object if it's a string
     const entryDate = typeof date === 'string' ? new Date(date) : date;
 
-    // Generate entry number atomically via storage helper
-    const entryNumber = await storage.generateEntryNumber(companyId, entryDate);
-
     // Determine if posting immediately
     const isPosting = status === 'posted';
 
-    // Create journal entry
-    const entry = await storage.createJournalEntry({
-      ...entryData,
-      date: entryDate,
+    // Create journal entry with lines atomically (generates entry number inside transaction)
+    const { entry } = await storage.createJournalEntryWithLines(
       companyId,
-      createdBy: userId,
-      entryNumber,
-      status: isPosting ? 'posted' : 'draft',
-      source: entryData.source || 'manual',
-      sourceId: entryData.sourceId || null,
-      postedBy: isPosting ? userId : null,
-      postedAt: isPosting ? new Date() : null,
-    });
-
-    // Create journal lines
-    for (const line of lines) {
-      await storage.createJournalLine({
-        entryId: entry.id,
+      entryDate,
+      {
+        createdBy: userId,
+        status: isPosting ? 'posted' : 'draft',
+        source: entryData.source || 'manual',
+        sourceId: entryData.sourceId || null,
+        postedBy: isPosting ? userId : null,
+        memo: entryData.memo,
+      },
+      lines.map((line: any) => ({
         accountId: line.accountId,
         debit: Number(line.debit) || 0,
         credit: Number(line.credit) || 0,
         description: line.description || null,
-      });
-    }
+      })),
+    );
 
     res.json({
       id: entry.id,
@@ -296,35 +288,28 @@ export function registerJournalRoutes(app: Express) {
     // Get original lines
     const originalLines = await storage.getJournalLinesByEntryId(id);
 
-    // Generate reversal entry number atomically via storage helper
+    // Create reversing entry with swapped debits/credits (atomic transaction)
     const now = new Date();
-    const reversalNumber = await storage.generateEntryNumber(entry.companyId, now);
-
-    // Create reversing entry with swapped debits/credits
-    const reversalEntry = await storage.createJournalEntry({
-      companyId: entry.companyId,
-      date: now,
-      memo: `Reversal of ${entry.entryNumber}: ${reason || 'No reason provided'}`,
-      entryNumber: reversalNumber,
-      status: 'posted',
-      source: 'reversal',
-      sourceId: id,
-      reversedEntryId: id,
-      reversalReason: reason || null,
-      createdBy: userId,
-      postedBy: userId,
-    });
-
-    // Create reversed lines (swap debits and credits)
-    for (const line of originalLines) {
-      await storage.createJournalLine({
-        entryId: reversalEntry.id,
+    const { entry: reversalEntry } = await storage.createJournalEntryWithLines(
+      entry.companyId,
+      now,
+      {
+        memo: `Reversal of ${entry.entryNumber}: ${reason || 'No reason provided'}`,
+        status: 'posted',
+        source: 'reversal',
+        sourceId: id,
+        reversedEntryId: id,
+        reversalReason: reason || null,
+        createdBy: userId,
+        postedBy: userId,
+      },
+      originalLines.map((line: any) => ({
         accountId: line.accountId,
         debit: line.credit, // Swap
         credit: line.debit, // Swap
         description: `Reversal: ${line.description || ''}`,
-      });
-    }
+      })),
+    );
 
     // Mark original entry as void
     await storage.updateJournalEntry(id, {

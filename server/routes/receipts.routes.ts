@@ -101,6 +101,7 @@ export function registerReceiptRoutes(app: Express) {
 
     const receipt = await storage.createReceipt({
       ...receiptData,
+      date: receiptData.date ? new Date(receiptData.date) : null,
       companyId, // Add companyId from URL params
       uploadedBy: userId,
     });
@@ -127,6 +128,11 @@ export function registerReceiptRoutes(app: Express) {
     // Convert empty category string to null (UUID field cannot accept empty strings)
     if (req.body.category === '') {
       req.body.category = null;
+    }
+
+    // Convert date string to Date object (receipts.date is now timestamp, not text)
+    if (req.body.date && typeof req.body.date === 'string') {
+      req.body.date = new Date(req.body.date);
     }
 
     const updatedReceipt = await storage.updateReceipt(id, req.body);
