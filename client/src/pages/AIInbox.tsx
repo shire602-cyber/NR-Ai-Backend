@@ -201,7 +201,7 @@ export default function AIInbox() {
     onError: (error: Error) => {
       toast({
         title: 'Scan Failed',
-        description: error.message,
+        description: error?.message,
         variant: 'destructive',
       });
     },
@@ -221,7 +221,7 @@ export default function AIInbox() {
     onError: (error: Error) => {
       toast({
         title: 'Accept Failed',
-        description: error.message,
+        description: error?.message,
         variant: 'destructive',
       });
     },
@@ -241,7 +241,7 @@ export default function AIInbox() {
     onError: (error: Error) => {
       toast({
         title: 'Reject Failed',
-        description: error.message,
+        description: error?.message,
         variant: 'destructive',
       });
     },
@@ -274,7 +274,7 @@ export default function AIInbox() {
     onError: (error: Error) => {
       toast({
         title: 'Correction Failed',
-        description: error.message,
+        description: error?.message,
         variant: 'destructive',
       });
     },
@@ -308,7 +308,7 @@ export default function AIInbox() {
     onError: (error: Error) => {
       toast({
         title: 'Bulk Accept Failed',
-        description: error.message,
+        description: error?.message,
         variant: 'destructive',
       });
     },

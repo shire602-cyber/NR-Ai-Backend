@@ -21,7 +21,11 @@ import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+} catch (e) {
+  console.error('Failed to set pdfjs worker:', e);
+}
 import { Upload, FileText, Sparkles, CheckCircle2, XCircle, Loader2, Camera, Image as ImageIcon, X, Trash2, Edit, Download, FileSpreadsheet } from 'lucide-react';
 import { SiGooglesheets } from 'react-icons/si';
 import { formatCurrency } from '@/lib/format';

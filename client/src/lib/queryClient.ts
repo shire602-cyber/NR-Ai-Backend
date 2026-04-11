@@ -1,4 +1,4 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, QueryCache, MutationCache } from "@tanstack/react-query";
 import { getAuthHeaders } from "./auth";
 import { apiUrl } from "./api";
 
@@ -71,6 +71,18 @@ export const getQueryFn: <T>(options: {
   };
 
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error) => {
+      // Global query error handler — prevents unhandled errors from crashing React
+      console.error('[QueryCache] Query error:', error?.message || String(error));
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      // Global mutation error handler — prevents unhandled errors from crashing React
+      console.error('[MutationCache] Mutation error:', error?.message || String(error));
+    },
+  }),
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),

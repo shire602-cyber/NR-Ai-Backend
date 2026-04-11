@@ -982,7 +982,7 @@ export default function Invoices() {
                               } catch (error: any) {
                                 toast({
                                   title: 'Error',
-                                  description: error.message || 'Failed to send via WhatsApp',
+                                  description: error?.message || 'Failed to send via WhatsApp',
                                   variant: 'destructive',
                                 });
                               }
@@ -1000,7 +1000,7 @@ export default function Invoices() {
                                 toast({ title: 'E-Invoice generated', description: `UUID: ${result.uuid}` });
                                 queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
                               } catch (error: any) {
-                                toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                                toast({ title: 'Error', description: error?.message, variant: 'destructive' });
                               }
                             }}
                             title="Generate E-Invoice"

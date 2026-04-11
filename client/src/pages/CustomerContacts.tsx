@@ -137,7 +137,7 @@ export default function CustomerContacts() {
       setPortalLinkDialog({ open: true, url: fullUrl, contactName: result.contactName });
     },
     onError: (error: any) => {
-      toast({ variant: 'destructive', title: 'Failed to generate portal link', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to generate portal link', description: error?.message });
     },
   });
 
