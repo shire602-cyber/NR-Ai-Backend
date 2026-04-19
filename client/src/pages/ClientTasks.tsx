@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, Link } from 'wouter';
 import { format, parseISO, differenceInDays, isBefore } from 'date-fns';
+import { daysBetween, formatDateSafe, isBefore as isBeforeSafe } from '@/lib/date-safe';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -180,8 +181,9 @@ export default function ClientTasks() {
 
   const getTaskStatus = (task: ComplianceTask) => {
     if (task.status === 'completed') return 'completed';
-    if (isBefore(parseISO(task.dueDate), new Date())) return 'overdue';
-    const daysLeft = differenceInDays(parseISO(task.dueDate), new Date());
+    const daysLeft = daysBetween(task.dueDate, new Date());
+    if (daysLeft === null) return 'pending';
+    if (daysLeft < 0) return 'overdue';
     if (daysLeft <= 3) return 'due_soon';
     return 'pending';
   };
@@ -344,7 +346,7 @@ export default function ClientTasks() {
                 const status = getTaskStatus(task);
                 const category = CATEGORIES.find(c => c.value === task.category);
                 const priority = PRIORITIES.find(p => p.value === task.priority);
-                const daysLeft = differenceInDays(parseISO(task.dueDate), new Date());
+                const daysLeft = daysBetween(task.dueDate, new Date()) ?? 0;
 
                 return (
                   <div
@@ -388,7 +390,7 @@ export default function ClientTasks() {
                       <div className="text-right">
                         <div className="flex items-center gap-1 text-sm">
                           <Calendar className="w-3 h-3" />
-                          {format(parseISO(task.dueDate), 'MMM d, yyyy')}
+                          {formatDateSafe(task.dueDate, d => format(d, 'MMM d, yyyy'))}
                         </div>
                         {task.status !== 'completed' && (
                           <Badge 

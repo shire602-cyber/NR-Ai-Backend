@@ -431,6 +431,7 @@ export default function Inventory() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => deleteProductMutation.mutate(product.id)}
+                                  disabled={deleteProductMutation.isPending}
                                   title="Delete"
                                   className="text-destructive hover:text-destructive"
                                 >

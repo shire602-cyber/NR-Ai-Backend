@@ -32,6 +32,7 @@ import { SiGooglesheets, SiWhatsapp } from 'react-icons/si';
 import type { Invoice, Company, CustomerContact } from '@shared/schema';
 import { MESSAGE_TEMPLATES, fillTemplate, openWhatsApp } from '@/lib/whatsapp-templates';
 import { cn } from '@/lib/utils';
+import { toDate } from '@/lib/date-safe';
 import { downloadInvoicePDF } from '@/lib/pdf-invoice';
 
 const invoiceLineSchema = z.object({
@@ -946,10 +947,11 @@ export default function Invoices() {
                                 const shareResult = await apiRequest('POST', `/api/invoices/${invoice.id}/share`);
                                 const shareUrl = `${window.location.origin}${shareResult.shareUrl}`;
 
-                                // Calculate due date
-                                const invoiceDate = new Date(invoice.date);
+                                // Calculate due date — fall back to today if
+                                // invoice.date is missing or malformed.
+                                const safeInvoiceDate = toDate(invoice.date) ?? new Date();
                                 const paymentTerms = customer.paymentTerms || 30;
-                                const dueDate = new Date(invoiceDate);
+                                const dueDate = new Date(safeInvoiceDate);
                                 dueDate.setDate(dueDate.getDate() + paymentTerms);
 
                                 // Fill template

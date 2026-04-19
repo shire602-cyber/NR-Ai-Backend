@@ -92,6 +92,28 @@ export default function AdvancedAnalytics() {
     enabled: !!companyId,
   });
 
+  // Aggregate totals from actual forecast rows. Previously these tiles rendered
+  // hardcoded demo numbers (520000 / 423000 / 97000) regardless of data.
+  const projectedInflow = (forecasts ?? []).reduce(
+    (sum, f) => sum + (Number.isFinite(f.predictedInflow) ? f.predictedInflow : 0),
+    0,
+  );
+  const projectedOutflow = (forecasts ?? []).reduce(
+    (sum, f) => sum + (Number.isFinite(f.predictedOutflow) ? f.predictedOutflow : 0),
+    0,
+  );
+  const projectedNet = projectedInflow - projectedOutflow;
+
+  const totalBudgeted = (budgetData ?? []).reduce(
+    (sum, b) => sum + (Number.isFinite(b.budgeted) ? b.budgeted : 0),
+    0,
+  );
+  const totalActual = (budgetData ?? []).reduce(
+    (sum, b) => sum + (Number.isFinite(b.actual) ? b.actual : 0),
+    0,
+  );
+  const totalVariance = totalActual - totalBudgeted;
+
   // Fetch budget vs actual
   const { data: budgetData, isLoading: budgetLoading } = useQuery<BudgetVsActual[]>({
     queryKey: ['/api/analytics/budget-vs-actual', companyId, budgetYear, budgetMonth],
@@ -294,7 +316,7 @@ export default function AdvancedAnalytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
-                  {formatCurrency(520000, 'AED')}
+                  {formatCurrency(projectedInflow, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Next {forecastPeriod === '3months' ? '3' : forecastPeriod === '6months' ? '6' : '12'} months</p>
               </CardContent>
@@ -307,20 +329,20 @@ export default function AdvancedAnalytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
-                  {formatCurrency(423000, 'AED')}
+                  {formatCurrency(projectedOutflow, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Estimated expenses</p>
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate border-green-200 dark:border-green-900">
+            <Card className={`hover-elevate ${projectedNet >= 0 ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Net Cash Position</CardTitle>
-                <Wallet className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <Wallet className={`w-4 h-4 ${projectedNet >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
-                  {formatCurrency(97000, 'AED')}
+                <div className={`text-2xl font-bold font-mono ${projectedNet >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {formatCurrency(projectedNet, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Projected balance</p>
               </CardContent>
@@ -426,7 +448,7 @@ export default function AdvancedAnalytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono">
-                  {formatCurrency(250500, 'AED')}
+                  {formatCurrency(totalBudgeted, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Planned for {months[budgetMonth - 1]} {budgetYear}</p>
               </CardContent>
@@ -439,22 +461,22 @@ export default function AdvancedAnalytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono">
-                  {formatCurrency(247100, 'AED')}
+                  {formatCurrency(totalActual, 'AED')}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Recorded transactions</p>
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate border-green-200 dark:border-green-900">
+            <Card className={`hover-elevate ${totalVariance <= 0 ? 'border-green-200 dark:border-green-900' : 'border-amber-200 dark:border-amber-900'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
                 <CardTitle className="text-sm font-medium">Net Variance</CardTitle>
-                <PiggyBank className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <PiggyBank className={`w-4 h-4 ${totalVariance <= 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`} />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
-                  {formatCurrency(-3400, 'AED')}
+                <div className={`text-2xl font-bold font-mono ${totalVariance <= 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {formatCurrency(totalVariance, 'AED')}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Under budget</p>
+                <p className="text-xs text-muted-foreground mt-1">{totalVariance <= 0 ? 'Under budget' : 'Over budget'}</p>
               </CardContent>
             </Card>
           </div>
