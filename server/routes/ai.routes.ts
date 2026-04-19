@@ -10,8 +10,34 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { getEnv } from '../config/env';
 import { createLogger } from '../config/logger';
 import { categorizationRequestSchema } from '../../shared/schema';
+import { LruCache } from '../lib/lru-cache';
 
 const log = createLogger('ai');
+
+// Cache categorisation responses for 1 hour. The same merchant/description/
+// amount/currency for the same company gets the same answer — caching it
+// eliminates the OpenAI spend on repeats (OCR batches, receipt re-scans,
+// identical invoices, etc).
+interface CategorizationResult {
+  suggestedAccountCode: string;
+  suggestedAccountName: string;
+  confidence: number;
+  reason: string;
+}
+const categorizationCache = new LruCache<string, CategorizationResult>(500, 60 * 60 * 1000);
+
+function categorizationCacheKey(
+  companyId: string,
+  description: string,
+  amount: number,
+  currency: string,
+): string {
+  const normalizedDesc = description.trim().toLowerCase().replace(/\s+/g, ' ');
+  // Round amount to the cent — tiny rounding differences shouldn't bust
+  // the cache and create a second billable call.
+  const roundedAmount = Math.round(amount * 100) / 100;
+  return `${companyId}|${currency.toUpperCase()}|${roundedAmount}|${normalizedDesc}`;
+}
 
 // =============================================
 // AI client initialisation
@@ -61,6 +87,23 @@ export function registerAIRoutes(app: Express) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
+      // Cache check — identical prompts get the same answer, so serve from
+      // memory and skip the billable OpenAI call.
+      const cacheKey = categorizationCacheKey(
+        validated.companyId,
+        validated.description,
+        validated.amount,
+        validated.currency,
+      );
+      const cached = categorizationCache.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      if (!openai) {
+        return res.status(503).json({ message: 'AI is not configured on this server' });
+      }
+
       // Get company's Chart of Accounts
       const accounts = await storage.getAccountsByCompanyId(validated.companyId);
       const expenseAccounts = accounts.filter(a => a.type === 'expense');
@@ -100,17 +143,28 @@ Amount: ${validated.amount} ${validated.currency}`
         temperature: 0.3,
       });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      let aiResponse: any = {};
+      try {
+        aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      } catch {
+        // Model returned something that wasn't valid JSON despite the
+        // json_object response_format — log and fall back to empty.
+        log.warn({ raw: completion.choices[0].message.content }, 'Non-JSON response from AI');
+      }
 
-      res.json({
-        suggestedAccountCode: aiResponse.accountCode,
-        suggestedAccountName: aiResponse.accountName,
-        confidence: aiResponse.confidence,
-        reason: aiResponse.reason,
-      });
+      const result: CategorizationResult = {
+        suggestedAccountCode: String(aiResponse.accountCode ?? ''),
+        suggestedAccountName: String(aiResponse.accountName ?? ''),
+        confidence: Number.isFinite(aiResponse.confidence) ? Number(aiResponse.confidence) : 0,
+        reason: String(aiResponse.reason ?? ''),
+      };
+      categorizationCache.set(cacheKey, result);
+
+      res.json(result);
     } catch (error: any) {
-      console.error('AI categorization error:', error);
-      res.status(500).json({ message: error.message || 'AI categorization failed' });
+      log.error({ err: error }, 'AI categorization error');
+      // Don't leak internal error messages; client gets a generic failure.
+      res.status(500).json({ message: 'AI categorization failed. Please try again.' });
     }
   }));
 
