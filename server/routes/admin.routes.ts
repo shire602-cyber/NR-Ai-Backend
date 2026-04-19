@@ -157,7 +157,27 @@ export function registerAdminRoutes(app: Express): void {
     '/admin/companies/:companyId',
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
-      const updates = req.body;
+
+      // Whitelist fields an admin may update — never forward req.body wholesale.
+      // Blocks mass-assignment of internal/computed fields (id, createdAt,
+      // subscriptionStatus internals, stripe IDs, etc.).
+      const allowedFields = [
+        'name',
+        'trnNumber',
+        'baseCurrency',
+        'fiscalYearStart',
+        'address',
+        'phone',
+        'email',
+        'companyType',
+        'industry',
+        'size',
+        'logoUrl',
+      ] as const;
+      const updates: Record<string, unknown> = {};
+      for (const key of allowedFields) {
+        if (key in req.body) updates[key] = (req.body as any)[key];
+      }
 
       const company = await storage.getCompany(companyId);
       if (!company) {
@@ -335,7 +355,26 @@ export function registerAdminRoutes(app: Express): void {
       const { clientId } = req.params;
       const userId = (req as any).user.id;
 
-      const company = await storage.updateCompany(clientId, req.body);
+      // Whitelist fields to prevent mass-assignment of internal fields.
+      const allowedFields = [
+        'name',
+        'trnNumber',
+        'baseCurrency',
+        'fiscalYearStart',
+        'address',
+        'phone',
+        'email',
+        'companyType',
+        'industry',
+        'size',
+        'logoUrl',
+      ] as const;
+      const updates: Record<string, unknown> = {};
+      for (const key of allowedFields) {
+        if (key in req.body) updates[key] = (req.body as any)[key];
+      }
+
+      const company = await storage.updateCompany(clientId, updates);
 
       // Log activity
       await storage.createActivityLog({
