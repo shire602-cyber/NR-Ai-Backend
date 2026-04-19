@@ -26,51 +26,59 @@ BEGIN;
 -- Quantity columns: numeric(15,4) — 4 decimal places lets us represent
 -- fractional units of inventory accurately.
 
--- Helper: a table-agnostic cast wrapper to cut noise below. Postgres
--- requires USING on ALTER COLUMN TYPE when there's no implicit cast;
--- real -> numeric is implicit, but we pin it explicitly for clarity.
+-- Every column named here is either a rate (0..1 probability, percentage)
+-- or a physical quantity — both need a different precision than the
+-- catch-all money default below. Each ALTER is guarded by information_schema
+-- so the migration is safe to run against databases that haven't received
+-- every previous feature (e.g. missing `products` because migration 0007
+-- wasn't applied to this environment).
 
--- journal_lines
-ALTER TABLE journal_lines ALTER COLUMN debit  TYPE numeric(15,2) USING debit::numeric(15,2);
-ALTER TABLE journal_lines ALTER COLUMN credit TYPE numeric(15,2) USING credit::numeric(15,2);
-
--- invoices
-ALTER TABLE invoices ALTER COLUMN subtotal   TYPE numeric(15,2) USING subtotal::numeric(15,2);
-ALTER TABLE invoices ALTER COLUMN vat_amount TYPE numeric(15,2) USING vat_amount::numeric(15,2);
-ALTER TABLE invoices ALTER COLUMN total      TYPE numeric(15,2) USING total::numeric(15,2);
-
--- invoice_lines
-ALTER TABLE invoice_lines ALTER COLUMN quantity   TYPE numeric(15,4) USING quantity::numeric(15,4);
-ALTER TABLE invoice_lines ALTER COLUMN unit_price TYPE numeric(15,4) USING unit_price::numeric(15,4);
-ALTER TABLE invoice_lines ALTER COLUMN vat_rate   TYPE numeric(10,6) USING vat_rate::numeric(10,6);
-
--- receipts
-ALTER TABLE receipts ALTER COLUMN amount     TYPE numeric(15,2) USING amount::numeric(15,2);
-ALTER TABLE receipts ALTER COLUMN vat_amount TYPE numeric(15,2) USING vat_amount::numeric(15,2);
-
--- products
-ALTER TABLE products ALTER COLUMN unit_price TYPE numeric(15,2) USING unit_price::numeric(15,2);
-ALTER TABLE products ALTER COLUMN cost_price TYPE numeric(15,2) USING cost_price::numeric(15,2);
-ALTER TABLE products ALTER COLUMN vat_rate   TYPE numeric(10,6) USING vat_rate::numeric(10,6);
-
--- stock_movements (if present from migration 0007)
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='stock_movements' AND column_name='unit_cost') THEN
-    EXECUTE 'ALTER TABLE stock_movements ALTER COLUMN unit_cost TYPE numeric(15,2) USING unit_cost::numeric(15,2)';
-  END IF;
-END $$;
-
--- bank_transactions
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='bank_transactions' AND column_name='amount') THEN
-    EXECUTE 'ALTER TABLE bank_transactions ALTER COLUMN amount TYPE numeric(15,2) USING amount::numeric(15,2)';
-  END IF;
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='bank_transactions' AND column_name='ai_confidence') THEN
-    EXECUTE 'ALTER TABLE bank_transactions ALTER COLUMN ai_confidence TYPE numeric(10,6) USING ai_confidence::numeric(10,6)';
-  END IF;
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='bank_transactions' AND column_name='match_confidence') THEN
-    EXECUTE 'ALTER TABLE bank_transactions ALTER COLUMN match_confidence TYPE numeric(10,6) USING match_confidence::numeric(10,6)';
-  END IF;
+DO $$
+DECLARE
+  rec record;
+  rate_cols text[]     := ARRAY[
+    'invoice_lines.vat_rate',
+    'products.vat_rate',
+    'bank_transactions.ai_confidence',
+    'bank_transactions.match_confidence',
+    'anomaly_alerts.ai_confidence',
+    'cash_flow_forecasts.confidence_level',
+    'transaction_classifications.ai_confidence',
+    'financial_kpis.change_percent',
+    'financial_kpis.benchmark',
+    'feature_usage_metrics.avg_duration',
+    'feature_usage_metrics.conversion_rate',
+    'feature_usage_metrics.error_rate'
+  ];
+  qty_cols text[]      := ARRAY[
+    'invoice_lines.quantity',
+    'invoice_lines.unit_price'
+  ];
+  spec text;
+  parts text[];
+BEGIN
+  FOREACH spec IN ARRAY rate_cols LOOP
+    parts := string_to_array(spec, '.');
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name=parts[1]
+                   AND column_name=parts[2] AND data_type='real') THEN
+      EXECUTE format(
+        'ALTER TABLE %I ALTER COLUMN %I TYPE numeric(10,6) USING %I::numeric(10,6)',
+        parts[1], parts[2], parts[2]
+      );
+    END IF;
+  END LOOP;
+  FOREACH spec IN ARRAY qty_cols LOOP
+    parts := string_to_array(spec, '.');
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name=parts[1]
+                   AND column_name=parts[2] AND data_type='real') THEN
+      EXECUTE format(
+        'ALTER TABLE %I ALTER COLUMN %I TYPE numeric(15,4) USING %I::numeric(15,4)',
+        parts[1], parts[2], parts[2]
+      );
+    END IF;
+  END LOOP;
 END $$;
 
 -- Catch-all: any remaining `real` column on any table gets bumped to
