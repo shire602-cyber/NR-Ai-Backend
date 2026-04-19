@@ -89,7 +89,7 @@ export function registerAccountRoutes(app: Express) {
       res.json(archivedAccount);
     } catch (archiveError: any) {
       // Handle race condition where account was marked as system between read and update
-      if (archiveError.message.includes('system account')) {
+      if (archiveError?.message?.includes('system account')) {
         return res.status(409).json({
           message: 'System accounts cannot be archived. These are essential for proper bookkeeping.'
         });
