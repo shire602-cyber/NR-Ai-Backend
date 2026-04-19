@@ -137,7 +137,9 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
               >
-            {children}
+            <ErrorBoundary key={location} label={`route:${location}`} isolate>
+              {children}
+            </ErrorBoundary>
               </motion.div>
             </AnimatePresence>
             </RouteGuard>

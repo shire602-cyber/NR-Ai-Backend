@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { apiUrl } from '@/lib/api';
+import { getAuthHeaders } from '@/lib/auth';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { exportToExcel, exportToGoogleSheets, prepareReceiptsForExport } from '@/lib/export';
 import Tesseract from 'tesseract.js';
@@ -638,9 +639,9 @@ export default function Receipts() {
     try {
       const response = await fetch(apiUrl('/api/ai/categorize'), {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           companyId,
@@ -1150,9 +1151,11 @@ export default function Receipts() {
                             type="number"
                             step="0.01"
                             value={receipt.data.total || ''}
-                            onChange={(e) =>
-                              updateReceiptData(index, { total: parseFloat(e.target.value) })
-                            }
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const parsed = raw === '' ? 0 : parseFloat(raw);
+                              updateReceiptData(index, { total: Number.isFinite(parsed) ? parsed : 0 });
+                            }}
                             className="h-8"
                             data-testid={`input-amount-${index}`}
                           />
@@ -1371,8 +1374,12 @@ export default function Receipts() {
                         step="0.01" 
                         className="font-mono"
                         value={field.value ?? ''} 
-                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : '')}
-                        data-testid="input-edit-amount" 
+                        onChange={(e) => {
+                          if (!e.target.value) return field.onChange('');
+                          const parsed = parseFloat(e.target.value);
+                          field.onChange(Number.isFinite(parsed) ? parsed : '');
+                        }}
+                        data-testid="input-edit-amount"
                       />
                     </FormControl>
                     <FormMessage />
@@ -1386,7 +1393,11 @@ export default function Receipts() {
                   <FormItem>
                     <FormLabel>VAT Amount (Optional)</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" step="0.01" className="font-mono" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)} data-testid="input-edit-vat" />
+                      <Input {...field} type="number" step="0.01" className="font-mono" value={field.value ?? ''} onChange={(e) => {
+                        if (!e.target.value) return field.onChange(null);
+                        const parsed = parseFloat(e.target.value);
+                        field.onChange(Number.isFinite(parsed) ? parsed : null);
+                      }} data-testid="input-edit-vat" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
