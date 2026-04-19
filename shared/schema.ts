@@ -40,6 +40,27 @@ export type User = typeof users.$inferSelect;
 export type UserPublic = Omit<User, 'passwordHash'>;
 
 // ===========================
+// JWT revocation denylist
+// ===========================
+// JWTs are stateless — /auth/logout can only ask the client to forget
+// its token. For real server-side revocation we record the jti (token
+// id) and its original expiry here. The auth middleware consults this
+// table on every request; the row is auto-garbage-collected by a
+// periodic job once `expiresAt` is in the past so the table cannot
+// grow without bound.
+export const jwtRevocations = pgTable("jwt_revocations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  jti: text("jti").notNull().unique(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull().default("logout"), // logout | password_change | admin_revoke
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type JwtRevocation = typeof jwtRevocations.$inferSelect;
+export type InsertJwtRevocation = typeof jwtRevocations.$inferInsert;
+
+// ===========================
 // Companies
 // ===========================
 export const companies = pgTable("companies", {
@@ -221,6 +242,12 @@ export const invoices = pgTable("invoices", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   number: text("number").notNull(),
+  // Proper FK to customer_contacts. Nullable because older rows pre-date
+  // this column; new flows should always populate it, and the portal
+  // authorisation check prefers contactId over the legacy name match.
+  // onDelete "set null" keeps the invoice around (for accounting history)
+  // even if the contact is deleted.
+  contactId: uuid("contact_id").references(() => customerContacts.id, { onDelete: "set null" }),
   customerName: text("customer_name").notNull(),
   customerTrn: text("customer_trn"),
   date: timestamp("date").notNull(),

@@ -9,15 +9,19 @@ import type { CustomerContact, Invoice } from "../../shared/schema";
 /**
  * Return true when the invoice belongs to the given customer contact.
  *
- * Defense-in-depth: invoice has no FK to customer_contacts yet (tracked
- * as a schema migration), so matching is done on TRN when available
- * (unique per-tax-registrant) and falls back to case-insensitive
- * trimmed name match. TRN match alone is preferred because name
- * collisions are possible within a company. Tracked follow-up: add
- * invoices.contactId FK, backfill, and switch this to a plain equality
- * check.
+ * Three-tier check, strongest first:
+ *   1. FK equality: invoice.contactId === contact.id. The real fix for
+ *      the portal IDOR bug. New flows always populate contactId, so in
+ *      steady state this is the only path that fires.
+ *   2. TRN match: both sides carry a VAT registration number. Not
+ *      vulnerable to name collisions.
+ *   3. Name match (legacy fallback): trimmed, case-insensitive. Still
+ *      used for invoices created before the contact_id column existed.
+ *      Will stop being needed once old rows are backfilled.
  */
 function invoiceBelongsToContact(inv: Invoice, contact: CustomerContact): boolean {
+  if (inv.contactId && inv.contactId === contact.id) return true;
+
   const contactTrn = contact.trnNumber?.trim() || '';
   const invoiceTrn = inv.customerTrn?.trim() || '';
   if (contactTrn.length > 0 && invoiceTrn.length > 0) {

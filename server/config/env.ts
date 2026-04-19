@@ -30,6 +30,13 @@ const envSchema = z.object({
 
   // === Logging ===
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // === Session store ===
+  // When set, Express sessions are persisted in Redis so they survive
+  // deploys and can be shared across replicas. When unset, the server
+  // falls back to an in-process MemoryStore (fine for single-instance
+  // development, sessions are lost on every restart in production).
+  REDIS_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
