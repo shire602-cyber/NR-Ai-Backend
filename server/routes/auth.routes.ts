@@ -169,18 +169,26 @@ export function registerAuthRoutes(app: Express): void {
   );
 
   // Login
+  // Dummy bcrypt hash generated once at startup. Used when the email is
+  // unknown so we still spend CPU on a comparison — this removes the
+  // timing signal that distinguishes "no such user" from "wrong password"
+  // and prevents email enumeration via response-time measurement.
+  const DUMMY_HASH = bcrypt.hashSync('account_enumeration_placeholder', 10);
+
   router.post(
     '/auth/login',
     asyncHandler(async (req: Request, res: Response) => {
       const { email, password } = req.body;
 
       const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
 
-      const isValid = await bcrypt.compare(password, user.passwordHash);
-      if (!isValid) {
+      // Always compare against *some* hash so the timing is constant.
+      const passwordToCheck = typeof password === 'string' ? password : '';
+      const isValid = user
+        ? await bcrypt.compare(passwordToCheck, user.passwordHash)
+        : (await bcrypt.compare(passwordToCheck, DUMMY_HASH), false);
+
+      if (!user || !isValid) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
@@ -238,6 +246,17 @@ export function registerAuthRoutes(app: Express): void {
         refreshToken: newRefreshToken,
       });
     })
+  );
+
+  // Logout endpoint — acknowledge the request and let the client discard
+  // its tokens. Access tokens are stateless JWTs so they remain valid
+  // until expiry; a follow-up change will add a revocation list keyed on
+  // token jti so we can enforce server-side revocation at /refresh-token.
+  router.post(
+    '/auth/logout',
+    asyncHandler(async (_req: Request, res: Response) => {
+      res.json({ ok: true });
+    }),
   );
 
   // =====================================

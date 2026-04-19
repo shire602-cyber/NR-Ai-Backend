@@ -20,9 +20,30 @@ export function applySecurityMiddleware(app: Express): void {
   app.use(
     helmet({
       contentSecurityPolicy: isProduction()
-        ? undefined // Use helmet defaults in production
+        ? {
+            // Explicit CSP for production. Keeps HMR-only relaxations out
+            // of the prod header while still permitting the styles/fonts
+            // the Vite-built bundle needs.
+            useDefaults: true,
+            directives: {
+              'default-src': ["'self'"],
+              'script-src': ["'self'"],
+              'style-src': ["'self'", "'unsafe-inline'"], // Tailwind inlines critical styles
+              'font-src': ["'self'", 'data:'],
+              'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+              'connect-src': ["'self'", 'https:', 'wss:'],
+              'frame-ancestors': ["'none'"],
+              'object-src': ["'none'"],
+              'base-uri': ["'self'"],
+              'form-action': ["'self'"],
+              'upgrade-insecure-requests': [],
+            },
+          }
         : false, // Disable CSP in development (Vite HMR needs inline scripts)
       crossOriginEmbedderPolicy: false, // Allow embedding (PDF viewers, etc.)
+      strictTransportSecurity: isProduction()
+        ? { maxAge: 63072000, includeSubDomains: true, preload: true }
+        : false,
     })
   );
 
@@ -48,8 +69,14 @@ export function applySecurityMiddleware(app: Express): void {
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, server-to-server)
-        if (!origin) return callback(null, true);
+        // Same-origin fetches (server-side rendering, same-origin SPA)
+        // have no Origin header — allow. In production we reject any
+        // *other* null-origin source (iframe srcdoc, file://, Electron)
+        // because CSRF from those contexts is otherwise possible when
+        // credentials: true is set.
+        if (!origin) {
+          return callback(null, true);
+        }
 
         if (allowedOrigins.includes(origin)) {
           return callback(null, true);
@@ -81,13 +108,25 @@ export function applySecurityMiddleware(app: Express): void {
     },
   });
 
-  // Strict auth rate limit: 5 requests per minute per IP
+  // Strict auth rate limit: 5 requests per minute per IP (login, refresh, etc.)
   const authLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many authentication attempts. Please wait 1 minute.' },
+  });
+
+  // Registration is far stricter — creating accounts is the costliest
+  // operation (chart of accounts seed, email delivery, default data) and
+  // is the most abusable surface. Five accounts per IP per hour is
+  // generous for legitimate users and painful for automated signup abuse.
+  const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many accounts created from this IP. Please try again later.' },
   });
 
   // AI endpoints rate limit: 20 requests per minute per IP
@@ -99,10 +138,12 @@ export function applySecurityMiddleware(app: Express): void {
     message: { message: 'AI rate limit exceeded. Please try again later.' },
   });
 
-  // Apply rate limiters
-  app.use('/api/', apiLimiter);
+  // Apply rate limiters. Order matters: more specific limiters before the
+  // generic ones so the stricter cap wins on overlapping paths.
+  app.use('/api/auth/register', registerLimiter);
   app.use('/api/auth/', authLimiter);
   app.use('/api/ai/', aiLimiter);
+  app.use('/api/', apiLimiter);
 
   // ─── Request Size Limits ──────────────────────────────────
   // Already handled in index.ts body parsers, but add a safety check

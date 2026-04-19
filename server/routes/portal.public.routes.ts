@@ -6,6 +6,33 @@ import { generateInvoicePDF } from "../services/pdf-invoice.service";
 import { createInvoicePaymentSession } from "../services/invoice-payment.service";
 import { isStripeConfigured } from "../services/stripe.service";
 import crypto from "crypto";
+import type { CustomerContact, Invoice } from "../../shared/schema";
+
+/**
+ * Return true when the invoice belongs to the given customer contact.
+ *
+ * Defense-in-depth: invoice has no FK to customer_contacts yet (tracked
+ * as a schema migration), so matching is done on TRN when available
+ * (unique per-tax-registrant) and falls back to case-insensitive
+ * trimmed name match. TRN match alone is preferred because name
+ * collisions are possible within a company. Tracked follow-up: add
+ * invoices.contactId FK, backfill, and switch this to a plain equality
+ * check.
+ */
+function invoiceBelongsToContact(inv: Invoice, contact: CustomerContact): boolean {
+  const contactTrn = contact.trnNumber?.trim() || '';
+  const invoiceTrn = inv.customerTrn?.trim() || '';
+  if (contactTrn.length > 0 && invoiceTrn.length > 0) {
+    return contactTrn === invoiceTrn;
+  }
+  const contactName = contact.name.trim().toLowerCase();
+  const invoiceName = (inv.customerName || '').trim().toLowerCase();
+  return contactName.length > 0 && contactName === invoiceName;
+}
+
+// Sliding expiry window on portal access. Was 365 days; reducing
+// the blast radius of a leaked link to 90 days.
+const PORTAL_TOKEN_TTL_DAYS = 90;
 
 /**
  * Portal Public Routes
@@ -40,9 +67,8 @@ export function registerPortalPublicRoutes(app: Express) {
     // Generate crypto-random token
     const token = crypto.randomBytes(32).toString('hex');
 
-    // Set 1-year expiry
     const expiresAt = new Date();
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    expiresAt.setDate(expiresAt.getDate() + PORTAL_TOKEN_TTL_DAYS);
 
     await storage.setPortalAccessToken(contactId, token, expiresAt);
 
@@ -95,11 +121,10 @@ export function registerPortalPublicRoutes(app: Express) {
       return res.status(410).json({ message: 'This portal link has expired' });
     }
 
-    // Find invoices matching this customer's name within the same company
+    // Find invoices matching this customer within the same company.
+    // See invoiceBelongsToContact — prefers TRN match, falls back to name.
     const allInvoices = await storage.getInvoicesByCompanyId(contact.companyId);
-    const customerInvoices = allInvoices.filter(
-      inv => inv.customerName.toLowerCase() === contact.name.toLowerCase()
-    );
+    const customerInvoices = allInvoices.filter(inv => invoiceBelongsToContact(inv, contact));
 
     // Return sanitized invoice data (no internal company details)
     const sanitizedInvoices = customerInvoices.map(inv => ({
@@ -137,8 +162,8 @@ export function registerPortalPublicRoutes(app: Express) {
       return res.status(404).json({ message: 'Invoice not found' });
     }
 
-    // Verify the invoice belongs to this customer and company
-    if (invoice.companyId !== contact.companyId || invoice.customerName.toLowerCase() !== contact.name.toLowerCase()) {
+    // Verify the invoice belongs to this customer and company.
+    if (invoice.companyId !== contact.companyId || !invoiceBelongsToContact(invoice, contact)) {
       return res.status(403).json({ message: 'Access denied to this invoice' });
     }
 
