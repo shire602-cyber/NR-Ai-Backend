@@ -41,26 +41,31 @@ export function registerReceiptRoutes(app: Express) {
     const receipts = await storage.getReceiptsByCompanyId(companyId);
 
     // Find similar transactions
+    const merchantLower = typeof merchant === 'string' ? merchant.toLowerCase() : '';
+    const amountNum = typeof amount === 'number' && Number.isFinite(amount) ? amount : NaN;
     const similarTransactions = receipts.filter(receipt => {
-      // Check if merchant name is similar (case-insensitive partial match)
-      const merchantMatch = merchant && receipt.merchant &&
-        receipt.merchant.toLowerCase().includes(merchant.toLowerCase()) ||
-        merchant.toLowerCase().includes(receipt.merchant?.toLowerCase() || '');
+      // Merchant name similar (case-insensitive partial match) — guarded against undefined/empty
+      const rcptMerchantLower = typeof receipt.merchant === 'string' ? receipt.merchant.toLowerCase() : '';
+      const merchantMatch = !!merchantLower && !!rcptMerchantLower && (
+        rcptMerchantLower.includes(merchantLower) || merchantLower.includes(rcptMerchantLower)
+      );
 
-      // Check if amount is within 10% range
-      const amountMatch = amount && receipt.amount &&
-        Math.abs(receipt.amount - amount) / amount < 0.1;
+      // Amount within 10% — guarded against NaN/zero
+      const rcptAmountNum = typeof receipt.amount === 'number' && Number.isFinite(receipt.amount) ? receipt.amount : NaN;
+      const amountMatch = Number.isFinite(amountNum) && Number.isFinite(rcptAmountNum) && amountNum !== 0
+        && Math.abs(rcptAmountNum - amountNum) / Math.abs(amountNum) < 0.1;
 
-      // Check if date is within 7 days
+      // Date within 7 days — guarded against invalid dates
       let dateMatch = false;
       if (date && receipt.date) {
         const checkDate = new Date(date);
         const receiptDate = new Date(receipt.date);
-        const daysDiff = Math.abs((checkDate.getTime() - receiptDate.getTime()) / (1000 * 60 * 60 * 24));
-        dateMatch = daysDiff <= 7;
+        if (!isNaN(checkDate.getTime()) && !isNaN(receiptDate.getTime())) {
+          const daysDiff = Math.abs((checkDate.getTime() - receiptDate.getTime()) / (1000 * 60 * 60 * 24));
+          dateMatch = daysDiff <= 7;
+        }
       }
 
-      // Return if at least 2 criteria match
       const matchCount = [merchantMatch, amountMatch, dateMatch].filter(Boolean).length;
       return matchCount >= 2;
     });
@@ -77,7 +82,7 @@ export function registerReceiptRoutes(app: Express) {
     });
   }));
 
-  app.post("/api/companies/:companyId/receipts", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/receipts", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 

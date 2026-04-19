@@ -722,16 +722,24 @@ export default function Receipts() {
     // Save each receipt sequentially with status updates
     for (const { receipt, index } of completedIndices) {
       try {
+        // Defensive: receipt.status==='completed' *should* mean data exists,
+        // but concurrent state updates can leave data undefined. Fall back to
+        // an empty object rather than using non-null assertions that crash.
+        const d = receipt.data ?? ({} as Partial<ExtractedData>);
+        const parsedTotal = typeof d.total === 'number' ? d.total : Number(d.total);
+        const parsedVat = d.vatAmount === undefined || d.vatAmount === null
+          ? null
+          : (typeof d.vatAmount === 'number' ? d.vatAmount : Number(d.vatAmount));
         const receiptData = {
           companyId: companyId,
-          merchant: receipt.data!.merchant || 'Unknown',
-          date: receipt.data!.date || new Date().toISOString().split('T')[0],
-          amount: Number(receipt.data!.total) || 0,
-          vatAmount: receipt.data!.vatAmount ? Number(receipt.data!.vatAmount) : null,
-          category: receipt.data!.category || 'Uncategorized',
-          currency: receipt.data!.currency || 'AED',
+          merchant: d.merchant || 'Unknown',
+          date: d.date || new Date().toISOString().split('T')[0],
+          amount: Number.isFinite(parsedTotal) ? parsedTotal : 0,
+          vatAmount: parsedVat !== null && Number.isFinite(parsedVat) ? parsedVat : null,
+          category: d.category || 'Uncategorized',
+          currency: d.currency || 'AED',
           imageData: receipt.preview,
-          rawText: receipt.data!.rawText,
+          rawText: d.rawText || '',
         };
 
         await apiRequest('POST', `/api/companies/${companyId}/receipts`, receiptData);
