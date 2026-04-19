@@ -117,7 +117,7 @@ import {
   inventoryMovements
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, lte } from "drizzle-orm";
+import { eq, and, desc, lte, like, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -203,7 +203,17 @@ export interface IStorage {
   updateJournalEntry(id: string, data: Partial<InsertJournalEntry>): Promise<JournalEntry>;
   deleteJournalEntry(id: string): Promise<void>;
   generateEntryNumber(companyId: string, date: Date): Promise<string>;
-  
+  /**
+   * Atomically create a journal entry together with its lines. Serialises
+   * per-company entry-number generation via an advisory lock so concurrent
+   * callers cannot produce duplicate entry numbers, and rolls back all
+   * writes together on failure.
+   */
+  createJournalEntryWithLines(
+    entry: Omit<InsertJournalEntry, 'entryNumber'>,
+    lines: Array<Omit<InsertJournalLine, 'entryId'>>
+  ): Promise<{ entry: JournalEntry; lines: JournalLine[] }>;
+
   // Journal Lines
   createJournalLine(line: InsertJournalLine): Promise<JournalLine>;
   getJournalLinesByEntryId(entryId: string): Promise<JournalLine[]>;
@@ -940,20 +950,65 @@ export class DatabaseStorage implements IStorage {
   async generateEntryNumber(companyId: string, date: Date): Promise<string> {
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     const prefix = `JE-${dateStr}`;
-    
-    // Get count of entries for this company and date prefix using SQL for atomicity
-    const allEntries = await db
-      .select()
+    const existing = await db
+      .select({ entryNumber: journalEntries.entryNumber })
       .from(journalEntries)
-      .where(eq(journalEntries.companyId, companyId));
-    
-    // Filter entries that match this date prefix
-    const todayEntries = allEntries.filter(e => 
-      e.entryNumber?.startsWith(prefix)
-    );
-    
-    const nextNumber = todayEntries.length + 1;
+      .where(
+        and(
+          eq(journalEntries.companyId, companyId),
+          like(journalEntries.entryNumber, `${prefix}-%`),
+        ),
+      );
+    const nextNumber = existing.length + 1;
     return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+  }
+
+  async createJournalEntryWithLines(
+    entry: Omit<InsertJournalEntry, 'entryNumber'>,
+    lines: Array<Omit<InsertJournalLine, 'entryId'>>,
+  ): Promise<{ entry: JournalEntry; lines: JournalLine[] }> {
+    return await db.transaction(async (tx: any) => {
+      // Serialise concurrent entry creation for this company. pg_advisory_xact_lock
+      // is automatically released at transaction end (commit OR rollback), so we
+      // cannot leak a lock even if a subsequent statement throws.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${entry.companyId}))`);
+
+      const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date as any);
+      const dateStr = entryDate.toISOString().slice(0, 10).replace(/-/g, '');
+      const prefix = `JE-${dateStr}`;
+
+      const existing = await tx
+        .select({ entryNumber: journalEntries.entryNumber })
+        .from(journalEntries)
+        .where(
+          and(
+            eq(journalEntries.companyId, entry.companyId),
+            like(journalEntries.entryNumber, `${prefix}-%`),
+          ),
+        );
+      const nextNumber = existing.length + 1;
+      const entryNumber = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+
+      const [insertedEntry] = await tx
+        .insert(journalEntries)
+        .values({ ...entry, entryNumber })
+        .returning();
+
+      if (!insertedEntry) {
+        throw new Error('Failed to create journal entry');
+      }
+
+      const insertedLines: JournalLine[] = [];
+      for (const line of lines) {
+        const [inserted] = await tx
+          .insert(journalLines)
+          .values({ ...line, entryId: insertedEntry.id })
+          .returning();
+        insertedLines.push(inserted);
+      }
+
+      return { entry: insertedEntry, lines: insertedLines };
+    });
   }
 
   // Journal Lines

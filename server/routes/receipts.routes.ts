@@ -197,60 +197,40 @@ export function registerReceiptRoutes(app: Express) {
       return res.status(400).json({ message: 'Payment account must be a cash or bank account (asset)' });
     }
 
-    // TODO: Wrap in database transaction to ensure atomicity
-    // For now, we'll proceed with the journal entry creation
-    // In production, this should be wrapped in a transaction
-    // NOTE: The operations below (journal entry creation, journal line creation,
-    // and receipt update) need to be wrapped in a database transaction to prevent
-    // partial writes if any step fails mid-way.
+    // Parse date safely — fall back to today if the receipt date is missing
+    // or unparseable (OCR can produce invalid strings).
+    const parsedReceiptDate = receipt.date ? new Date(receipt.date) : new Date();
+    const entryDate = isNaN(parsedReceiptDate.getTime()) ? new Date() : parsedReceiptDate;
 
-    // Parse date safely
-    let entryDate: Date;
-    try {
-      const parsed = new Date(receipt.date || new Date());
-      if (isNaN(parsed.getTime())) {
-        entryDate = new Date();
-      } else {
-        entryDate = parsed;
-      }
-    } catch (e) {
-      entryDate = new Date();
-    }
-
-    // Generate entry number atomically via storage helper
-    const entryNumber = await storage.generateEntryNumber(receipt.companyId, entryDate);
-
-    // Create journal entry for the receipt
-    const entry = await storage.createJournalEntry({
-      companyId: receipt.companyId,
-      date: entryDate,
-      memo: `Receipt: ${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-      entryNumber,
-      status: 'posted',
-      source: 'receipt',
-      sourceId: receipt.id,
-      createdBy: userId,
-      postedBy: userId,
-      postedAt: new Date(),
-    });
-
-    // Debit: Expense Account (total amount including VAT)
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: expenseAccount.id,
-      debit: totalAmount,
-      credit: 0,
-      description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
-    });
-
-    // Credit: Payment Account (cash/bank)
-    await storage.createJournalLine({
-      entryId: entry.id,
-      accountId: paymentAccount.id,
-      debit: 0,
-      credit: totalAmount,
-      description: `Payment for ${receipt.merchant || 'expense'}`,
-    });
+    // Create entry + both journal lines atomically. If any step fails the whole
+    // operation rolls back, so we never leave an entry without its balancing lines.
+    const { entry } = await storage.createJournalEntryWithLines(
+      {
+        companyId: receipt.companyId,
+        date: entryDate,
+        memo: `Receipt: ${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
+        status: 'posted',
+        source: 'receipt',
+        sourceId: receipt.id,
+        createdBy: userId,
+        postedBy: userId,
+        postedAt: new Date(),
+      } as any,
+      [
+        {
+          accountId: expenseAccount.id,
+          debit: totalAmount,
+          credit: 0,
+          description: `${receipt.merchant || 'Expense'} - ${receipt.category || 'General'}`,
+        } as any,
+        {
+          accountId: paymentAccount.id,
+          debit: 0,
+          credit: totalAmount,
+          description: `Payment for ${receipt.merchant || 'expense'}`,
+        } as any,
+      ],
+    );
 
     // Update receipt with posting information
     const updatedReceipt = await storage.updateReceipt(id, {

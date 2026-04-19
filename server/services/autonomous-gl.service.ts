@@ -417,30 +417,41 @@ export async function autoPostHighConfidence(companyId: string): Promise<{
 
   for (const item of highConfItems) {
     try {
+      // Journal creation is already transactional. Wrap the two bookkeeping
+      // UPDATE statements that follow in a second transaction so a crash
+      // between them cannot leave the queue marked auto_posted while the
+      // bank transaction stays unreconciled (or vice versa).
       const journalEntryId = await createJournalEntryForQueueItem(companyId, item);
 
-      // Update queue item
-      await pool.query(
-        `UPDATE ai_gl_queue
-         SET journal_entry_id = $1, status = 'auto_posted'
-         WHERE id = $2`,
-        [journalEntryId, item.id]
-      );
-
-      // Mark bank transaction as reconciled
-      if (item.bank_transaction_id) {
-        await pool.query(
-          `UPDATE bank_transactions
-           SET is_reconciled = true, matched_journal_entry_id = $1
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `UPDATE ai_gl_queue
+           SET journal_entry_id = $1, status = 'auto_posted'
            WHERE id = $2`,
-          [journalEntryId, item.bank_transaction_id]
+          [journalEntryId, item.id]
         );
+        if (item.bank_transaction_id) {
+          await client.query(
+            `UPDATE bank_transactions
+             SET is_reconciled = true, matched_journal_entry_id = $1
+             WHERE id = $2`,
+            [journalEntryId, item.bank_transaction_id]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
 
       posted++;
     } catch (err: any) {
       log.error({ err, queueItemId: item.id }, 'Failed to auto-post queue item');
-      errors.push(`Failed to post item ${item.id}: ${err.message}`);
+      errors.push(`Failed to post item ${item.id}: ${err?.message || String(err)}`);
     }
   }
 
@@ -456,21 +467,15 @@ async function createJournalEntryForQueueItem(
   item: AIGLQueueItem & { bank_account_id?: string | null }
 ): Promise<string> {
   const amount = parseFloat(item.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error(`Invalid amount on queue item ${item.id}: ${item.amount}`);
+  }
   const txnDate = new Date(item.transaction_date);
+  if (isNaN(txnDate.getTime())) {
+    throw new Error(`Invalid transaction date on queue item ${item.id}`);
+  }
 
-  // Generate entry number
-  const dateStr = txnDate.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `JE-${dateStr}`;
-
-  const { rows: existing } = await pool.query(
-    `SELECT COUNT(*) as count FROM journal_entries
-     WHERE company_id = $1 AND entry_number LIKE $2`,
-    [companyId, `${prefix}%`]
-  );
-  const nextNum = parseInt(existing[0].count, 10) + 1;
-  const entryNumber = `${prefix}-${String(nextNum).padStart(3, '0')}`;
-
-  // Determine bank account (from bank_transaction or fallback to first bank/cash account)
+  // Resolve bank account outside the transaction — read-only, no lock needed.
   let bankAccountId = (item as any).bank_account_id;
   if (!bankAccountId) {
     const { rows: bankAccounts } = await pool.query(
@@ -483,76 +488,78 @@ async function createJournalEntryForQueueItem(
     );
     bankAccountId = bankAccounts[0]?.id || null;
   }
-
   if (!bankAccountId) {
     throw new Error('No bank account found for journal entry');
   }
 
-  // Create the journal entry (posted directly since it's auto-posted)
-  const { rows: [entry] } = await pool.query(
-    `INSERT INTO journal_entries
-     (company_id, entry_number, date, memo, status, source, source_id, created_by, posted_by, posted_at)
-     VALUES ($1, $2, $3, $4, 'posted', 'system', $5, $6, $6, now())
-     RETURNING id`,
-    [
-      companyId,
-      entryNumber,
-      txnDate,
-      `AI Auto-Posted: ${item.description}`,
-      item.bank_transaction_id,
-      // Use a system user ID — for auto-posted entries we use a placeholder
-      // In production this would be a dedicated system user
-      '00000000-0000-0000-0000-000000000000',
-    ]
-  );
-
-  const journalEntryId = entry.id;
-
-  // For payments (amount > 0 in queue = absolute value of bank debit):
-  // If original bank txn was negative (debit/payment):
-  //   Debit the expense/suggested account, Credit the bank account
-  // If original bank txn was positive (credit/deposit):
-  //   Debit the bank account, Credit the income/suggested account
-
-  // Check the original bank transaction direction
-  let isDebit = true; // default: payment out
+  // Determine posting direction from the source bank transaction.
+  let isDebit = true;
   if (item.bank_transaction_id) {
     const { rows: [bankTxn] } = await pool.query(
       `SELECT amount FROM bank_transactions WHERE id = $1`,
       [item.bank_transaction_id]
     );
-    if (bankTxn && bankTxn.amount > 0) {
-      isDebit = false; // credit/deposit
-    }
+    if (bankTxn && bankTxn.amount > 0) isDebit = false;
   }
 
-  if (isDebit) {
-    // Payment: Debit expense account, Credit bank account
-    await pool.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-       VALUES ($1, $2, $3, 0, $4)`,
-      [journalEntryId, item.suggested_account_id, amount, item.description]
-    );
-    await pool.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-       VALUES ($1, $2, 0, $3, $4)`,
-      [journalEntryId, bankAccountId, amount, item.description]
-    );
-  } else {
-    // Deposit: Debit bank account, Credit income/suggested account
-    await pool.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-       VALUES ($1, $2, $3, 0, $4)`,
-      [journalEntryId, bankAccountId, amount, item.description]
-    );
-    await pool.query(
-      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-       VALUES ($1, $2, 0, $3, $4)`,
-      [journalEntryId, item.suggested_account_id, amount, item.description]
-    );
-  }
+  // All writes in a single transaction with an advisory lock per company so
+  // concurrent auto-post runs cannot produce duplicate entry numbers and a
+  // failure halfway through rolls back both the entry and its lines.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [companyId]);
 
-  return journalEntryId;
+    const dateStr = txnDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `JE-${dateStr}`;
+    const { rows: existing } = await client.query(
+      `SELECT COUNT(*)::int AS count FROM journal_entries
+       WHERE company_id = $1 AND entry_number LIKE $2`,
+      [companyId, `${prefix}-%`]
+    );
+    const nextNum = existing[0].count + 1;
+    const entryNumber = `${prefix}-${String(nextNum).padStart(3, '0')}`;
+
+    const { rows: [entry] } = await client.query(
+      `INSERT INTO journal_entries
+       (company_id, entry_number, date, memo, status, source, source_id, created_by, posted_by, posted_at)
+       VALUES ($1, $2, $3, $4, 'posted', 'system', $5, $6, $6, now())
+       RETURNING id`,
+      [
+        companyId,
+        entryNumber,
+        txnDate,
+        `AI Auto-Posted: ${item.description}`,
+        item.bank_transaction_id,
+        // Placeholder system-user ID used for auto-posted entries.
+        '00000000-0000-0000-0000-000000000000',
+      ]
+    );
+    const journalEntryId = entry.id;
+
+    const [firstAccount, secondAccount] = isDebit
+      ? [item.suggested_account_id, bankAccountId]
+      : [bankAccountId, item.suggested_account_id];
+
+    await client.query(
+      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+       VALUES ($1, $2, $3, 0, $4)`,
+      [journalEntryId, firstAccount, amount, item.description]
+    );
+    await client.query(
+      `INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+       VALUES ($1, $2, 0, $3, $4)`,
+      [journalEntryId, secondAccount, amount, item.description]
+    );
+
+    await client.query('COMMIT');
+    return journalEntryId;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**
