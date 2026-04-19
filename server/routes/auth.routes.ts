@@ -10,6 +10,7 @@ import {
   generateToken,
   generateRefreshToken,
   verifyRefreshToken,
+  decodeTokenUnsafe,
 } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { insertUserSchema } from '../../shared/schema';
@@ -231,13 +232,29 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ message: 'Invalid or expired refresh token' });
       }
 
+      // Revocation check — refresh tokens are long-lived (7d), so a
+      // denylist hit here is the main defence against a stolen refresh
+      // token being replayed after logout.
+      if (payload.jti && (await storage.isJwtRevoked(payload.jti))) {
+        return res.status(401).json({ message: 'Refresh token has been revoked' });
+      }
+
       // Verify user still exists in DB
       const user = await storage.getUser(payload.userId);
       if (!user) {
         return res.status(401).json({ message: 'User not found' });
       }
 
-      // Issue new access + refresh tokens
+      // Refresh-token rotation: revoke the one we just consumed so it
+      // cannot be replayed, and issue a fresh pair.
+      if (payload.jti && payload.exp) {
+        await storage.revokeJwt(
+          payload.jti,
+          new Date(payload.exp * 1000),
+          user.id,
+          'refresh_rotation',
+        );
+      }
       const newToken = generateToken(user);
       const newRefreshToken = generateRefreshToken(user);
 
@@ -248,13 +265,31 @@ export function registerAuthRoutes(app: Express): void {
     })
   );
 
-  // Logout endpoint — acknowledge the request and let the client discard
-  // its tokens. Access tokens are stateless JWTs so they remain valid
-  // until expiry; a follow-up change will add a revocation list keyed on
-  // token jti so we can enforce server-side revocation at /refresh-token.
+  // Logout endpoint — revokes both the access token (from Authorization
+  // header) and the refresh token (from body) by adding their jti to the
+  // denylist table. Expired tokens are skipped; malformed tokens are a
+  // no-op (we still return 200 so the client proceeds with its local
+  // cleanup). Subsequent requests using either revoked token are
+  // rejected in authMiddleware.
   router.post(
     '/auth/logout',
-    asyncHandler(async (_req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
+      const revokeIfValid = async (raw: string | undefined, reason: string) => {
+        if (!raw) return;
+        const decoded = decodeTokenUnsafe(raw);
+        if (!decoded?.jti || !decoded.exp) return;
+        const expiresAt = new Date(decoded.exp * 1000);
+        if (expiresAt.getTime() < Date.now()) return; // already expired
+        await storage.revokeJwt(decoded.jti, expiresAt, decoded.userId, reason);
+      };
+
+      const authHeader = req.headers.authorization;
+      const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+      const refreshToken: string | undefined = req.body?.refreshToken;
+
+      await revokeIfValid(accessToken, 'logout');
+      await revokeIfValid(refreshToken, 'logout');
+
       res.json({ ok: true });
     }),
   );

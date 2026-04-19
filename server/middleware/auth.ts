@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import { storage } from '../storage';
 import { getEnv } from '../config/env';
 import { createLogger } from '../config/logger';
@@ -39,6 +40,7 @@ declare global {
 interface JwtPayload {
   userId: string;
   email: string;
+  jti?: string;
   iat?: number;
   exp?: number;
 }
@@ -61,6 +63,15 @@ export async function authMiddleware(
   const token = authHeader.substring(7);
   try {
     const decoded = jwt.verify(token, getEnv().JWT_SECRET) as JwtPayload;
+
+    // Revocation check — a token that was present at logout (or during a
+    // password change, or admin-revoked) is refused here even though its
+    // signature is still valid. Tokens issued before we added the jti
+    // claim have no `jti` and skip the check; they'll naturally expire.
+    if (decoded.jti && (await storage.isJwtRevoked(decoded.jti))) {
+      res.status(401).json({ message: 'Token has been revoked' });
+      return;
+    }
 
     // Always fetch user from DB — never trust JWT claims for authorization
     const user = await storage.getUser(decoded.userId);
@@ -173,7 +184,7 @@ export function requireUserType(...allowedTypes: string[]) {
 export function generateToken(user: { id: string; email: string }): string {
   const env = getEnv();
   return jwt.sign(
-    { userId: user.id, email: user.email },
+    { userId: user.id, email: user.email, jti: randomUUID() },
     env.JWT_SECRET,
     { expiresIn: '24h' }
   );
@@ -185,10 +196,25 @@ export function generateToken(user: { id: string; email: string }): string {
 export function generateRefreshToken(user: { id: string; email: string }): string {
   const env = getEnv();
   return jwt.sign(
-    { userId: user.id, email: user.email, type: 'refresh' },
+    { userId: user.id, email: user.email, type: 'refresh', jti: randomUUID() },
     env.JWT_SECRET,
     { expiresIn: '7d' }
   );
+}
+
+/**
+ * Decode a token without verifying its signature. Used by /auth/logout
+ * so we can read the jti + exp of a token we're about to revoke even if
+ * its signature is past expiry (no point adding an already-expired token
+ * to the denylist, but the logout should still succeed).
+ */
+export function decodeTokenUnsafe(token: string): JwtPayload | null {
+  try {
+    const decoded = jwt.decode(token) as JwtPayload | null;
+    return decoded;
+  } catch {
+    return null;
+  }
 }
 
 /**

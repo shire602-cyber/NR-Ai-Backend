@@ -47,12 +47,36 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 // ─── Session configuration ───────────────────────────────────
-const MemoryStoreSession = MemoryStore(session);
+// Pick a session store based on REDIS_URL: when it is set we persist
+// sessions to Redis so they survive restarts and can be shared across
+// replicas; when it is not set we fall back to an in-process
+// MemoryStore (fine for local dev; in production this means users are
+// logged out on every deploy/restart, which is why REDIS_URL should be
+// set on the Railway service).
+let sessionStore: session.Store;
+if (env.REDIS_URL) {
+  const { createClient } = await import('redis');
+  const { RedisStore } = await import('connect-redis');
+  const redisClient = createClient({ url: env.REDIS_URL });
+  redisClient.on('error', (err: unknown) => log.error({ err }, 'Redis client error'));
+  await redisClient.connect();
+  sessionStore = new RedisStore({ client: redisClient, prefix: 'muhasib:sess:' });
+  log.info('Session store: Redis');
+} else {
+  const MemoryStoreSession = MemoryStore(session);
+  sessionStore = new MemoryStoreSession({
+    checkPeriod: 86400000, // Prune expired entries every 24h
+  });
+  if (isProduction()) {
+    log.warn('REDIS_URL not set — using in-memory sessions. All users will be logged out on every restart.');
+  } else {
+    log.info('Session store: in-memory');
+  }
+}
+
 app.use(
   session({
-    store: new MemoryStoreSession({
-      checkPeriod: 86400000, // Prune expired entries every 24h
-    }),
+    store: sessionStore,
     secret: env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,

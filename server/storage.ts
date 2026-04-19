@@ -162,17 +162,23 @@ import {
   costCenters,
   fixedAssetCategories,
   fixedAssets,
-  depreciationSchedules
+  depreciationSchedules,
+  jwtRevocations
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, lte, sql } from "drizzle-orm";
+import { eq, and, desc, lte, sql, lt } from "drizzle-orm";
 
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  
+
+  // JWT revocation
+  revokeJwt(jti: string, expiresAt: Date, userId?: string, reason?: string): Promise<void>;
+  isJwtRevoked(jti: string): Promise<boolean>;
+  pruneExpiredJwtRevocations(): Promise<number>;
+
   // Companies
   getCompany(id: string): Promise<Company | undefined>;
   getCompanyByName(name: string): Promise<Company | undefined>;
@@ -697,6 +703,37 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  // JWT revocation
+  async revokeJwt(jti: string, expiresAt: Date, userId?: string, reason?: string): Promise<void> {
+    // INSERT ... ON CONFLICT DO NOTHING — logging out twice or calling
+    // revoke on a jti that is already denylisted is a no-op rather than
+    // an error.
+    await db
+      .insert(jwtRevocations)
+      .values({ jti, userId: userId ?? null, reason: reason ?? 'logout', expiresAt })
+      .onConflictDoNothing({ target: jwtRevocations.jti });
+  }
+
+  async isJwtRevoked(jti: string): Promise<boolean> {
+    const [row] = await db
+      .select({ jti: jwtRevocations.jti })
+      .from(jwtRevocations)
+      .where(eq(jwtRevocations.jti, jti))
+      .limit(1);
+    return Boolean(row);
+  }
+
+  async pruneExpiredJwtRevocations(): Promise<number> {
+    // Called by the scheduler. Rows whose original token expiry has
+    // passed no longer need to be in the denylist (the signature check
+    // will reject them on its own).
+    const result = await db
+      .delete(jwtRevocations)
+      .where(lt(jwtRevocations.expiresAt, new Date()))
+      .returning({ id: jwtRevocations.id });
+    return result.length;
   }
 
   // Companies
