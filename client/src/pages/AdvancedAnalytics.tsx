@@ -92,6 +92,12 @@ export default function AdvancedAnalytics() {
     enabled: !!companyId,
   });
 
+  // Fetch budget vs actual
+  const { data: budgetData, isLoading: budgetLoading } = useQuery<BudgetVsActual[]>({
+    queryKey: ['/api/analytics/budget-vs-actual', companyId, budgetYear, budgetMonth],
+    enabled: !!companyId,
+  });
+
   // Aggregate totals from actual forecast rows. Previously these tiles rendered
   // hardcoded demo numbers (520000 / 423000 / 97000) regardless of data.
   const projectedInflow = (forecasts ?? []).reduce(
@@ -113,12 +119,6 @@ export default function AdvancedAnalytics() {
     0,
   );
   const totalVariance = totalActual - totalBudgeted;
-
-  // Fetch budget vs actual
-  const { data: budgetData, isLoading: budgetLoading } = useQuery<BudgetVsActual[]>({
-    queryKey: ['/api/analytics/budget-vs-actual', companyId, budgetYear, budgetMonth],
-    enabled: !!companyId,
-  });
 
   // Fetch KPIs
   const { data: kpis, isLoading: kpisLoading } = useQuery<FinancialKPI[]>({
