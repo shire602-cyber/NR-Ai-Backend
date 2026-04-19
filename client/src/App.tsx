@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, Suspense, lazy } from 'react';
 import { Switch, Route, useLocation, Link } from 'wouter';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -28,7 +28,10 @@ import JournalEntryDetail from '@/pages/JournalEntryDetail';
 import Reports from '@/pages/Reports';
 import AICFO from '@/pages/AICFO';
 import AIChat from '@/pages/AIChat';
-import Receipts from '@/pages/Receipts';
+// Receipts ships tesseract.js (~14 MB) and pdfjs-dist (~5 MB) for OCR.
+// Lazy-load so those only hit the wire when a user actually opens /receipts
+// instead of blocking first paint for every page in the app.
+const Receipts = lazy(() => import('@/pages/Receipts'));
 import CustomerContacts from '@/pages/CustomerContacts';
 import Landing from '@/pages/Landing';
 import Services from '@/pages/Services';
@@ -138,7 +141,15 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
                 transition={{ duration: 0.3, ease: "easeOut" }}
               >
             <ErrorBoundary key={location} label={`route:${location}`} isolate>
-              {children}
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
+                    Loading…
+                  </div>
+                }
+              >
+                {children}
+              </Suspense>
             </ErrorBoundary>
               </motion.div>
             </AnimatePresence>
