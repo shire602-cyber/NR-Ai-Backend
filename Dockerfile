@@ -3,33 +3,59 @@
 # Multi-stage build for optimal size
 # ===================================
 
-# Stage 1: Install ALL dependencies and build
+# RAILWAY_GIT_COMMIT_SHA is injected by Railway and is different on every
+# deploy. We declare it as a build ARG at the very top so every subsequent
+# layer sees it in its cache key — any source change produces a new SHA
+# and invalidates the whole build. Without this, Railway was happily
+# reusing a stale "cached" builder stage forever.
+ARG RAILWAY_GIT_COMMIT_SHA=local
+
+# ---------------------------------------------------------------------------
+# Stage 1: Install dependencies and build the client + server bundles
+# ---------------------------------------------------------------------------
 FROM node:20-alpine AS builder
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}
 WORKDIR /app
+
+# Dependency layer — cacheable. Only invalidates when lockfile changes.
 COPY package.json package-lock.json ./
-RUN npm ci || npm install
+RUN npm ci
+
+# Source layer — tagged with the commit SHA so Railway's cache key
+# changes every deploy. Without this tag the layer can be erroneously
+# reused when source IS changed but Docker thinks the context is the
+# same (which was happening in production).
+RUN echo "source-sha: ${RAILWAY_GIT_COMMIT_SHA}" > /tmp/source-sha
 COPY . .
 RUN npm run build
 
+# ---------------------------------------------------------------------------
 # Stage 2: Install production dependencies only
+# ---------------------------------------------------------------------------
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 
-# Stage 3: Production image
+# ---------------------------------------------------------------------------
+# Stage 3: Minimal production image
+# ---------------------------------------------------------------------------
 FROM node:20-alpine
-WORKDIR /app
-
+ARG RAILWAY_GIT_COMMIT_SHA
 ENV NODE_ENV=production
+ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}
+WORKDIR /app
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 muhasib
 
 COPY --from=deps /app/node_modules ./node_modules
 
-# Force cache invalidation — date changes every build so nothing below can be cached
-RUN echo "build-timestamp: $(date -u +%Y%m%d%H%M%S)" > /app/.build-info
+# Same SHA trick: guarantees every layer below is re-evaluated on every
+# new commit. Also leaves a /app/.build-info file that ops can cat to
+# verify which commit is running.
+RUN echo "git-sha: ${RAILWAY_GIT_COMMIT_SHA}" > /app/.build-info
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
