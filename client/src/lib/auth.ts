@@ -17,7 +17,14 @@ export function removeToken(): void {
 
 export function getStoredUser(): any {
   const userStr = localStorage.getItem(USER_KEY);
-  return userStr ? JSON.parse(userStr) : null;
+  if (!userStr) return null;
+  try {
+    return JSON.parse(userStr);
+  } catch {
+    // Corrupt payload — clear it so the user isn't stuck
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
 }
 
 export function setStoredUser(user: any): void {

@@ -207,7 +207,14 @@ export default function ActivityLogs() {
                       <p className="font-medium">{log.description}</p>
                       {log.metadata && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          {JSON.parse(log.metadata).changes?.join(', ') || ''}
+                          {(() => {
+                            try {
+                              const parsed = JSON.parse(log.metadata);
+                              return parsed?.changes?.join(', ') || '';
+                            } catch {
+                              return '';
+                            }
+                          })()}
                         </p>
                       )}
                     </TableCell>

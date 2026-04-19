@@ -358,7 +358,15 @@ export function HelpTip({ tipKey, children }: { tipKey: string; children: React.
     return null;
   }
 
-  const dismissedTips = onboarding.dismissedTips ? JSON.parse(onboarding.dismissedTips) : [];
+  let dismissedTips: string[] = [];
+  if (onboarding.dismissedTips) {
+    try {
+      const parsed = JSON.parse(onboarding.dismissedTips);
+      if (Array.isArray(parsed)) dismissedTips = parsed;
+    } catch {
+      // Corrupt payload from API — treat as no dismissed tips
+    }
+  }
   if (dismissedTips.includes(tipKey)) {
     return null;
   }
