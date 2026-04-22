@@ -177,7 +177,7 @@ export default function CustomerContacts() {
         setPreviewData(mappedData);
         toast({ title: `Found ${mappedData.length} contacts in ${selectedFile.name}` });
       } catch (err: any) {
-        toast({ variant: 'destructive', title: 'Failed to parse file', description: err.message });
+        toast({ variant: 'destructive', title: 'Failed to parse file', description: err?.message || 'Unknown parse error' });
       }
     };
     reader.readAsBinaryString(selectedFile);

@@ -191,7 +191,7 @@ export default function Payroll() {
       queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/payroll`] });
       toast({ title: 'WPS File Generated', description: 'SIF file has been downloaded.' });
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error', description: err?.message || 'Unknown error generating WPS file', variant: 'destructive' });
     }
   };
 
