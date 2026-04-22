@@ -173,6 +173,8 @@ async function bootstrap() {
     log.info(`✓ Server running at http://localhost:${port}`);
     log.info(`✓ Database: ${env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
     log.info(`✓ AI: ${env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}`);
+    log.info(`✓ Build SHA: ${buildSha} (short: ${buildSha.slice(0, 7)})`);
+    log.info(`✓ Healthcheck: /api/version`);
   });
 
   server.on('error', (error: NodeJS.ErrnoException) => {

@@ -113,7 +113,7 @@ async function scanCompanyPaymentReminders(companyId: string) {
         ruleType: 'due_in_3_days',
         sentKeys,
         title: `Payment reminder: Invoice #${inv.number} due in 3 days`,
-        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${inv.total.toFixed(2)}) is due on ${dueDateStart.toLocaleDateString('en-AE')}. Consider sending a WhatsApp reminder.`,
+        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${Number(inv.total ?? 0).toFixed(2)}) is due on ${dueDateStart.toLocaleDateString('en-AE')}. Consider sending a WhatsApp reminder.`,
         priority: 'normal',
       });
     }
@@ -127,7 +127,7 @@ async function scanCompanyPaymentReminders(companyId: string) {
         ruleType: 'due_today',
         sentKeys,
         title: `Payment due today: Invoice #${inv.number}`,
-        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${inv.total.toFixed(2)}) is due today. Send a WhatsApp reminder to follow up.`,
+        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${Number(inv.total ?? 0).toFixed(2)}) is due today. Send a WhatsApp reminder to follow up.`,
         priority: 'high',
       });
     }
@@ -141,7 +141,7 @@ async function scanCompanyPaymentReminders(companyId: string) {
         ruleType: 'overdue_7_days',
         sentKeys,
         title: `Overdue: Invoice #${inv.number} (${Math.abs(diffDays)} days)`,
-        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${inv.total.toFixed(2)}) is ${Math.abs(diffDays)} days overdue. Send a WhatsApp follow-up to collect payment.`,
+        message: `Invoice #${inv.number} for ${inv.customerName} (AED ${Number(inv.total ?? 0).toFixed(2)}) is ${Math.abs(diffDays)} days overdue. Send a WhatsApp follow-up to collect payment.`,
         priority: 'urgent',
       });
     }
