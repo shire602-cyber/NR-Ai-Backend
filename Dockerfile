@@ -23,11 +23,19 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Source layer — tagged with the commit SHA so Railway's cache key
-# changes every deploy. Without this tag the layer can be erroneously
-# reused when source IS changed but Docker thinks the context is the
-# same (which was happening in production).
-RUN echo "source-sha: ${RAILWAY_GIT_COMMIT_SHA}" > /tmp/source-sha
+# changes every deploy. We embed the SHA in TWO places to defeat
+# layer reuse: a label (which is part of the image manifest) and
+# a file that the build step reads. Without this Railway was
+# reusing the entire builder stage between deploys of the same
+# branch, which is why the dist/ produced was sometimes stale.
+LABEL railway.commit-sha="${RAILWAY_GIT_COMMIT_SHA}"
+RUN echo "source-sha: ${RAILWAY_GIT_COMMIT_SHA}" > /tmp/source-sha && \
+    echo "build-time: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/source-sha
 COPY . .
+# Touch a sentinel that includes the SHA so even `npm run build`'s
+# cache key changes — Vite content-hashes by source, so identical
+# source produces identical chunks; we don't try to fight that.
+RUN echo "${RAILWAY_GIT_COMMIT_SHA}" > /app/.commit-sha
 RUN npm run build
 
 # ---------------------------------------------------------------------------

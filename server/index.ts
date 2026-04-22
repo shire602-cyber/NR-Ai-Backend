@@ -98,13 +98,37 @@ import './auth';
 app.use(requestLogger);
 
 // ─── Health check (before auth, always accessible) ───────────
+// Read /app/.build-info once at startup so /health and /api/version
+// can return which git SHA is actually live. This is the source of
+// truth when Fastly/CDN caching makes us doubt what's deployed.
+let buildSha = process.env.RAILWAY_GIT_COMMIT_SHA || 'unknown';
+try {
+  const info = fs.readFileSync('/app/.build-info', 'utf-8').trim();
+  const m = info.match(/git-sha:\s*([0-9a-f]+)/i);
+  if (m) buildSha = m[1];
+} catch {
+  // file only exists in the Docker image; ignore on local
+}
+
 app.get('/health', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: env.NODE_ENV,
     version: '1.0.0',
+    sha: buildSha.slice(0, 7),
+  });
+});
+
+app.get('/api/version', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({
+    sha: buildSha,
+    short: buildSha.slice(0, 7),
+    startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    uptime: process.uptime(),
   });
 });
 
