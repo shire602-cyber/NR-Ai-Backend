@@ -262,21 +262,29 @@ export function checkUsageLimit(resource: 'invoices' | 'receipts' | 'aiCredits')
       return;
     }
 
-    // Increment usage after passing check
+    // Register post-response increment so the counter only advances when the
+    // handler actually succeeds (2xx). Pre-incrementing caused quota loss on
+    // any handler failure and made race conditions immediately destructive.
     const companyId = req.params.companyId || req.body?.companyId;
     if (companyId && subscription) {
-      try {
-        if (resource === 'invoices') {
-          await storage.incrementInvoiceCount(companyId);
-        } else if (resource === 'receipts') {
-          await storage.incrementReceiptCount(companyId);
-        } else if (resource === 'aiCredits') {
-          await storage.decrementAiCredits(companyId);
+      res.on('finish', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const doIncrement = async () => {
+            try {
+              if (resource === 'invoices') {
+                await storage.incrementInvoiceCount(companyId);
+              } else if (resource === 'receipts') {
+                await storage.incrementReceiptCount(companyId);
+              } else if (resource === 'aiCredits') {
+                await storage.decrementAiCredits(companyId);
+              }
+            } catch (error) {
+              log.error({ error, companyId, resource }, 'Failed to increment usage counter');
+            }
+          };
+          doIncrement();
         }
-      } catch (error) {
-        log.error({ error, companyId, resource }, 'Failed to increment usage counter');
-        // Don't block the request if counter update fails
-      }
+      });
     }
 
     next();

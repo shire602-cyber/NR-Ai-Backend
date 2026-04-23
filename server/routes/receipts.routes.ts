@@ -5,6 +5,9 @@ import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { checkUsageLimit } from '../middleware/featureGate';
 import { insertInvoiceSchema } from '../../shared/schema';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('receipts');
 
 export function registerReceiptRoutes(app: Express) {
   // =====================================
@@ -95,14 +98,7 @@ export function registerReceiptRoutes(app: Express) {
 
     const receiptData = req.body;
 
-    console.log('[Receipts] Creating receipt:', {
-      companyId,
-      userId,
-      merchant: receiptData.merchant,
-      amount: receiptData.amount,
-      hasImageData: !!receiptData.imageData,
-      imageDataLength: receiptData.imageData?.length
-    });
+    log.info({ companyId, merchant: receiptData.merchant, hasImageData: !!receiptData.imageData }, 'Creating receipt');
 
     const receipt = await storage.createReceipt({
       ...receiptData,
@@ -111,7 +107,7 @@ export function registerReceiptRoutes(app: Express) {
       uploadedBy: userId,
     });
 
-    console.log('[Receipts] Receipt created successfully:', receipt.id);
+    log.info({ receiptId: receipt.id }, 'Receipt created');
     res.json(receipt);
   }));
 

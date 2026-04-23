@@ -15,6 +15,9 @@ import {
 import { asyncHandler } from '../middleware/errorHandler';
 import { insertUserSchema } from '../../shared/schema';
 import { createDefaultAccountsForCompany } from '../defaultChartOfAccounts';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('auth');
 
 // =============================================
 // Helpers (migrated from monolith routes.ts)
@@ -28,7 +31,7 @@ async function seedChartOfAccounts(
 ): Promise<{ created: number; alreadyExisted: boolean }> {
   const hasAccounts = await storage.companyHasAccounts(companyId);
   if (hasAccounts) {
-    console.log(`[Seed COA] Company ${companyId} already has accounts, skipping seed`);
+    log.info({ companyId }, 'Company already has accounts, skipping seed');
     return { created: 0, alreadyExisted: true };
   }
 
@@ -36,13 +39,11 @@ async function seedChartOfAccounts(
 
   try {
     const createdAccounts = await storage.createBulkAccounts(defaultAccounts as any);
-    console.log(`[Seed COA] Created ${createdAccounts.length} accounts for company ${companyId}`);
+    log.info({ companyId, count: createdAccounts.length }, 'Seeded chart of accounts');
     return { created: createdAccounts.length, alreadyExisted: false };
   } catch (error: any) {
     if (error.message?.includes('PARTIAL_INSERT')) {
-      console.error(
-        `[Seed COA] Partial insert detected for company ${companyId}: ${error.message}`
-      );
+      log.error({ companyId, message: error.message }, 'Partial COA insert detected');
       throw new Error(
         'PARTIAL_CHART: Chart of Accounts partially created due to race condition. Please contact support.'
       );
@@ -339,6 +340,9 @@ export function registerAuthRoutes(app: Express): void {
       const { token } = req.params;
       const { name, password } = req.body;
 
+      const nameSchema = z.string().min(1, 'Name is required').max(100, 'Name too long');
+      nameSchema.parse(name);
+
       // Strengthen password validation (8+ chars)
       passwordSchema.parse(password);
 
@@ -362,12 +366,12 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: 'User already exists with this email' });
       }
 
-      // Create user with appropriate userType from invitation
+      // Create user with appropriate userType from invitation.
+      // Only pass passwordHash — never the raw password.
       const passwordHash = await bcrypt.hash(password, 10);
       const user = await storage.createUser({
         email: invitation.email,
         name,
-        password,
         isAdmin: invitation.role === 'staff' || invitation.userType === 'admin',
         userType: invitation.userType || 'client',
         passwordHash,
@@ -406,7 +410,6 @@ export function registerAuthRoutes(app: Express): void {
       });
 
       // Generate tokens for immediate login
-      const isAdminBoolean = user.isAdmin === true;
       const jwtToken = generateToken(user);
       const refreshToken = generateRefreshToken(user);
 

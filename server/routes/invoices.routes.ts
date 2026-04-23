@@ -8,6 +8,9 @@ import { insertInvoiceSchema } from '../../shared/schema';
 import { generateInvoicePDF } from '../services/pdf-invoice.service';
 import { generateEInvoiceXML } from '../services/einvoice.service';
 import { checkUsageLimit } from '../middleware/featureGate';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('invoices');
 
 export function registerInvoiceRoutes(app: Express) {
   // =====================================
@@ -111,6 +114,10 @@ export function registerInvoiceRoutes(app: Express) {
     const userId = (req as any).user.id;
     const { lines, date, ...invoiceData } = req.body;
 
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return res.status(400).json({ message: 'Invoice must have at least one line item' });
+    }
+
     // Check if user has access to this company
     const hasAccess = await storage.hasCompanyAccess(userId, companyId);
     if (!hasAccess) {
@@ -122,6 +129,9 @@ export function registerInvoiceRoutes(app: Express) {
     let vatAmount = 0;
 
     for (const line of lines) {
+      if (typeof line.quantity !== 'number' || typeof line.unitPrice !== 'number') {
+        return res.status(400).json({ message: 'Each line must have numeric quantity and unitPrice' });
+      }
       const lineTotal = line.quantity * line.unitPrice;
       subtotal += lineTotal;
       vatAmount += lineTotal * (line.vatRate || 0.05);
@@ -132,16 +142,7 @@ export function registerInvoiceRoutes(app: Express) {
     // Convert date string to Date object if it's a string
     const invoiceDate = typeof date === 'string' ? new Date(date) : date;
 
-    console.log('[Invoices] Creating invoice:', {
-      companyId,
-      userId,
-      number: invoiceData.number,
-      date: invoiceDate,
-      subtotal,
-      vatAmount,
-      total,
-      linesCount: lines.length
-    });
+    log.info({ companyId, number: invoiceData.number, linesCount: lines.length }, 'Creating invoice');
 
     // Create invoice
     const invoice = await storage.createInvoice({
@@ -190,12 +191,12 @@ export function registerInvoiceRoutes(app: Express) {
         journalLines,
       );
 
-      console.log('[Invoices] Revenue recognition journal entry created:', entry.entryNumber, 'for invoice:', invoice.id);
+      log.info({ entryNumber: entry.entryNumber, invoiceId: invoice.id }, 'Revenue recognition journal entry created');
     } else {
-      console.warn('[Invoices] Could not create revenue recognition entry - missing accounts');
+      log.warn({ companyId }, 'Could not create revenue recognition entry - missing chart of accounts');
     }
 
-    console.log('[Invoices] Invoice created successfully:', invoice.id);
+    log.info({ invoiceId: invoice.id }, 'Invoice created');
     res.json(invoice);
   }));
 

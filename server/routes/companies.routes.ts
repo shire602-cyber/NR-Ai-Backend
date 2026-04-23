@@ -4,6 +4,9 @@ import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { insertCompanySchema } from "../../shared/schema";
 import { createDefaultAccountsForCompany } from "../defaultChartOfAccounts";
+import { createLogger } from "../config/logger";
+
+const log = createLogger('companies');
 
 /**
  * Seed Chart of Accounts for a company using the default UAE chart.
@@ -12,7 +15,7 @@ async function seedChartOfAccounts(companyId: string): Promise<{ created: number
   // Check if company already has accounts
   const hasAccounts = await storage.companyHasAccounts(companyId);
   if (hasAccounts) {
-    console.log(`[Seed COA] Company ${companyId} already has accounts, skipping seed`);
+    log.info({ companyId }, 'Company already has accounts, skipping seed');
     return { created: 0, alreadyExisted: true };
   }
 
@@ -21,11 +24,11 @@ async function seedChartOfAccounts(companyId: string): Promise<{ created: number
 
   try {
     const createdAccounts = await storage.createBulkAccounts(defaultAccounts as any);
-    console.log(`[Seed COA] Created ${createdAccounts.length} accounts for company ${companyId}`);
+    log.info({ companyId, count: createdAccounts.length }, 'Seeded chart of accounts');
     return { created: createdAccounts.length, alreadyExisted: false };
   } catch (error: any) {
     if (error.message?.includes('PARTIAL_INSERT')) {
-      console.error(`[Seed COA] Partial insert detected for company ${companyId}: ${error.message}`);
+      log.error({ companyId, message: error.message }, 'Partial COA insert detected');
       throw new Error('PARTIAL_CHART: Chart of Accounts partially created due to race condition. Please contact support.');
     }
     throw error;
@@ -96,24 +99,30 @@ export function registerCompanyRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Prepare update data with proper type conversions
-    const updateData = { ...req.body };
+    // Strip fields that must not be user-writable: companyType determines the
+    // NR-managed vs self-service access model and must only be set by admin
+    // flows (invitation acceptance, admin panel). id/createdAt are immutable.
+    const {
+      companyType: _companyType,
+      id: _id,
+      createdAt: _createdAt,
+      ...userUpdateable
+    } = req.body as Record<string, unknown>;
+
+    const updateData: Record<string, unknown> = { ...userUpdateable };
 
     // Convert taxRegistrationDate to Date if it exists and is not already a Date
     if (updateData.taxRegistrationDate) {
       if (typeof updateData.taxRegistrationDate === 'string') {
-        updateData.taxRegistrationDate = new Date(updateData.taxRegistrationDate);
+        updateData.taxRegistrationDate = new Date(updateData.taxRegistrationDate as string);
       } else if (!(updateData.taxRegistrationDate instanceof Date)) {
-        // If it's not a string or Date, try to coerce it
-        updateData.taxRegistrationDate = new Date(updateData.taxRegistrationDate);
+        updateData.taxRegistrationDate = new Date(updateData.taxRegistrationDate as string);
       }
     } else {
-      // If taxRegistrationDate is undefined or null, ensure it's properly set
       delete updateData.taxRegistrationDate;
     }
 
-    const company = await storage.updateCompany(id, updateData);
-    console.log('[Company Profile] Company updated:', company.id);
+    const company = await storage.updateCompany(id, updateData as any);
     res.json(company);
   }));
 
