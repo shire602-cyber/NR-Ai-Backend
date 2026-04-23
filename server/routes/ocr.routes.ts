@@ -6,22 +6,35 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { getEnv } from '../config/env';
 
 export function registerOCRRoutes(app: Express) {
-  // Initialize OpenAI inside function to avoid module-level crash when key is missing
   const apiKey = getEnv().OPENAI_API_KEY;
   const openai = apiKey ? new OpenAI({ apiKey }) : null;
   const AI_MODEL = getEnv().AI_MODEL;
-  // ===========================
-  // OCR Processing Endpoint
-  // ===========================
+  const VISION_MODEL = 'gpt-4o';
 
-  // Process receipt image with OCR and AI categorization
+  const validCategories = [
+    'Office Supplies', 'Utilities', 'Travel', 'Meals',
+    'Rent', 'Marketing', 'Equipment', 'Professional Services',
+    'Insurance', 'Maintenance', 'Communication', 'Other'
+  ];
+
+  const systemPrompt = `You are a receipt data extraction assistant for UAE businesses. Extract the following information from the receipt:
+- merchant: The store/business name
+- date: The transaction date (YYYY-MM-DD format, use today if not found)
+- amount: The subtotal amount before VAT in AED (number only, exclude VAT)
+- vatAmount: The VAT amount in AED (number only, assume 5% of amount if not specified)
+- category: Categorize as one of: ${validCategories.join(', ')}
+- rawText: All readable text from the receipt
+
+Important: All amounts should be in AED. If the receipt shows a different currency, convert to AED.
+If you cannot read the receipt clearly, still try your best to extract whatever you can.
+Respond in JSON format only with these exact field names.`;
+
   app.post("/api/ocr/process", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // Validate and get company for scoping
     const companies = await storage.getCompaniesByUserId(userId);
     if (companies.length === 0) {
       return res.status(404).json({ message: 'No company found' });
@@ -30,13 +43,9 @@ export function registerOCRRoutes(app: Express) {
 
     const { messageId, mediaId, content, imageData } = req.body;
 
-    // Validate input
     const sanitizedContent = content ? String(content).slice(0, 10000) : '';
     const sanitizedMessageId = messageId ? String(messageId).slice(0, 100) : null;
-    const sanitizedMediaId = mediaId ? String(mediaId).slice(0, 100) : null;
 
-    // Default extraction results
-    let rawText = sanitizedContent;
     let extractedData = {
       merchant: 'Unknown Merchant',
       date: new Date().toISOString().split('T')[0],
@@ -44,53 +53,104 @@ export function registerOCRRoutes(app: Express) {
       vatAmount: 0,
       category: 'Office Supplies',
       confidence: 0.5,
-      rawText: rawText,
+      rawText: sanitizedContent,
       companyId: companyId,
       messageId: sanitizedMessageId,
     };
 
-    // Valid expense categories for UAE businesses
-    const validCategories = [
-      'Office Supplies', 'Utilities', 'Travel', 'Meals',
-      'Rent', 'Marketing', 'Equipment', 'Professional Services',
-      'Insurance', 'Maintenance', 'Communication', 'Other'
-    ];
+    if (!openai) {
+      console.error('[OCR] OpenAI API key not configured');
+      return res.status(500).json({ message: 'OCR service not configured. Please set OPENAI_API_KEY.' });
+    }
 
-    // Try to use AI to extract structured data from text
-    if (sanitizedContent && openai) {
+    // Strategy 1: Image-based OCR using GPT-4o Vision
+    if (imageData) {
       try {
+        console.log('[OCR] Processing image with GPT-4o Vision...');
+
+        let base64Image = imageData;
+        let mimeType = 'image/jpeg';
+        const dataUrlMatch = imageData.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (dataUrlMatch) {
+          mimeType = dataUrlMatch[1];
+          base64Image = dataUrlMatch[2];
+        }
+
+        const imageUrl = `data:${mimeType};base64,${base64Image}`;
+
+        const aiResponse = await openai.chat.completions.create({
+          model: VISION_MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Extract all receipt data from this image. Read every line of text carefully." },
+                { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
+              ],
+            },
+          ],
+          response_format: { type: "json_object" },
+          max_tokens: 1000,
+        });
+
+        const responseContent = aiResponse.choices[0]?.message?.content || '{}';
+        console.log('[OCR] Vision API response:', responseContent.slice(0, 200));
+        const aiResult = JSON.parse(responseContent);
+
+        const parsedAmount = parseFloat(aiResult.amount);
+        const parsedVat = parseFloat(aiResult.vatAmount);
+        const category = validCategories.includes(aiResult.category) ? aiResult.category : 'Other';
+
+        let parsedDate = extractedData.date;
+        if (aiResult.date && /^\d{4}-\d{2}-\d{2}$/.test(aiResult.date)) {
+          parsedDate = aiResult.date;
+        }
+
+        extractedData = {
+          merchant: aiResult.merchant ? String(aiResult.merchant).slice(0, 200) : extractedData.merchant,
+          date: parsedDate,
+          amount: !isNaN(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0,
+          vatAmount: !isNaN(parsedVat) && parsedVat >= 0 ? parsedVat : 0,
+          category: category,
+          confidence: 0.95,
+          rawText: aiResult.rawText ? String(aiResult.rawText).slice(0, 10000) : '',
+          companyId: companyId,
+          messageId: sanitizedMessageId,
+        };
+
+        console.log('[OCR] Vision extraction successful:', { merchant: extractedData.merchant, amount: extractedData.amount, date: extractedData.date });
+        return res.json(extractedData);
+      } catch (visionError: any) {
+        console.error('[OCR] Vision API error:', visionError?.message || 'Unknown error');
+        if (!sanitizedContent) {
+          return res.status(422).json({
+            message: 'Failed to process receipt image. Please try again or enter data manually.',
+            error: visionError?.message || 'Vision API error',
+          });
+        }
+      }
+    }
+
+    // Strategy 2: Text-based extraction fallback
+    if (sanitizedContent) {
+      try {
+        console.log('[OCR] Processing text with AI...');
         const aiResponse = await openai.chat.completions.create({
           model: AI_MODEL,
           messages: [
-            {
-              role: "system",
-              content: `You are a receipt data extraction assistant for UAE businesses. Extract the following information from receipt text:
-                - merchant: The store/business name
-                - date: The transaction date (YYYY-MM-DD format, use today if not found)
-                - amount: The subtotal amount before VAT in AED (number only, exclude VAT)
-                - vatAmount: The VAT amount in AED (number only, assume 5% of amount if not specified)
-                - category: Categorize as one of: ${validCategories.join(', ')}
-
-                Important: All amounts should be in AED. If the receipt shows a different currency, convert to AED.
-                Respond in JSON format only with these exact field names.`
-            },
-            {
-              role: "user",
-              content: `Extract receipt data from this text:\n\n${sanitizedContent}`
-            }
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Extract receipt data from this text:\n\n${sanitizedContent}` },
           ],
           response_format: { type: "json_object" },
           max_tokens: 500,
         });
 
         const aiResult = JSON.parse(aiResponse.choices[0]?.message?.content || '{}');
-
-        // Validate and sanitize AI response
         const parsedAmount = parseFloat(aiResult.amount);
         const parsedVat = parseFloat(aiResult.vatAmount);
         const category = validCategories.includes(aiResult.category) ? aiResult.category : 'Other';
 
-        // Validate date format
         let parsedDate = extractedData.date;
         if (aiResult.date && /^\d{4}-\d{2}-\d{2}$/.test(aiResult.date)) {
           parsedDate = aiResult.date;
@@ -108,8 +168,7 @@ export function registerOCRRoutes(app: Express) {
           messageId: sanitizedMessageId,
         };
       } catch (aiError: any) {
-        console.log('AI extraction error:', aiError.message || 'Unknown error');
-        // Return default data with lower confidence
+        console.log('[OCR] AI text extraction error:', aiError?.message || 'Unknown error');
         extractedData.confidence = 0.3;
       }
     }
