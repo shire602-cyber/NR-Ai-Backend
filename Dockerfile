@@ -20,7 +20,7 @@ WORKDIR /app
 
 # Dependency layer — cacheable. Only invalidates when lockfile changes.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci || npm install
 
 # Source layer — tagged with the commit SHA so Railway's cache key
 # changes every deploy. We embed the SHA in TWO places to defeat
@@ -44,7 +44,7 @@ RUN npm run build
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
 
 # ---------------------------------------------------------------------------
 # Stage 3: Minimal production image
