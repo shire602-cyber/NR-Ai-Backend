@@ -2,22 +2,56 @@ import type { Request, Response } from 'express';
 import { Router } from 'express';
 import type { Express } from 'express';
 import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 
 import { storage } from '../storage';
 import { getEnv } from '../config/env';
 import {
+  authMiddleware,
   generateToken,
   generateRefreshToken,
   verifyRefreshToken,
   decodeTokenUnsafe,
 } from '../middleware/auth';
+import {
+  clearAuthCookies,
+  getAccessTokenFromRequest,
+  getRefreshTokenFromRequest,
+  setAuthCookies,
+} from '../services/auth-cookies.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { insertUserSchema } from '../../shared/schema';
 import { createDefaultAccountsForCompany } from '../defaultChartOfAccounts';
 import { createLogger } from '../config/logger';
 
 const log = createLogger('auth');
+
+function publicUser(user: any) {
+  const { passwordHash: _passwordHash, password: _password, ...safeUser } = user;
+  return safeUser;
+}
+
+function issueAuthTokens(res: Response, user: { id: string; email: string; isAdmin?: boolean; userType?: string }) {
+  const token = generateToken(user);
+  const refreshToken = generateRefreshToken(user);
+  setAuthCookies(res, token, refreshToken);
+  return { token, refreshToken };
+}
+
+function loginRateLimitKey(req: Request): string {
+  const rawEmail = (req.body as { email?: unknown } | undefined)?.email;
+  const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : 'unknown';
+  return `${req.ip || 'unknown'}:${email || 'unknown'}`;
+}
+
+function retryAfterSeconds(req: Request, fallbackSeconds: number): number {
+  const resetTime = (req as any).rateLimit?.resetTime;
+  if (resetTime instanceof Date) {
+    return Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000));
+  }
+  return fallbackSeconds;
+}
 
 // =============================================
 // Helpers (migrated from monolith routes.ts)
@@ -148,9 +182,7 @@ export function registerAuthRoutes(app: Express): void {
         usagePeriodStart: now,
       });
 
-      // Generate tokens
-      const token = generateToken(user);
-      const refreshToken = generateRefreshToken(user);
+      const { token, refreshToken } = issueAuthTokens(res, user);
 
       res.json({
         token,
@@ -176,9 +208,26 @@ export function registerAuthRoutes(app: Express): void {
   // timing signal that distinguishes "no such user" from "wrong password"
   // and prevents email enumeration via response-time measurement.
   const DUMMY_HASH = bcrypt.hashSync('account_enumeration_placeholder', 10);
+  const loginLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 8,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+    keyGenerator: loginRateLimitKey,
+    handler: (req, res) => {
+      const retryAfter = retryAfterSeconds(req, 60);
+      res.setHeader('Retry-After', String(retryAfter));
+      res.status(429).json({
+        message: 'Too many login attempts for this email. Please wait before trying again.',
+        details: { retryAfterSeconds: retryAfter },
+      });
+    },
+  });
 
   router.post(
     '/auth/login',
+    loginLimiter,
     asyncHandler(async (req: Request, res: Response) => {
       const { email, password } = req.body;
 
@@ -200,9 +249,7 @@ export function registerAuthRoutes(app: Express): void {
         (user.isAdmin as any) === 'true' ||
         (user.isAdmin as any) === 1;
 
-      // Generate tokens
-      const token = generateToken(user);
-      const refreshToken = generateRefreshToken(user);
+      const { token, refreshToken } = issueAuthTokens(res, user);
 
       res.json({
         token,
@@ -219,51 +266,65 @@ export function registerAuthRoutes(app: Express): void {
   );
 
   // Refresh token endpoint
-  router.post(
-    '/auth/refresh-token',
+  const handleRefreshToken = asyncHandler(async (req: Request, res: Response) => {
+    const refreshToken = req.body?.refreshToken || getRefreshTokenFromRequest(req);
+
+    if (!refreshToken) {
+      return res.status(400).json({ message: 'Refresh token is required' });
+    }
+
+    const payload = verifyRefreshToken(refreshToken);
+    if (!payload) {
+      return res.status(401).json({ message: 'Invalid or expired refresh token' });
+    }
+
+    // Revocation check — refresh tokens are long-lived (7d), so a
+    // denylist hit here is the main defence against a stolen refresh
+    // token being replayed after logout.
+    if (payload.jti && (await storage.isJwtRevoked(payload.jti))) {
+      return res.status(401).json({ message: 'Refresh token has been revoked' });
+    }
+
+    // Verify user still exists in DB
+    const user = await storage.getUser(payload.userId);
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    // Refresh-token rotation: revoke the one we just consumed so it
+    // cannot be replayed, and issue a fresh pair.
+    if (payload.jti && payload.exp) {
+      await storage.revokeJwt(
+        payload.jti,
+        new Date(payload.exp * 1000),
+        user.id,
+        'refresh_rotation',
+      );
+    }
+    const newToken = generateToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+    setAuthCookies(res, newToken, newRefreshToken);
+
+    res.json({
+      token: newToken,
+      refreshToken: newRefreshToken,
+    });
+  });
+
+  router.post('/auth/refresh-token', handleRefreshToken);
+  router.post('/auth/refresh', handleRefreshToken);
+
+  router.get(
+    '/auth/me',
+    authMiddleware as any,
     asyncHandler(async (req: Request, res: Response) => {
-      const { refreshToken } = req.body;
-
-      if (!refreshToken) {
-        return res.status(400).json({ message: 'Refresh token is required' });
-      }
-
-      const payload = verifyRefreshToken(refreshToken);
-      if (!payload) {
-        return res.status(401).json({ message: 'Invalid or expired refresh token' });
-      }
-
-      // Revocation check — refresh tokens are long-lived (7d), so a
-      // denylist hit here is the main defence against a stolen refresh
-      // token being replayed after logout.
-      if (payload.jti && (await storage.isJwtRevoked(payload.jti))) {
-        return res.status(401).json({ message: 'Refresh token has been revoked' });
-      }
-
-      // Verify user still exists in DB
-      const user = await storage.getUser(payload.userId);
+      const userId = (req as any).user.id;
+      const user = await storage.getUser(userId);
       if (!user) {
-        return res.status(401).json({ message: 'User not found' });
+        return res.status(404).json({ message: 'User not found' });
       }
-
-      // Refresh-token rotation: revoke the one we just consumed so it
-      // cannot be replayed, and issue a fresh pair.
-      if (payload.jti && payload.exp) {
-        await storage.revokeJwt(
-          payload.jti,
-          new Date(payload.exp * 1000),
-          user.id,
-          'refresh_rotation',
-        );
-      }
-      const newToken = generateToken(user);
-      const newRefreshToken = generateRefreshToken(user);
-
-      res.json({
-        token: newToken,
-        refreshToken: newRefreshToken,
-      });
-    })
+      res.json(publicUser(user));
+    }),
   );
 
   // Logout endpoint — revokes both the access token (from Authorization
@@ -285,11 +346,14 @@ export function registerAuthRoutes(app: Express): void {
       };
 
       const authHeader = req.headers.authorization;
-      const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
-      const refreshToken: string | undefined = req.body?.refreshToken;
+      const accessToken =
+        getAccessTokenFromRequest(req) ||
+        (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+      const refreshToken: string | undefined = req.body?.refreshToken || getRefreshTokenFromRequest(req) || undefined;
 
       await revokeIfValid(accessToken, 'logout');
       await revokeIfValid(refreshToken, 'logout');
+      clearAuthCookies(res);
 
       res.json({ ok: true });
     }),
@@ -409,12 +473,9 @@ export function registerAuthRoutes(app: Express): void {
         description: `User registered via invitation: ${user.email}`,
       });
 
-      // Generate tokens for immediate login
-      const jwtToken = generateToken(user);
-      const refreshToken = generateRefreshToken(user);
+      const { token: jwtToken, refreshToken } = issueAuthTokens(res, user);
 
-      const { passwordHash: _, ...safeUser } = user;
-      res.json({ user: safeUser, token: jwtToken, refreshToken });
+      res.json({ user: publicUser(user), token: jwtToken, refreshToken });
     })
   );
 

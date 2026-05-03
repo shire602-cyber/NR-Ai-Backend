@@ -11,8 +11,10 @@ import MemoryStore from 'memorystore';
 import passport from 'passport';
 
 import { validateEnv, isProduction, isDevelopment } from './config/env';
+import { authCookieSameSite } from './config/cookies';
 import { createLogger } from './config/logger';
 import { applySecurityMiddleware } from './middleware/security';
+import { csrfProtection, csrfTokenHandler } from './middleware/csrf';
 import { requestLogger } from './middleware/requestLogger';
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { registerRoutes } from './routes';
@@ -84,7 +86,7 @@ app.use(
       secure: isProduction(),
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: 'lax',
+      sameSite: authCookieSameSite(),
     },
   })
 );
@@ -96,6 +98,10 @@ import './auth';
 
 // ─── Request logging ─────────────────────────────────────────
 app.use(requestLogger);
+
+// ─── CSRF support for cookie-authenticated browser mutations ──
+app.get('/api/csrf-token', csrfTokenHandler);
+app.use(csrfProtection);
 
 // ─── Health check (before auth, always accessible) ───────────
 // Read /app/.build-info once at startup so /health and /api/version

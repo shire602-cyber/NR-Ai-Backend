@@ -48,22 +48,29 @@ export function applySecurityMiddleware(app: Express): void {
   );
 
   // ─── CORS: Cross-Origin Resource Sharing ──────────────────
-  const allowedOrigins: string[] = [];
+  const allowedOrigins = new Set<string>();
 
   if (env.FRONTEND_URL) {
-    allowedOrigins.push(env.FRONTEND_URL);
+    allowedOrigins.add(env.FRONTEND_URL);
+  }
+
+  if (env.CORS_ORIGIN) {
+    for (const origin of env.CORS_ORIGIN.split(',')) {
+      const trimmed = origin.trim();
+      if (trimmed) allowedOrigins.add(trimmed);
+    }
   }
 
   // In development, allow localhost origins
   if (!isProduction()) {
-    allowedOrigins.push(
+    [
       'http://localhost:5173',
       'http://localhost:5000',
       'http://localhost:3000',
       'http://127.0.0.1:5173',
       'http://127.0.0.1:5000',
       'http://127.0.0.1:3000'
-    );
+    ].forEach((origin) => allowedOrigins.add(origin));
   }
 
   app.use(
@@ -78,7 +85,7 @@ export function applySecurityMiddleware(app: Express): void {
           return callback(null, true);
         }
 
-        if (allowedOrigins.includes(origin)) {
+        if (allowedOrigins.has(origin)) {
           return callback(null, true);
         }
 
@@ -87,8 +94,8 @@ export function applySecurityMiddleware(app: Express): void {
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-      exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-XSRF-Token'],
+      exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page', 'Retry-After', 'RateLimit-Reset'],
       maxAge: 86400, // Cache preflight for 24 hours
     })
   );
@@ -108,13 +115,15 @@ export function applySecurityMiddleware(app: Express): void {
     },
   });
 
-  // Strict auth rate limit: 5 requests per minute per IP (login, refresh, etc.)
+  // Auth session/general limit. Login has its own email-aware failed-attempt
+  // limiter in auth.routes.ts after JSON body parsing, so this bucket should
+  // not lock out legitimate users behind the same office/shared-network IP.
   const authLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 5,
+    max: 60,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { message: 'Too many authentication attempts. Please wait 1 minute.' },
+    message: { message: 'Too many authentication requests. Please wait before trying again.' },
   });
 
   // Registration is far stricter — creating accounts is the costliest

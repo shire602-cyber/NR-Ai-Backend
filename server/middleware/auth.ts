@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { storage } from '../storage';
 import { getEnv } from '../config/env';
 import { createLogger } from '../config/logger';
+import { getAccessTokenFromRequest } from '../services/auth-cookies.service';
 
 const log = createLogger('auth');
 
@@ -46,7 +47,7 @@ interface JwtPayload {
 }
 
 /**
- * Extract and verify JWT token from Authorization header.
+ * Extract and verify JWT token from httpOnly cookie or Authorization header.
  * Fetches the actual user from DB to prevent JWT claim tampering.
  */
 export async function authMiddleware(
@@ -55,12 +56,15 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const cookieToken = getAccessTokenFromRequest(req);
+  const token = cookieToken || bearerToken;
+
+  if (!token) {
     res.status(401).json({ message: 'Authentication required' });
     return;
   }
 
-  const token = authHeader.substring(7);
   try {
     const decoded = jwt.verify(token, getEnv().JWT_SECRET) as JwtPayload;
 
