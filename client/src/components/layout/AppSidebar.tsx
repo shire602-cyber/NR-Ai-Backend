@@ -1,180 +1,325 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard,
-  FileText,
+  TrendingUp,
+  ShoppingCart,
   BookMarked,
   BarChart3,
-  Sparkles,
+  Banknote,
+  Settings,
+  Briefcase,
+  Shield,
+  ChevronDown,
   Languages,
   LogOut,
-  Receipt,
-  Bot,
-  Plug,
-  MessageSquare,
-  Building2,
-  FileCheck,
-  Users,
-  List,
-  Wallet,
-  ShoppingCart,
   FolderArchive,
   FileStack,
   CalendarDays,
   ListTodo,
   Newspaper,
-  Shield,
+  Building2,
   UserPlus,
-  Activity,
-  Settings,
   FileUp,
   History,
   Database,
   CreditCard,
-  FileOutput,
-  FileMinus,
-  ClipboardList,
-  Palette,
-  Bell,
-  BanknoteIcon,
   Landmark,
-  GitBranchPlus
+  PieChart,
+  ClipboardList,
+  ShieldAlert,
+  Zap,
+  Brain,
+  CalendarCheck,
+  LineChart,
+  Kanban,
+  Users,
+  Activity,
+  Wallet,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useTranslation, useI18n } from '@/lib/i18n';
+import { useRTL } from '@/components/RTLProvider';
 import { removeToken, getToken } from '@/lib/auth';
+import { apiUrl } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { CompanySwitcher } from '@/components/CompanySwitcher';
 
-const coreItems = [
-  { title: 'dashboard', icon: LayoutDashboard, url: '/dashboard' },
-  { title: 'chartOfAccounts', icon: List, url: '/chart-of-accounts' },
-  { title: 'journal', icon: BookMarked, url: '/journal' },
-  { title: 'invoices', icon: FileText, url: '/invoices' },
-  { title: 'recurringInvoices', icon: CalendarDays, url: '/recurring-invoices' },
-  { title: 'quotes', icon: FileOutput, url: '/quotes' },
-  { title: 'creditNotes', icon: FileMinus, url: '/credit-notes' },
-  { title: 'receipts', icon: Receipt, url: '/receipts' },
-  { title: 'purchaseOrders', icon: ClipboardList, url: '/purchase-orders' },
-  { title: 'contacts', icon: Users, url: '/contacts' },
-  { title: 'inventory', icon: ShoppingCart, url: '/inventory' },
-  { title: 'invoiceTemplates', icon: Palette, url: '/invoice-templates' },
-  { title: 'bankReconciliation', icon: Building2, url: '/bank-reconciliation' },
-  { title: 'exchangeRates', icon: BanknoteIcon, url: '/exchange-rates' },
-  { title: 'employees', icon: Users, url: '/employees' },
-  { title: 'payroll', icon: Wallet, url: '/payroll' },
-  { title: 'fixedAssets', icon: Landmark, url: '/fixed-assets' },
-  { title: 'costCenters', icon: GitBranchPlus, url: '/cost-centers' },
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface SubItem {
+  titleKey: string;
+  url: string;
+}
+
+interface NavGroup {
+  key: string;
+  titleKey: string;
+  icon: LucideIcon;
+  items: SubItem[];
+}
+
+// ─── Nav data ────────────────────────────────────────────────────────────────
+
+const CUSTOMER_GROUPS: NavGroup[] = [
+  {
+    key: 'sales',
+    titleKey: 'sales',
+    icon: TrendingUp,
+    items: [
+      { titleKey: 'invoices', url: '/invoices' },
+      { titleKey: 'recurringInvoices', url: '/recurring-invoices' },
+      { titleKey: 'paymentChasing', url: '/payment-chasing' },
+      { titleKey: 'contacts', url: '/contacts' },
+    ],
+  },
+  {
+    key: 'purchases',
+    titleKey: 'purchases',
+    icon: ShoppingCart,
+    items: [
+      { titleKey: 'receipts', url: '/receipts' },
+      { titleKey: 'receiptAutopilot', url: '/receipt-autopilot' },
+      { titleKey: 'billPay', url: '/bill-pay' },
+      { titleKey: 'expenseClaims', url: '/expense-claims' },
+      { titleKey: 'inventory', url: '/inventory' },
+    ],
+  },
+  {
+    key: 'accounting',
+    titleKey: 'accounting',
+    icon: BookMarked,
+    items: [
+      { titleKey: 'chartOfAccounts', url: '/chart-of-accounts' },
+      { titleKey: 'journal', url: '/journal' },
+      { titleKey: 'bankReconciliation', url: '/bank-reconciliation' },
+      { titleKey: 'fixedAssets', url: '/fixed-assets' },
+      { titleKey: 'monthEndClose', url: '/month-end' },
+    ],
+  },
+  {
+    key: 'reports',
+    titleKey: 'reportsSection',
+    icon: BarChart3,
+    items: [
+      { titleKey: 'reports', url: '/reports' },
+      { titleKey: 'vatFiling', url: '/vat-filing' },
+      { titleKey: 'vatAutopilot', url: '/vat-autopilot' },
+      { titleKey: 'corporateTax', url: '/corporate-tax' },
+      { titleKey: 'budgeting', url: '/budgets' },
+      { titleKey: 'cashFlowForecast', url: '/cashflow-forecast' },
+    ],
+  },
+  {
+    key: 'payroll',
+    titleKey: 'hrPayroll',
+    icon: Banknote,
+    items: [
+      { titleKey: 'payroll', url: '/payroll' },
+    ],
+  },
+  {
+    key: 'compliance',
+    titleKey: 'compliance',
+    icon: ClipboardList,
+    items: [
+      { titleKey: 'documentChasing', url: '/document-chasing' },
+      { titleKey: 'complianceCalendar', url: '/compliance-calendar' },
+    ],
+  },
+  {
+    key: 'settings',
+    titleKey: 'settings',
+    icon: Settings,
+    items: [
+      { titleKey: 'companySettings', url: '/settings/company' },
+      { titleKey: 'companyProfile', url: '/company-profile' },
+      { titleKey: 'teamManagement', url: '/team' },
+      { titleKey: 'integrations', url: '/integrations' },
+      { titleKey: 'whatsappInbox', url: '/whatsapp' },
+      { titleKey: 'backupRestore', url: '/backup-restore' },
+      { titleKey: 'history', url: '/history' },
+    ],
+  },
 ];
 
-const reportsItems = [
-  { title: 'reports', icon: BarChart3, url: '/reports' },
-  { title: 'financialStatements', icon: FileText, url: '/financial-statements' },
-  { title: 'vatFiling', icon: FileCheck, url: '/vat-filing' },
-  { title: 'corporateTax', icon: FileCheck, url: '/corporate-tax' },
-  { title: 'reconciliationRules', icon: Settings, url: '/reconciliation-rules' },
+const NRA_GROUP: NavGroup = {
+  key: 'nra',
+  titleKey: 'nraCenter',
+  icon: Briefcase,
+  items: [
+    { titleKey: 'firmCommandCenter', url: '/firm/command-center' },
+    { titleKey: 'valueOps', url: '/firm/value-ops' },
+    { titleKey: 'clientPortfolio', url: '/firm/clients' },
+    { titleKey: 'staffManagement', url: '/firm/staff' },
+    { titleKey: 'healthDashboard', url: '/firm/health' },
+    { titleKey: 'communications', url: '/firm/comms' },
+  ],
+};
+
+const ADMIN_GROUP: NavGroup = {
+  key: 'admin',
+  titleKey: 'adminPanel',
+  icon: Shield,
+  items: [
+    { titleKey: 'adminDashboard', url: '/admin/dashboard' },
+    { titleKey: 'clientManagement', url: '/admin/clients' },
+    { titleKey: 'clientDocuments', url: '/admin/documents' },
+    { titleKey: 'userInvitations', url: '/admin/invitations' },
+    { titleKey: 'clientImport', url: '/admin/import' },
+    { titleKey: 'userManagement', url: '/admin/users' },
+    { titleKey: 'activityLogs', url: '/admin/activity-logs' },
+    { titleKey: 'systemSettings', url: '/admin' },
+  ],
+};
+
+// Client portal flat items (no collapsible — spec: "don't change this")
+const CLIENT_PORTAL_ITEMS = [
+  { titleKey: 'documentVault', icon: FolderArchive, url: '/document-vault' },
+  { titleKey: 'taxReturnArchive', icon: FileStack, url: '/tax-return-archive' },
+  { titleKey: 'complianceCalendar', icon: CalendarDays, url: '/compliance-calendar' },
+  { titleKey: 'taskCenter', icon: ListTodo, url: '/task-center' },
+  { titleKey: 'newsFeed', icon: Newspaper, url: '/news-feed' },
 ];
 
-const aiItems = [
-  { title: 'aiCfo', icon: Bot, url: '/ai-cfo' },
-  { title: 'aiFeatures', icon: Sparkles, url: '/ai-features' },
-  { title: 'aiChat', icon: MessageSquare, url: '/ai-chat' },
-];
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const clientPortalItems = [
-  { title: 'documentVault', icon: FolderArchive, url: '/document-vault' },
-  { title: 'taxReturnArchive', icon: FileStack, url: '/tax-return-archive' },
-  { title: 'complianceCalendar', icon: CalendarDays, url: '/compliance-calendar' },
-  { title: 'taskCenter', icon: ListTodo, url: '/task-center' },
-  { title: 'newsFeed', icon: Newspaper, url: '/news-feed' },
-];
+const SIDEBAR_LS_KEY = 'sidebar-expanded-group';
 
-const settingsItems = [
-  { title: 'subscription', icon: CreditCard, url: '/subscription' },
-  { title: 'teamManagement', icon: Users, url: '/team' },
-  { title: 'notificationPrefs', icon: Bell, url: '/notification-preferences' },
-  { title: 'developerSettings', icon: Settings, url: '/developer-settings' },
-  { title: 'documentVersions', icon: FileStack, url: '/document-versions' },
-  { title: 'history', icon: History, url: '/history' },
-  { title: 'backupRestore', icon: Database, url: '/backup-restore' },
-  { title: 'integrationsHub', icon: ShoppingCart, url: '/integrations-hub' },
-  { title: 'integrations', icon: Plug, url: '/integrations' },
-  { title: 'whatsappInbox', icon: MessageSquare, url: '/whatsapp' },
-];
+function getGroupForRoute(location: string, groups: NavGroup[]): string | null {
+  for (const group of groups) {
+    for (const item of group.items) {
+      if (location === item.url || location.startsWith(item.url + '/')) {
+        return group.key;
+      }
+    }
+  }
+  return null;
+}
 
-const adminItems = [
-  { title: 'adminDashboard', icon: Shield, url: '/admin/dashboard' },
-  { title: 'clientManagement', icon: Building2, url: '/admin/clients' },
-  { title: 'clientDocuments', icon: FolderArchive, url: '/admin/documents' },
-  { title: 'userInvitations', icon: UserPlus, url: '/admin/invitations' },
-  { title: 'clientImport', icon: FileUp, url: '/admin/import' },
-  { title: 'userManagement', icon: Users, url: '/admin/users' },
-  { title: 'activityLogs', icon: Activity, url: '/admin/activity-logs' },
-  { title: 'systemSettings', icon: Settings, url: '/admin' },
-];
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { t, locale } = useTranslation();
   const { setLocale } = useI18n();
+  const { isRTL, rtlValue } = useRTL();
+  const queryClient = useQueryClient();
 
-  // Check user status directly from token - no state needed
-  const checkUserStatus = (): { 
-    isAdmin: boolean; 
+  const checkUserStatus = (): {
+    isAdmin: boolean;
     userType: 'admin' | 'client' | 'customer';
-    needsRelogin: boolean 
+    firmRole: 'firm_owner' | 'firm_admin' | null;
+    needsRelogin: boolean;
   } => {
     try {
       const token = getToken();
       if (!token) {
-        return { isAdmin: false, userType: 'customer', needsRelogin: false };
+        return { isAdmin: false, userType: 'customer', firmRole: null, needsRelogin: false };
       }
       const parts = token.split('.');
       if (parts.length !== 3) {
-        return { isAdmin: false, userType: 'customer', needsRelogin: false };
+        return { isAdmin: false, userType: 'customer', firmRole: null, needsRelogin: false };
       }
       const payload = JSON.parse(atob(parts[1]));
-      
-      // If token doesn't have isAdmin field, it's an old token - needs re-login
       if (payload.isAdmin === undefined) {
-        return { isAdmin: false, userType: 'customer', needsRelogin: true };
+        return { isAdmin: false, userType: 'customer', firmRole: null, needsRelogin: true };
       }
-      
-      return { 
-        isAdmin: payload.isAdmin === true, 
+      return {
+        isAdmin: payload.isAdmin === true,
         userType: payload.userType || 'customer',
-        needsRelogin: false 
+        firmRole: payload.firmRole ?? null,
+        needsRelogin: false,
       };
-    } catch (error) {
-      return { isAdmin: false, userType: 'customer', needsRelogin: false };
+    } catch {
+      return { isAdmin: false, userType: 'customer', firmRole: null, needsRelogin: false };
     }
   };
 
-  // Check user status on every render
-  const { isAdmin, userType, needsRelogin } = checkUserStatus();
-  
-  // Handle old token logout in useEffect (can't update state during render)
+  const { isAdmin, userType, firmRole, needsRelogin } = checkUserStatus();
+
   useEffect(() => {
     if (needsRelogin) {
-      console.log('[Admin Check] Old token detected - forcing re-login to get updated token');
       removeToken();
       setLocation('/');
     }
   }, [needsRelogin, setLocation]);
 
-  const handleLogout = () => {
+  const hasFirmRole = firmRole === 'firm_owner' || firmRole === 'firm_admin';
+
+  // All collapsible groups for this user (Dashboard is separate — direct link)
+  const allGroups = useMemo<NavGroup[]>(
+    () => [
+      ...CUSTOMER_GROUPS,
+      ...(hasFirmRole ? [NRA_GROUP] : []),
+      ...(isAdmin ? [ADMIN_GROUP] : []),
+    ],
+    [hasFirmRole, isAdmin],
+  );
+
+  // Initialize expanded group: active route's group takes precedence, then localStorage
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
+    const fromRoute = getGroupForRoute(location, [
+      ...CUSTOMER_GROUPS,
+      NRA_GROUP,
+      ADMIN_GROUP,
+    ]);
+    if (fromRoute) return fromRoute;
+    try {
+      return localStorage.getItem(SIDEBAR_LS_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  // Auto-expand the group that owns the current route when navigating
+  useEffect(() => {
+    const group = getGroupForRoute(location, allGroups);
+    if (group && group !== expandedGroup) {
+      setExpandedGroup(group);
+      try { localStorage.setItem(SIDEBAR_LS_KEY, group); } catch { /* ignore */ }
+    }
+  }, [location, allGroups]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroup(prev => {
+      const next = prev === key ? null : key;
+      try {
+        if (next) localStorage.setItem(SIDEBAR_LS_KEY, next);
+        else localStorage.removeItem(SIDEBAR_LS_KEY);
+      } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  const handleLogout = async () => {
+    const token = getToken();
+    if (token) {
+      try {
+        await fetch(apiUrl('/api/auth/logout'), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Network failure shouldn't block local sign-out — JWT still expires.
+      }
+    }
     removeToken();
+    queryClient.clear();
     setLocation('/');
   };
 
@@ -182,245 +327,215 @@ export function AppSidebar() {
     setLocale(locale === 'en' ? 'ar' : 'en');
   };
 
-  const renderMenuItem = (item: typeof coreItems[0]) => {
-    const Icon = item.icon;
-    const isActive = location === item.url || location.startsWith(item.url + '/');
-    const label = (t as any)[item.title] || item.title;
-    
+  // ── Renderers ──────────────────────────────────────────────────────────────
+
+  const renderNavGroup = (group: NavGroup) => {
+    const Icon = group.icon;
+    const isExpanded = expandedGroup === group.key;
+    const hasActive = group.items.some(
+      item => location === item.url || location.startsWith(item.url + '/'),
+    );
+    const groupTitle = (t as Record<string, string>)[group.titleKey] ?? group.titleKey;
+
     return (
-      <SidebarMenuItem key={item.url}>
-        <motion.div
-          whileHover={{ x: 4 }}
-          transition={{ duration: 0.2 }}
-        >
-        <SidebarMenuButton 
-          isActive={isActive}
-          onClick={() => setLocation(item.url)}
-          data-testid={`link-${item.title}`}
-            className="relative group transition-all duration-200"
-          >
-            <motion.div
-              className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"
-              initial={{ scaleY: 0 }}
-              animate={{ scaleY: isActive ? 1 : 0 }}
-              transition={{ duration: 0.2 }}
-            />
-            <motion.div
-              whileHover={{ scale: 1.1 }}
-              transition={{ duration: 0.2 }}
+      <SidebarMenuItem key={group.key}>
+        <SidebarMenuButton
+          onClick={() => toggleGroup(group.key)}
+          className={cn(hasActive && 'text-primary font-medium')}
+          data-testid={`group-${group.key}`}
         >
           <Icon className="w-4 h-4" />
-            </motion.div>
-            <motion.span
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {label}
-            </motion.span>
+          <span>{groupTitle}</span>
+          <motion.div
+            className="ms-auto"
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-4 h-4 opacity-50" />
+          </motion.div>
         </SidebarMenuButton>
-        </motion.div>
+
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              key="sub"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              style={{ overflow: 'hidden' }}
+            >
+              <SidebarMenuSub>
+                {group.items.map(item => {
+                  const isActive =
+                    location === item.url || location.startsWith(item.url + '/');
+                  const label =
+                    (t as Record<string, string>)[item.titleKey] ?? item.titleKey;
+                  return (
+                    <SidebarMenuSubItem key={item.url}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={isActive}
+                        data-testid={`link-${item.titleKey}`}
+                      >
+                        <button type="button" onClick={() => setLocation(item.url)}>
+                          {label}
+                        </button>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  );
+                })}
+              </SidebarMenuSub>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </SidebarMenuItem>
     );
   };
 
+  const renderClientPortalItem = (item: typeof CLIENT_PORTAL_ITEMS[0]) => {
+    const Icon = item.icon;
+    const isActive = location === item.url;
+    const label = (t as Record<string, string>)[item.titleKey] ?? item.titleKey;
+    return (
+      <SidebarMenuItem key={item.url}>
+        <SidebarMenuButton
+          isActive={isActive}
+          onClick={() => setLocation(item.url)}
+          data-testid={`link-${item.titleKey}`}
+        >
+          <Icon className="w-4 h-4" />
+          <span>{label}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
-    <Sidebar>
+    <Sidebar side={isRTL ? 'right' : 'left'}>
       <motion.div
-        initial={{ opacity: 0, x: -20 }}
+        initial={{ opacity: 0, x: rtlValue(-12, 12) }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4 }}
       >
-      <SidebarHeader className="p-4">
-          <motion.div 
-            className="flex items-center gap-2"
-            whileHover={{ scale: 1.02 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div 
-              className="w-8 h-8 rounded-md bg-primary flex items-center justify-center"
-              whileHover={{ rotate: [0, -10, 10, -10, 0] }}
-              transition={{ duration: 0.5 }}
-            >
-            <Wallet className="w-5 h-5 text-primary-foreground" />
-            </motion.div>
-          <div>
-              <motion.div 
-                className="font-semibold text-sm"
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-              >
-                Muhasib.ai
-              </motion.div>
-              <motion.div 
-                className="text-xs text-muted-foreground"
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
-              >
-              {t.smartAccounting || 'Smart Accounting'}
-              </motion.div>
+        <SidebarHeader className="px-3 pt-4 pb-3 border-b border-sidebar-border/60 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 flex items-center justify-center shrink-0 shadow-sm ring-1 ring-sidebar-primary/30">
+              <Wallet className="w-4 h-4 text-sidebar-primary-foreground" strokeWidth={2.25} />
+              <span aria-hidden className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-sidebar-primary ring-2 ring-sidebar animate-pulse-dot" />
             </div>
-          </motion.div>
-      </SidebarHeader>
+            <div className="min-w-0">
+              <div className="font-semibold text-[13px] tracking-tight text-sidebar-foreground leading-tight">
+                Muhasib<span className="text-sidebar-primary">.ai</span>
+              </div>
+              <div className="text-[10.5px] text-sidebar-foreground/55 uppercase tracking-[0.12em] leading-tight font-medium">
+                {t.smartAccounting ?? 'Smart Accounting'}
+              </div>
+            </div>
+          </div>
+          <CompanySwitcher />
+        </SidebarHeader>
       </motion.div>
-      
-      <SidebarContent>
-        {/* Client Portal View - Simplified view for NR-managed clients */}
+
+      <SidebarContent className="px-1.5">
+        {/* ── Client portal — simplified flat view ── */}
         {userType === 'client' && (
           <>
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.overview || 'Overview'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {renderMenuItem({ title: 'dashboard', icon: LayoutDashboard, url: '/dashboard' })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <div className="px-3 pt-4 pb-1.5 text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-semibold">
+              Workspace
+            </div>
+            <SidebarMenu className="px-1.5">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location === '/dashboard'}
+                  onClick={() => setLocation('/dashboard')}
+                  data-testid="link-dashboard"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>{t.dashboard}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
 
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.myPortal || 'My Portal'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {clientPortalItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <div className="px-3 pt-4 pb-1.5 text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-semibold">
+              Documents
+            </div>
+            <SidebarMenu className="px-1.5">
+              {CLIENT_PORTAL_ITEMS.map(renderClientPortalItem)}
+            </SidebarMenu>
 
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.reportsSection || 'Reports'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {reportsItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <div className="px-3 pt-4 pb-1.5 text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-semibold">
+              Insights
+            </div>
+            <SidebarMenu className="px-1.5">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location === '/reports'}
+                  onClick={() => setLocation('/reports')}
+                  data-testid="link-reports"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>{t.reports}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
           </>
         )}
 
-        {/* Customer/Admin View - Full bookkeeping features for self-service SaaS customers */}
+        {/* ── Customer / admin — 7 collapsible accordion groups ── */}
         {(userType === 'customer' || userType === 'admin') && (
           <>
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.accounting || 'Accounting'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {coreItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.reportsSection || 'Reports'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {reportsItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <div className="px-3 pt-4 pb-1.5 text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-semibold">
+              Overview
+            </div>
+            <SidebarMenu className="px-1.5">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location === '/dashboard'}
+                  onClick={() => setLocation('/dashboard')}
+                  data-testid="link-dashboard"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>{t.dashboard}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
 
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.aiTools || 'AI Tools'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {aiItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.clientPortal || 'Client Portal'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {clientPortalItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                {t.settings || 'Settings'}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {settingsItems.map(renderMenuItem)}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <div className="px-3 pt-4 pb-1.5 text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-semibold">
+              Operations
+            </div>
+            <SidebarMenu className="px-1.5 pb-4">
+              {allGroups.map(renderNavGroup)}
+            </SidebarMenu>
           </>
-        )}
-
-        {/* Admin Panel - Only for admin users */}
-        {isAdmin && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-primary">
-              <Shield className="w-3 h-3 mr-1 inline" />
-              {t.adminPanel || 'Admin Panel'}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {adminItems.map(renderMenuItem)}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-4 space-y-2">
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-        <Button
-          variant="outline"
-            className="w-full justify-start transition-all duration-200"
+      <SidebarFooter className="px-3 py-3 border-t border-sidebar-border/60 space-y-1.5">
+        <button
+          type="button"
           onClick={toggleLanguage}
           data-testid="button-language-toggle"
-          >
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 0.5, delay: 0.2 }}
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent transition-colors"
         >
-          <Languages className="w-4 h-4 mr-2" />
-            </motion.div>
-          {locale === 'en' ? 'Arabic' : 'English'}
-        </Button>
-        </motion.div>
-        
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-        <Button
-          variant="ghost"
-            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+          <Languages className="w-4 h-4 opacity-70" />
+          <span className="text-[13px]">{locale === 'en' ? 'العربية' : 'English'}</span>
+          <span className="ms-auto text-[10px] uppercase tracking-wider text-sidebar-foreground/45 font-medium">
+            {locale === 'en' ? 'AR' : 'EN'}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={handleLogout}
           data-testid="button-logout"
-          >
-            <motion.div
-              whileHover={{ x: -2 }}
-              transition={{ duration: 0.2 }}
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
         >
-          <LogOut className="w-4 h-4 mr-2" />
-            </motion.div>
-          {t.logout || 'Logout'}
-        </Button>
-        </motion.div>
+          <LogOut className="w-4 h-4 opacity-70" />
+          <span className="text-[13px]">{t.logout ?? 'Sign out'}</span>
+        </button>
       </SidebarFooter>
     </Sidebar>
   );

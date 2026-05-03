@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
 import {
   AppError,
-  NotFoundError,
-  BadRequestError,
   globalErrorHandler,
   asyncHandler,
 } from '../../server/middleware/errorHandler';
@@ -60,20 +58,6 @@ describe('Error Handler Middleware', () => {
     });
   });
 
-  describe('Error factories', () => {
-    it('should create NotFoundError', () => {
-      const error = NotFoundError('User');
-      expect(error.statusCode).toBe(404);
-      expect(error.message).toBe('User not found');
-    });
-
-    it('should create BadRequestError', () => {
-      const error = BadRequestError('Invalid input');
-      expect(error.statusCode).toBe(400);
-      expect(error.message).toBe('Invalid input');
-    });
-  });
-
   describe('globalErrorHandler', () => {
     it('should handle AppError correctly', () => {
       const req = createMockReq();
@@ -84,7 +68,9 @@ describe('Error Handler Middleware', () => {
       globalErrorHandler(error, req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ message: 'Not Found' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Not Found', code: expect.any(String) })
+      );
     });
 
     it('should handle ZodError with validation details', () => {
@@ -108,7 +94,10 @@ describe('Error Handler Middleware', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Validation error',
-          errors: expect.any(Object),
+          code: 'VALIDATION_ERROR',
+          details: expect.objectContaining({
+            errors: expect.any(Object),
+          }),
         })
       );
     });

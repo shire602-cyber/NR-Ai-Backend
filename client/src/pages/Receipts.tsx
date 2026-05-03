@@ -7,7 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CardListSkeleton } from '@/components/ui/loading-skeletons';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useTranslation } from '@/lib/i18n';
@@ -17,14 +20,22 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { apiUrl } from '@/lib/api';
 import { getAuthHeaders } from '@/lib/auth';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
-import { exportToExcel, exportToGoogleSheets, prepareReceiptsForExport } from '@/lib/export';
+import {
+  exportToExcel,
+  exportToGoogleSheets,
+  prepareReceiptsForExport,
+  downloadOcrExcel,
+  downloadReceiptsExcel,
+  ocrDataToExportRow,
+} from '@/lib/export';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-import { Upload, FileText, Sparkles, CheckCircle2, XCircle, Loader2, Camera, Image as ImageIcon, X, Trash2, Edit, Download, FileSpreadsheet } from 'lucide-react';
+import { Upload, FileText, Sparkles, CheckCircle2, XCircle, Loader2, Camera, Image as ImageIcon, X, Trash2, Edit, Download, FileSpreadsheet, ZoomIn, Brain, Bot, Zap } from 'lucide-react';
 import { SiGooglesheets } from 'react-icons/si';
+import { VirtualList } from '@/components/VirtualList';
 import { formatCurrency } from '@/lib/format';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useForm } from 'react-hook-form';
@@ -35,11 +46,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 interface ExtractedData {
   merchant?: string;
   date?: string;
-  total?: number;
+  invoiceNumber?: string | null;
+  subtotal?: number;
+  vatPercentage?: number;
   vatAmount?: number;
+  total?: number;
   currency?: string;
   rawText: string;
   category?: string;
+  lineItems?: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
   confidence?: number;
 }
 
@@ -62,6 +77,97 @@ const receiptSchema = z.object({
 });
 
 type ReceiptFormData = z.infer<typeof receiptSchema>;
+
+// Fetches a saved receipt's image via the authenticated server route and
+// returns a blob URL the parent can show as a thumbnail or full preview.
+// Returns `null` while loading and on any failure (including receipts with
+// no stored image), so the caller can render a placeholder instead.
+function useReceiptImageUrl(companyId: string | undefined, receiptId: string, hasImage: boolean): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!companyId || !receiptId || !hasImage) {
+      setUrl(null);
+      return;
+    }
+    let cancelled = false;
+    let createdUrl: string | null = null;
+
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/companies/${companyId}/receipts/${receiptId}/image`), {
+          credentials: 'include',
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        createdUrl = URL.createObjectURL(blob);
+        setUrl(createdUrl);
+      } catch {
+        // Best effort — leave the placeholder visible.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [companyId, receiptId, hasImage]);
+
+  return url;
+}
+
+interface ReceiptThumbnailProps {
+  companyId: string | undefined;
+  receipt: { id: string; imagePath?: string | null; imageData?: string | null; merchant?: string | null };
+  onPreview: (src: string, merchant?: string) => void;
+}
+
+function ReceiptThumbnail({ companyId, receipt, onPreview }: ReceiptThumbnailProps) {
+  const hasImage = !!(receipt.imagePath || receipt.imageData);
+  const url = useReceiptImageUrl(companyId, receipt.id, hasImage);
+
+  if (!hasImage) {
+    return (
+      <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center" aria-hidden>
+        <FileText className="w-6 h-6" />
+      </div>
+    );
+  }
+
+  if (!url) {
+    return (
+      <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center" aria-hidden>
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onPreview(url, receipt.merchant ?? undefined)}
+      className="group relative w-12 h-12 rounded-md overflow-hidden border hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label={`Preview receipt image for ${receipt.merchant ?? 'this receipt'}`}
+      data-testid={`receipt-thumbnail-${receipt.id}`}
+    >
+      <img src={url} alt="" className="w-full h-full object-cover" />
+      <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <ZoomIn className="w-4 h-4 text-white" />
+      </span>
+    </button>
+  );
+}
+
+// Phase 2 — internal classifier methods that drive the "Internal" badge.
+// Anything outside this set (typo, future schema value, null) renders no badge
+// rather than a misleading "Internal" label with raw value text.
+const INTERNAL_CLASSIFIER_METHODS = ['rule', 'keyword', 'statistical'] as const;
+type InternalClassifierMethod = typeof INTERNAL_CLASSIFIER_METHODS[number];
+function isInternalClassifierMethod(value: unknown): value is InternalClassifierMethod {
+  return typeof value === 'string' && (INTERNAL_CLASSIFIER_METHODS as readonly string[]).includes(value);
+}
 
 export default function Receipts() {
   const { t, locale } = useTranslation();
@@ -87,7 +193,9 @@ export default function Receipts() {
   const [pendingSaveData, setPendingSaveData] = useState<any>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [isExporting, setIsExporting] = useState(false);
+  const [isOcrExporting, setIsOcrExporting] = useState(false);
   const [manualExpenseDialogOpen, setManualExpenseDialogOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState<{ src: string; merchant?: string } | null>(null);
   
   const manualExpenseForm = useForm<ReceiptFormData>({
     resolver: zodResolver(receiptSchema),
@@ -156,8 +264,16 @@ export default function Receipts() {
   const postExpenseMutation = useMutation({
     mutationFn: ({ id, accountId, paymentAccountId }: { id: string; accountId: string; paymentAccountId: string }) =>
       apiRequest('POST', `/api/receipts/${id}/post`, { accountId, paymentAccountId }),
+    onMutate: async ({ id }) => {
+      const queryKey = ['/api/companies', companyId, 'receipts'] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<any[]>(queryKey);
+      queryClient.setQueryData<any[]>(queryKey, (old) =>
+        old?.map((r: any) => (r.id === id ? { ...r, posted: true } : r)) ?? [],
+      );
+      return { previous, queryKey };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'journal-entries'] });
       toast({
         title: 'Expense posted successfully',
@@ -168,12 +284,18 @@ export default function Receipts() {
       setSelectedExpenseAccount('');
       setSelectedPaymentAccount('');
     },
-    onError: (error: any) => {
+    onError: (error: any, _vars, context: any) => {
+      if (context?.previous && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
       toast({
         variant: 'destructive',
         title: 'Failed to post expense',
         description: error?.message || 'Please try again.',
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
     },
   });
 
@@ -208,22 +330,22 @@ export default function Receipts() {
   });
 
   const createAccountMutation = useMutation({
-    mutationFn: (data: any) =>
+    mutationFn: (data: any) => 
       apiRequest('POST', `/api/companies/${companyId}/accounts`, data),
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'accounts'] });
       toast({
         title: 'Account created successfully',
-        description: `${data?.nameEn || 'Account'} has been added.`,
+        description: `${data.nameEn} has been added.`,
       });
       setCreateAccountDialogOpen(false);
       setNewAccountCode('');
       setNewAccountName('');
       // Auto-select the new account if it matches the type
       if (newAccountType === 'expense') {
-        setSelectedExpenseAccount(data?.id);
+        setSelectedExpenseAccount(data.id);
       } else if (newAccountType === 'asset') {
-        setSelectedPaymentAccount(data?.id);
+        setSelectedPaymentAccount(data.id);
       }
     },
     onError: (error: any) => {
@@ -241,21 +363,33 @@ export default function Receipts() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => 
+    mutationFn: (id: string) =>
       apiRequest('DELETE', `/api/receipts/${id}`),
+    onMutate: async (id: string) => {
+      const queryKey = ['/api/companies', companyId, 'receipts'] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<any[]>(queryKey);
+      queryClient.setQueryData<any[]>(queryKey, (old) => old?.filter((r: any) => r.id !== id) ?? []);
+      return { previous, queryKey };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
       toast({
         title: 'Expense deleted',
         description: 'The expense has been deleted successfully.',
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, _id, context: any) => {
+      if (context?.previous && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
       toast({
         variant: 'destructive',
         title: 'Failed to delete expense',
         description: error?.message || 'Please try again.',
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'receipts'] });
     },
   });
 
@@ -269,7 +403,7 @@ export default function Receipts() {
     setEditingReceipt(receipt);
     form.reset({
       merchant: receipt.merchant || '',
-      date: receipt.date ? String(receipt.date).slice(0, 10) : '',
+      date: receipt.date || '',
       amount: receipt.amount || 0,
       vatAmount: receipt.vatAmount || null,
       category: receipt.category || '',
@@ -453,55 +587,134 @@ export default function Receipts() {
 
     setProcessedReceipts((prev) => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], status: 'processing', progress: 0 };
+      updated[index] = { ...updated[index], status: 'processing', progress: 10 };
       return updated;
     });
 
     try {
-      const result = await Tesseract.recognize(receipt.file, 'eng', {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            setProcessedReceipts((prev) => {
-              const updated = [...prev];
-              updated[index] = { ...updated[index], progress: Math.round(m.progress * 100) };
-              return updated;
-            });
-          }
-        },
+      // Strategy 1: Backend AI Vision OCR (GPT-4o)
+      const toBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+      const imageData = await toBase64(receipt.file);
+
+      setProcessedReceipts((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], progress: 40 };
+        return updated;
       });
 
-      const text = result.data.text;
-      
-      // Validate that we got some text
-      if (!text || text.trim().length < 10) {
-        throw new Error('Could not extract readable text from image. Try a clearer photo.');
-      }
+      let parsed: ExtractedData | null = null;
+      let backendErrorMessage: string | null = null;
 
-      const parsed = parseReceiptText(text);
+      try {
+        const response = await fetch(apiUrl('/api/ocr/process'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ imageData, companyId }),
+        });
 
-      // Validate that we extracted at least some useful data
-      if (!parsed.merchant && !parsed.total) {
-        // Set defaults but keep the raw text for manual editing
-        parsed.merchant = 'Unknown Merchant';
-        parsed.total = 0;
-      }
-
-      // AI categorization (only if we have some data to work with)
-      if (parsed.merchant || parsed.total) {
-        try {
-          const category = await categorizeWithAI(parsed);
-          if (category) {
-            parsed.category = category;
+        if (response.ok) {
+          const result = await response.json();
+          parsed = {
+            merchant: result.merchant || 'Unknown Merchant',
+            date: result.date || new Date().toISOString().split('T')[0],
+            invoiceNumber: result.invoiceNumber || null,
+            subtotal: result.subtotal || result.amount || 0,
+            vatPercentage: result.vatPercentage ?? 5,
+            vatAmount: result.vatAmount || 0,
+            total: result.total || result.amount || 0,
+            currency: result.currency || 'AED',
+            category: result.category || 'Other',
+            lineItems: result.lineItems || [],
+            rawText: result.rawText || '',
+            confidence: result.confidence ?? 0.85,
+          };
+          setProcessedReceipts((prev) => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], progress: 90 };
+            return updated;
+          });
+        } else {
+          // Capture the server-provided message so we can surface it if Tesseract
+          // also fails. Without this, users see a generic "Try a clearer image"
+          // even when the real cause is a misconfigured AI key on the server.
+          try {
+            const body = await response.json();
+            backendErrorMessage = body?.message || `Backend OCR returned ${response.status}`;
+          } catch {
+            backendErrorMessage = `Backend OCR returned ${response.status}`;
           }
-        } catch (aiError) {
-          console.error('AI categorization failed, continuing without it:', aiError);
-          // Don't fail the whole process if AI categorization fails
+          console.warn('[OCR] Backend returned error:', response.status, backendErrorMessage);
+        }
+      } catch (backendError: any) {
+        backendErrorMessage = backendError?.message || 'Network error contacting OCR service';
+        console.warn('[OCR] Backend Vision failed, falling back to Tesseract:', backendError);
+      }
+
+      // Strategy 2: Tesseract fallback
+      if (!parsed) {
+        let tesseractText = '';
+        try {
+          const result = await Tesseract.recognize(receipt.file, 'eng', {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                setProcessedReceipts((prev) => {
+                  const updated = [...prev];
+                  updated[index] = { ...updated[index], progress: 40 + Math.round(m.progress * 50) };
+                  return updated;
+                });
+              }
+            },
+          });
+          tesseractText = result.data.text;
+        } catch (tesseractError: any) {
+          // If Tesseract itself blew up (worker/WASM load failure under strict
+          // CSP, etc.), surface the backend reason instead of a vague Tesseract
+          // stack trace — that's almost always the actionable cause.
+          const tessMsg = tesseractError?.message || 'Tesseract failed to initialize';
+          const composed = backendErrorMessage
+            ? `${backendErrorMessage} (local OCR fallback also failed: ${tessMsg})`
+            : `OCR fallback failed: ${tessMsg}`;
+          throw new Error(composed);
+        }
+
+        if (!tesseractText || tesseractText.trim().length < 10) {
+          // Prefer the actionable backend reason over the generic Tesseract msg.
+          throw new Error(
+            backendErrorMessage
+              ? `${backendErrorMessage} (local OCR could not read the image)`
+              : 'Could not extract readable text from image. Try a clearer photo.',
+          );
+        }
+
+        parsed = parseReceiptText(tesseractText);
+        if (!parsed.merchant && !parsed.total) {
+          parsed.merchant = 'Unknown Merchant';
+          parsed.total = 0;
+        }
+
+        if (parsed.merchant || parsed.total) {
+          try {
+            const category = await categorizeWithAI(parsed);
+            if (category) parsed.category = category;
+          } catch (aiError) {
+            console.error('AI categorization failed, continuing without it:', aiError);
+          }
         }
       }
 
       setProcessedReceipts((prev) => {
         const updated = [...prev];
-        updated[index] = { ...updated[index], status: 'completed', data: parsed, progress: 100 };
+        updated[index] = { ...updated[index], status: 'completed', data: parsed!, progress: 100 };
         return updated;
       });
 
@@ -509,11 +722,11 @@ export default function Receipts() {
       console.error('OCR processing error:', error);
       setProcessedReceipts((prev) => {
         const updated = [...prev];
-        updated[index] = { 
-          ...updated[index], 
-          status: 'error', 
+        updated[index] = {
+          ...updated[index],
+          status: 'error',
           error: error?.message || 'OCR processing failed. Try a clearer image.',
-          progress: 0 
+          progress: 0
         };
         return updated;
       });
@@ -618,14 +831,20 @@ export default function Receipts() {
       date = new Date().toISOString().split('T')[0];
     }
 
+    // Derive subtotal from total and VAT
+    const derivedSubtotal = vatAmount > 0 && total > 0 ? parseFloat((total - vatAmount).toFixed(2)) : parseFloat((total / 1.05).toFixed(2));
+    const derivedVat = vatAmount > 0 ? vatAmount : parseFloat((total - derivedSubtotal).toFixed(2));
+
     return {
       merchant: merchant || 'Unknown Merchant',
       date,
+      subtotal: derivedSubtotal,
+      vatPercentage: 5,
+      vatAmount: derivedVat,
       total,
-      vatAmount,
       currency: 'AED',
       rawText: text,
-      confidence: 0.85,
+      confidence: 0.5,
     };
   };
 
@@ -718,24 +937,20 @@ export default function Receipts() {
     // Save each receipt sequentially with status updates
     for (const { receipt, index } of completedIndices) {
       try {
-        // Defensive: receipt.status==='completed' *should* mean data exists,
-        // but concurrent state updates can leave data undefined. Fall back to
-        // an empty object rather than using non-null assertions that crash.
-        const d = receipt.data ?? ({} as Partial<ExtractedData>);
-        const parsedTotal = typeof d.total === 'number' ? d.total : Number(d.total);
-        const parsedVat = d.vatAmount === undefined || d.vatAmount === null
-          ? null
-          : (typeof d.vatAmount === 'number' ? d.vatAmount : Number(d.vatAmount));
         const receiptData = {
           companyId: companyId,
-          merchant: d.merchant || 'Unknown',
-          date: d.date || new Date().toISOString().split('T')[0],
-          amount: Number.isFinite(parsedTotal) ? parsedTotal : 0,
-          vatAmount: parsedVat !== null && Number.isFinite(parsedVat) ? parsedVat : null,
-          category: d.category || 'Uncategorized',
-          currency: d.currency || 'AED',
+          merchant: receipt.data!.merchant || 'Unknown',
+          date: receipt.data!.date || new Date().toISOString().split('T')[0],
+          invoiceNumber: receipt.data!.invoiceNumber || null,
+          amount: Number(receipt.data!.subtotal ?? receipt.data!.total) || 0,
+          vatAmount: receipt.data!.vatAmount ? Number(receipt.data!.vatAmount) : null,
+          vatPercentage: receipt.data!.vatPercentage ?? 5,
+          total: Number(receipt.data!.total) || 0,
+          category: receipt.data!.category || 'Uncategorized',
+          currency: receipt.data!.currency || 'AED',
           imageData: receipt.preview,
-          rawText: d.rawText || '',
+          rawText: receipt.data!.rawText,
+          lineItems: receipt.data!.lineItems || [],
         };
 
         await apiRequest('POST', `/api/companies/${companyId}/receipts`, receiptData);
@@ -864,32 +1079,95 @@ export default function Receipts() {
     setIsExporting(false);
 
     if (result.success) {
-      toast({ 
-        title: 'Export successful', 
-        description: `${filteredReceipts.length} expenses exported to Google Sheets` 
+      toast({
+        title: 'Export successful',
+        description: `${filteredReceipts.length} expenses exported to Google Sheets`
       });
       if (result.spreadsheetUrl) {
         window.open(result.spreadsheetUrl, '_blank');
       }
     } else {
-      toast({ 
+      toast({
         variant: 'destructive',
-        title: 'Export failed', 
-        description: result.error || 'Failed to export to Google Sheets' 
+        title: 'Export failed',
+        description: result.error || 'Failed to export to Google Sheets'
       });
+    }
+  };
+
+  // Server-rendered Excel of the OCR-extracted rows currently on screen
+  // (post-extraction, pre-save). Skips rows that haven't completed OCR yet.
+  const handleDownloadOcrExcel = async () => {
+    const rows = processedReceipts
+      .filter((r) => r.status === 'completed' || r.status === 'saved')
+      .filter((r) => r.data)
+      .map((r) => ocrDataToExportRow(r.data!));
+
+    if (rows.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nothing to export',
+        description: 'Process at least one receipt before downloading.',
+      });
+      return;
+    }
+
+    setIsOcrExporting(true);
+    try {
+      await downloadOcrExcel(rows);
+      toast({
+        title: 'Excel ready',
+        description: `${rows.length} receipt${rows.length === 1 ? '' : 's'} exported to Excel.`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Export failed',
+        description: err?.message || 'Could not generate the spreadsheet.',
+      });
+    } finally {
+      setIsOcrExporting(false);
+    }
+  };
+
+  // Bulk export of saved receipts via the server endpoint — same column layout
+  // as the OCR export, so users get a consistent spreadsheet format for both
+  // in-flight scans and historical data.
+  const handleDownloadReceiptsExcel = async () => {
+    if (!companyId || !filteredReceipts.length) {
+      toast({ variant: 'destructive', title: 'No data', description: 'No expenses to export' });
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await downloadReceiptsExcel(companyId, {
+        ids: filteredReceipts.map((r: any) => r.id),
+      });
+      toast({
+        title: 'Excel ready',
+        description: `${filteredReceipts.length} receipts exported.`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Export failed',
+        description: err?.message || 'Could not generate the spreadsheet.',
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold mb-2">Receipt Scanner</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Receipt Scanner</h1>
           <p className="text-muted-foreground">
             Upload receipts for AI extraction or enter manually
           </p>
         </div>
-        <Button onClick={() => setManualExpenseDialogOpen(true)} data-testid="button-add-manual-expense">
+        <Button onClick={() => setManualExpenseDialogOpen(true)} className="w-full sm:w-auto" data-testid="button-add-manual-expense">
           + Add Expense Manually
         </Button>
       </div>
@@ -914,7 +1192,7 @@ export default function Receipts() {
             className={`
               border-2 border-dashed rounded-lg p-8 text-center transition-all
               ${isDragging ? 'border-primary bg-primary/5' : 'border-border'}
-              ${processedReceipts.length > 0 ? 'border-green-500 bg-green-500/5' : ''}
+              ${processedReceipts.length > 0 ? 'border-[hsl(var(--chart-5))] bg-[hsl(var(--chart-5)/0.05)]' : ''}
               hover:border-primary hover:bg-accent/50 cursor-pointer
             `}
             onClick={() => document.getElementById('file-input')?.click()}
@@ -935,7 +1213,7 @@ export default function Receipts() {
 
             {processedReceipts.length > 0 ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-center gap-2 text-green-600">
+                <div className="flex items-center justify-center gap-2 text-[hsl(var(--chart-5))]">
                   <CheckCircle2 className="w-5 h-5" />
                   <span>{processedReceipts.length} image(s) loaded</span>
                 </div>
@@ -1008,6 +1286,26 @@ export default function Receipts() {
 
               <Button
                 variant="outline"
+                onClick={handleDownloadOcrExcel}
+                disabled={completedCount === 0 || isOcrExporting || isProcessingBulk}
+                size="lg"
+                data-testid="button-download-ocr-excel"
+              >
+                {isOcrExporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Download Excel ({completedCount})
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
                 onClick={resetForm}
                 disabled={isProcessingBulk}
                 data-testid="button-reset"
@@ -1027,24 +1325,24 @@ export default function Receipts() {
                 <Badge variant="outline">{processingCount} processing</Badge>
               )}
               {completedCount > 0 && (
-                <Badge variant="outline" className="bg-green-500/10 border-green-500">
+                <StatusBadge tone="success">
                   {completedCount} ready to save
-                </Badge>
+                </StatusBadge>
               )}
               {savedCount > 0 && (
-                <Badge variant="outline" className="bg-blue-500/10 border-blue-500">
+                <StatusBadge tone="info">
                   {savedCount} saved
-                </Badge>
+                </StatusBadge>
               )}
               {errorCount > 0 && (
-                <Badge variant="outline" className="bg-red-500/10 border-red-500">
+                <StatusBadge tone="danger">
                   {errorCount} OCR errors
-                </Badge>
+                </StatusBadge>
               )}
               {saveErrorCount > 0 && (
-                <Badge variant="outline" className="bg-orange-500/10 border-orange-500">
+                <StatusBadge tone="warning">
                   {saveErrorCount} save failed
-                </Badge>
+                </StatusBadge>
               )}
             </div>
           )}
@@ -1058,13 +1356,24 @@ export default function Receipts() {
             <Card key={index} data-testid={`receipt-card-${index}`}>
               <CardContent className="p-4">
                 <div className="flex gap-4">
-                  {/* Thumbnail */}
+                  {/* Thumbnail — click to view source image alongside extracted data */}
                   <div className="relative">
-                    <img
-                      src={receipt.preview}
-                      alt={`Receipt ${index + 1}`}
-                      className="w-24 h-24 object-cover rounded-lg border"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setImagePreview({ src: receipt.preview, merchant: receipt.data?.merchant })}
+                      className="group relative block w-24 h-24 rounded-lg overflow-hidden border hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label="Preview source image"
+                      data-testid={`ocr-thumbnail-${index}`}
+                    >
+                      <img
+                        src={receipt.preview}
+                        alt={`Receipt ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <ZoomIn className="w-5 h-5 text-white" />
+                      </span>
+                    </button>
                     <Button
                       variant="destructive"
                       size="icon"
@@ -1102,21 +1411,21 @@ export default function Receipts() {
                     )}
 
                     {receipt.status === 'error' && (
-                      <div className="flex items-center gap-2 text-red-600">
+                      <div className="flex items-center gap-2 text-destructive">
                         <XCircle className="w-4 h-4" />
                         <span className="text-sm">{receipt.error}</span>
                       </div>
                     )}
 
                     {receipt.status === 'saved' && (
-                      <div className="flex items-center gap-2 text-blue-600">
+                      <div className="flex items-center gap-2 text-[hsl(var(--chart-1))]">
                         <CheckCircle2 className="w-4 h-4" />
                         <span className="text-sm font-medium">Successfully saved to database</span>
                       </div>
                     )}
 
                     {receipt.status === 'save_error' && (
-                      <div className="flex items-center gap-2 text-orange-600">
+                      <div className="flex items-center gap-2 text-[hsl(var(--chart-4))]">
                         <XCircle className="w-4 h-4" />
                         <span className="text-sm">{receipt.error || 'Failed to save'}</span>
                       </div>
@@ -1125,7 +1434,7 @@ export default function Receipts() {
                     {receipt.status === 'completed' && receipt.data && (
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                          <Label className="text-xs">Merchant</Label>
+                          <Label className="text-xs">Merchant / Supplier</Label>
                           <Input
                             value={receipt.data.merchant || ''}
                             onChange={(e) =>
@@ -1149,18 +1458,55 @@ export default function Receipts() {
                           />
                         </div>
 
+                        {receipt.data.invoiceNumber && (
+                          <div className="space-y-1 col-span-2">
+                            <Label className="text-xs">Invoice / Receipt Number</Label>
+                            <Input
+                              value={receipt.data.invoiceNumber || ''}
+                              onChange={(e) =>
+                                updateReceiptData(index, { invoiceNumber: e.target.value })
+                              }
+                              className="h-8 font-mono"
+                            />
+                          </div>
+                        )}
+
                         <div className="space-y-1">
-                          <Label className="text-xs">Amount</Label>
+                          <Label className="text-xs">Subtotal (excl. VAT)</Label>
                           <Input
                             type="number"
                             step="0.01"
-                            value={receipt.data.total || ''}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const parsed = raw === '' ? 0 : parseFloat(raw);
-                              updateReceiptData(index, { total: Number.isFinite(parsed) ? parsed : 0 });
-                            }}
+                            value={receipt.data.subtotal ?? receipt.data.total ?? ''}
+                            onChange={(e) =>
+                              updateReceiptData(index, { subtotal: parseFloat(e.target.value) })
+                            }
                             className="h-8"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs">VAT ({receipt.data.vatPercentage ?? 5}%)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={receipt.data.vatAmount ?? ''}
+                            onChange={(e) =>
+                              updateReceiptData(index, { vatAmount: parseFloat(e.target.value) })
+                            }
+                            className="h-8"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold">Total (incl. VAT)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={receipt.data.total ?? ''}
+                            onChange={(e) =>
+                              updateReceiptData(index, { total: parseFloat(e.target.value) })
+                            }
+                            className="h-8 font-semibold"
                             data-testid={`input-amount-${index}`}
                           />
                         </div>
@@ -1178,26 +1524,45 @@ export default function Receipts() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Office Supplies">Office Supplies</SelectItem>
-                              <SelectItem value="Meals & Entertainment">Meals & Entertainment</SelectItem>
+                              <SelectItem value="Meals">Meals &amp; Entertainment</SelectItem>
                               <SelectItem value="Travel">Travel</SelectItem>
                               <SelectItem value="Utilities">Utilities</SelectItem>
                               <SelectItem value="Marketing">Marketing</SelectItem>
-                              <SelectItem value="Software">Software</SelectItem>
+                              <SelectItem value="Equipment">Equipment</SelectItem>
+                              <SelectItem value="Communication">Communication</SelectItem>
+                              <SelectItem value="Professional Services">Professional Services</SelectItem>
+                              <SelectItem value="Insurance">Insurance</SelectItem>
+                              <SelectItem value="Maintenance">Maintenance</SelectItem>
+                              <SelectItem value="Rent">Rent</SelectItem>
                               <SelectItem value="Other">Other</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
+                        {receipt.data.lineItems && receipt.data.lineItems.length > 0 && (
+                          <div className="col-span-2 space-y-1">
+                            <Label className="text-xs">Line Items</Label>
+                            <div className="rounded border text-xs divide-y">
+                              {receipt.data.lineItems.map((item, i) => (
+                                <div key={i} className="flex justify-between px-2 py-1">
+                                  <span className="truncate max-w-[60%]">{item.description}</span>
+                                  <span className="text-muted-foreground ml-2">
+                                    {item.quantity > 1 ? `×${item.quantity}  ` : ''}{item.total.toFixed(2)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {receipt.data.confidence && (
                           <div className="col-span-2">
                             <p className="text-xs text-muted-foreground">
-                              OCR Confidence: {Math.round(receipt.data.confidence * 100)}%
-                              {receipt.data.category && (
-                                <Badge variant="secondary" className="ml-2">
-                                  <Sparkles className="w-2 h-2 mr-1" />
-                                  AI
-                                </Badge>
-                              )}
+                              AI Confidence: {Math.round(receipt.data.confidence * 100)}%
+                              <Badge variant="secondary" className="ml-2">
+                                <Sparkles className="w-2 h-2 mr-1" />
+                                GPT-4o Vision
+                              </Badge>
                             </p>
                           </div>
                         )}
@@ -1229,7 +1594,11 @@ export default function Receipts() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-expenses-excel">
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  Export to Excel
+                  Export to Excel (full)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDownloadReceiptsExcel} data-testid="menu-export-expenses-excel-ocr">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Download Excel (OCR format)
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportGoogleSheets} data-testid="menu-export-expenses-sheets">
                   <SiGooglesheets className="w-4 h-4 mr-2" />
@@ -1248,26 +1617,29 @@ export default function Receipts() {
             />
           </div>
           {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
+            <CardListSkeleton count={4} />
           ) : filteredReceipts && filteredReceipts.length > 0 ? (
-            <div className="space-y-2">
-              {filteredReceipts.map((receipt: any) => (
+            <VirtualList
+              items={filteredReceipts as any[]}
+              estimateSize={88}
+              height={Math.min(720, Math.max(400, filteredReceipts.length * 88))}
+              getKey={(receipt) => receipt.id}
+              className="space-y-2"
+              renderItem={(receipt: any) => (
                 <div
                   key={receipt.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
+                  className="flex items-center justify-between p-4 border rounded-lg hover-elevate mb-2"
                   data-testid={`receipt-${receipt.id}`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center">
-                      <FileText className="w-6 h-6" />
-                    </div>
+                    <ReceiptThumbnail
+                      companyId={companyId}
+                      receipt={receipt}
+                      onPreview={(src, merchant) => setImagePreview({ src, merchant })}
+                    />
                     <div>
                       <p className="font-medium">{receipt.merchant || 'Unknown Merchant'}</p>
-                      <p className="text-sm text-muted-foreground">{receipt.date ? String(receipt.date).slice(0, 10) : ''}</p>
+                      <p className="text-sm text-muted-foreground">{receipt.date}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -1275,14 +1647,47 @@ export default function Receipts() {
                       <p className="font-mono font-semibold">
                         {formatCurrency(receipt.amount || 0, 'AED', locale)}
                       </p>
-                      <div className="flex gap-2 mt-1">
+                      <div className="flex gap-2 mt-1 flex-wrap justify-end">
                         <Badge variant="outline">
                           {receipt.category || 'Uncategorized'}
                         </Badge>
-                        {receipt.posted && (
-                          <Badge variant="default" className="bg-green-600">
-                            Posted
+                        {isInternalClassifierMethod(receipt.classifierMethod) && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30"
+                            data-testid={`badge-classifier-internal-${receipt.id}`}
+                            title={`Classified by internal ${receipt.classifierMethod} stage`}
+                          >
+                            <Brain className="w-3 h-3 mr-1" />
+                            Internal
                           </Badge>
+                        )}
+                        {receipt.classifierMethod === 'openai' && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                            data-testid={`badge-classifier-ai-${receipt.id}`}
+                            title="Classified by OpenAI fallback"
+                          >
+                            <Bot className="w-3 h-3 mr-1" />
+                            AI
+                          </Badge>
+                        )}
+                        {receipt.autoPosted && (
+                          <Badge
+                            variant="default"
+                            className="bg-emerald-600 hover:bg-emerald-600"
+                            data-testid={`badge-auto-posted-${receipt.id}`}
+                            title="Auto-posted by Receipt Autopilot"
+                          >
+                            <Zap className="w-3 h-3 mr-1" />
+                            Auto-posted
+                          </Badge>
+                        )}
+                        {receipt.posted && !receipt.autoPosted && (
+                          <StatusBadge tone="success">
+                            Posted
+                          </StatusBadge>
                         )}
                       </div>
                     </div>
@@ -1319,15 +1724,64 @@ export default function Receipts() {
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+            />
           ) : (
-            <p className="text-center text-muted-foreground py-8">
-              No receipts yet. Upload your first receipt above!
-            </p>
+            <EmptyState
+              icon={Upload}
+              title={dateRange.from || dateRange.to ? 'No receipts in this date range' : 'No receipts yet'}
+              description={
+                dateRange.from || dateRange.to
+                  ? 'Try widening the filter or clearing it to see all receipts.'
+                  : "Snap a photo or upload a PDF — AI extracts merchant, VAT, and category automatically."
+              }
+              action={
+                !(dateRange.from || dateRange.to)
+                  ? {
+                      label: 'Upload receipt',
+                      icon: Upload,
+                      onClick: () => document.getElementById('file-input')?.click(),
+                      testId: 'button-upload-first-receipt',
+                    }
+                  : undefined
+              }
+              secondaryAction={
+                dateRange.from || dateRange.to
+                  ? {
+                      label: 'Clear filter',
+                      onClick: () => setDateRange({ from: undefined, to: undefined }),
+                    }
+                  : undefined
+              }
+              testId="empty-state-receipts"
+            />
           )}
         </CardContent>
       </Card>
+
+      {/* Source Image Preview Dialog — lets users compare OCR output against the original. */}
+      <Dialog open={!!imagePreview} onOpenChange={(open) => !open && setImagePreview(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Source receipt image</DialogTitle>
+            <DialogDescription>
+              {imagePreview?.merchant
+                ? `Original scanned image for ${imagePreview.merchant}`
+                : 'Original scanned image'}
+            </DialogDescription>
+          </DialogHeader>
+          {imagePreview && (
+            <div className="flex items-center justify-center bg-muted/30 rounded-md p-2 max-h-[75vh] overflow-auto">
+              <img
+                src={imagePreview.src}
+                alt="Source receipt"
+                className="max-w-full h-auto rounded"
+                data-testid="image-preview-full"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Receipt Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -1378,12 +1832,8 @@ export default function Receipts() {
                         step="0.01" 
                         className="font-mono"
                         value={field.value ?? ''} 
-                        onChange={(e) => {
-                          if (!e.target.value) return field.onChange('');
-                          const parsed = parseFloat(e.target.value);
-                          field.onChange(Number.isFinite(parsed) ? parsed : '');
-                        }}
-                        data-testid="input-edit-amount"
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : '')}
+                        data-testid="input-edit-amount" 
                       />
                     </FormControl>
                     <FormMessage />
@@ -1397,11 +1847,7 @@ export default function Receipts() {
                   <FormItem>
                     <FormLabel>VAT Amount (Optional)</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" step="0.01" className="font-mono" value={field.value ?? ''} onChange={(e) => {
-                        if (!e.target.value) return field.onChange(null);
-                        const parsed = parseFloat(e.target.value);
-                        field.onChange(Number.isFinite(parsed) ? parsed : null);
-                      }} data-testid="input-edit-vat" />
+                      <Input {...field} type="number" step="0.01" className="font-mono" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)} data-testid="input-edit-vat" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1451,7 +1897,7 @@ export default function Receipts() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <XCircle className="w-5 h-5 text-yellow-500" />
+              <XCircle className="w-5 h-5 text-[hsl(var(--chart-4))]" />
               Similar Transactions Found
             </DialogTitle>
             <DialogDescription>

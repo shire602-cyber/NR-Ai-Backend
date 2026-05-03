@@ -195,13 +195,10 @@ export function OnboardingWizard() {
     <Dialog open={showWizard} onOpenChange={setShowWizard}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center">
             <Badge variant="secondary">
               Step {currentStep + 1} of {totalSteps}
             </Badge>
-            <Button variant="ghost" size="sm" onClick={handleSkip}>
-              <X className="w-4 h-4" />
-            </Button>
           </div>
           <div className="pt-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
@@ -358,15 +355,7 @@ export function HelpTip({ tipKey, children }: { tipKey: string; children: React.
     return null;
   }
 
-  let dismissedTips: string[] = [];
-  if (onboarding.dismissedTips) {
-    try {
-      const parsed = JSON.parse(onboarding.dismissedTips);
-      if (Array.isArray(parsed)) dismissedTips = parsed;
-    } catch {
-      // Corrupt payload from API — treat as no dismissed tips
-    }
-  }
+  const dismissedTips = onboarding.dismissedTips ? JSON.parse(onboarding.dismissedTips) : [];
   if (dismissedTips.includes(tipKey)) {
     return null;
   }

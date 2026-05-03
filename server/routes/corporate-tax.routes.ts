@@ -2,6 +2,8 @@ import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
+import { UAE_CT_EXEMPTION_THRESHOLD } from '../constants';
+import { assertPeriodNotLocked } from '../services/period-lock.service';
 
 export function registerCorporateTaxRoutes(app: Express) {
   // =====================================
@@ -24,17 +26,11 @@ export function registerCorporateTaxRoutes(app: Express) {
 
   // Get a single corporate tax return
   app.get("/api/corporate-tax/returns/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user.id;
     const { id } = req.params;
 
     const taxReturn = await storage.getCorporateTaxReturn(id);
     if (!taxReturn) {
       return res.status(404).json({ message: 'Corporate tax return not found' });
-    }
-
-    const hasAccess = await storage.hasCompanyAccess(userId, taxReturn.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     res.json(taxReturn);
@@ -50,6 +46,12 @@ export function registerCorporateTaxRoutes(app: Express) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // CT returns settle tax against periodEnd — block creation when the
+    // period is already locked, since the tax provision JE could not post.
+    if (req.body?.periodEnd) {
+      await assertPeriodNotLocked(companyId, req.body.periodEnd);
+    }
+
     const taxReturn = await storage.createCorporateTaxReturn({
       ...req.body,
       companyId,
@@ -60,17 +62,11 @@ export function registerCorporateTaxRoutes(app: Express) {
 
   // Update a corporate tax return
   app.patch("/api/corporate-tax/returns/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user.id;
     const { id } = req.params;
 
     const existing = await storage.getCorporateTaxReturn(id);
     if (!existing) {
       return res.status(404).json({ message: 'Corporate tax return not found' });
-    }
-
-    const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const taxReturn = await storage.updateCorporateTaxReturn(id, req.body);
@@ -113,21 +109,18 @@ export function registerCorporateTaxRoutes(app: Express) {
     let totalRevenue = 0;
     let totalExpenses = 0;
 
-    // Process each journal entry's lines
-    for (const entry of periodEntries) {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
+    // Single batched fetch for all period lines.
+    const periodLines = await storage.getJournalLinesByEntryIds(periodEntries.map(e => e.id));
+    for (const line of periodLines) {
+      const account = accountMap.get(line.accountId);
+      if (!account) continue;
 
-      for (const line of lines) {
-        const account = accountMap.get(line.accountId);
-        if (!account) continue;
-
-        if (account.type === 'income') {
-          // Revenue accounts: credit side increases revenue
-          totalRevenue += (line.credit || 0) - (line.debit || 0);
-        } else if (account.type === 'expense') {
-          // Expense accounts: debit side increases expenses
-          totalExpenses += (line.debit || 0) - (line.credit || 0);
-        }
+      if (account.type === 'income') {
+        // Revenue accounts: credit side increases revenue
+        totalRevenue += (line.credit || 0) - (line.debit || 0);
+      } else if (account.type === 'expense') {
+        // Expense accounts: debit side increases expenses
+        totalExpenses += (line.debit || 0) - (line.credit || 0);
       }
     }
 
@@ -135,7 +128,7 @@ export function registerCorporateTaxRoutes(app: Express) {
     totalRevenue = Math.max(0, totalRevenue);
     totalExpenses = Math.max(0, totalExpenses);
 
-    const exemptionThreshold = 375000;
+    const exemptionThreshold = UAE_CT_EXEMPTION_THRESHOLD;
     const taxRate = 0.09;
     const totalDeductions = 0; // User can adjust this on the frontend
     const taxableIncome = totalRevenue - totalExpenses - totalDeductions;

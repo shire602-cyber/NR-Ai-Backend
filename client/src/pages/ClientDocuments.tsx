@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, Link } from 'wouter';
 import { format, differenceInDays, parseISO } from 'date-fns';
-import { daysBetween, formatDateSafe } from '@/lib/date-safe';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -192,8 +191,7 @@ export default function ClientDocuments() {
 
   const getExpiryStatus = (expiryDate: string | null) => {
     if (!expiryDate) return null;
-    const days = daysBetween(expiryDate, new Date());
-    if (days === null) return null;
+    const days = differenceInDays(parseISO(expiryDate), new Date());
     if (days < 0) return { status: 'expired', color: 'destructive', days: Math.abs(days) };
     if (days <= 30) return { status: 'expiring_soon', color: 'warning', days };
     return { status: 'valid', color: 'default', days };
@@ -213,14 +211,13 @@ export default function ClientDocuments() {
 
   const expiringDocs = documents?.filter(doc => {
     if (!doc.expiryDate || doc.isArchived) return false;
-    const days = daysBetween(doc.expiryDate, new Date());
-    return days !== null && days >= 0 && days <= 30;
+    const days = differenceInDays(parseISO(doc.expiryDate), new Date());
+    return days >= 0 && days <= 30;
   }) || [];
 
   const expiredDocs = documents?.filter(doc => {
     if (!doc.expiryDate || doc.isArchived) return false;
-    const days = daysBetween(doc.expiryDate, new Date());
-    return days !== null && days < 0;
+    return differenceInDays(parseISO(doc.expiryDate), new Date()) < 0;
   }) || [];
 
   if (isLoading) {
@@ -367,7 +364,7 @@ export default function ClientDocuments() {
                           {doc.expiryDate ? (
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
-                              {formatDateSafe(doc.expiryDate, d => format(d, 'dd MMM yyyy'))}
+                              {format(parseISO(doc.expiryDate), 'dd MMM yyyy')}
                             </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -387,7 +384,7 @@ export default function ClientDocuments() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {formatDateSafe(doc.createdAt, d => format(d, 'dd MMM yyyy'))}
+                          {format(parseISO(doc.createdAt), 'dd MMM yyyy')}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">

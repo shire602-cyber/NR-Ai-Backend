@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, Link } from 'wouter';
 import { format, parseISO } from 'date-fns';
-import { toDate } from '@/lib/date-safe';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -109,17 +108,9 @@ export default function ClientDetails() {
 
   const { company, documents = [], complianceTasks = [], users = [] } = data;
   
-  const now = new Date();
-  const expiredDocs = documents.filter(d => {
-    const expiry = toDate(d.expiryDate);
-    return expiry !== null && expiry < now;
-  }).length;
+  const expiredDocs = documents.filter(d => d.expiryDate && new Date(d.expiryDate) < new Date()).length;
   const pendingTasks = complianceTasks.filter(t => t.status !== 'completed').length;
-  const overdueTasks = complianceTasks.filter(t => {
-    if (t.status === 'completed') return false;
-    const due = toDate(t.dueDate);
-    return due !== null && due < now;
-  }).length;
+  const overdueTasks = complianceTasks.filter(t => t.status !== 'completed' && new Date(t.dueDate) < new Date()).length;
 
   return (
     <div className="space-y-6">

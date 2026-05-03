@@ -1,7 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware, requireCustomer } from "../middleware/auth";
+import { authMiddleware } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
+import { UAE_VAT_RATE } from "../constants";
+import { pool } from "../db";
+import { assertPeriodNotLocked } from "../services/period-lock.service";
 
 export function registerVATRoutes(app: Express) {
   // =====================================
@@ -9,7 +12,7 @@ export function registerVATRoutes(app: Express) {
   // =====================================
 
   // Get VAT returns by company
-  app.get("/api/companies/:companyId/vat-returns", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/vat-returns", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
 
@@ -23,7 +26,7 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Generate VAT return (FTA VAT 201 format with emirate breakdown)
-  app.post("/api/companies/:companyId/vat-returns/generate", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/vat-returns/generate", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.params;
     const { periodStart, periodEnd } = req.body;
@@ -31,6 +34,12 @@ export function registerVATRoutes(app: Express) {
     const hasAccess = await storage.hasCompanyAccess(userId, companyId);
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Generating a VAT return for a period that is already closed would
+    // produce numbers that disagree with the locked-period books. Block it.
+    if (periodEnd) {
+      await assertPeriodNotLocked(companyId, periodEnd);
     }
 
     // Get company information for emirate and VAT registration
@@ -56,48 +65,92 @@ export function registerVATRoutes(app: Express) {
     const startDate = new Date(periodStart);
     const endDate = new Date(periodEnd);
 
-    // Filter invoices for the period
+    // Filter invoices for the period — drafts must be excluded too because
+    // they have not been issued and therefore create no VAT obligation.
     const periodInvoices = invoices.filter(inv => {
       const invDate = new Date(inv.date);
-      return invDate >= startDate && invDate <= endDate && inv.status !== 'void';
+      return invDate >= startDate
+        && invDate <= endDate
+        && inv.status !== 'void'
+        && inv.status !== 'draft'
+        && inv.status !== 'cancelled';
     });
 
-    // Fetch all invoice lines for categorization by VAT supply type
+    // Fetch all invoice lines for categorization by VAT supply type — single
+    // batched fetch instead of one per invoice.
     let standardRatedAmount = 0;
     let standardRatedVat = 0;
     let zeroRatedAmount = 0;
     let exemptAmount = 0;
 
-    for (const invoice of periodInvoices) {
-      const lines = await storage.getInvoiceLinesByInvoiceId(invoice.id);
+    const periodLines = await storage.getInvoiceLinesByInvoiceIds(periodInvoices.map(i => i.id));
+    for (const line of periodLines) {
+      const lineAmount = line.quantity * line.unitPrice;
+      const lineVat = lineAmount * (line.vatRate ?? UAE_VAT_RATE);
+      const supplyType = (line as any).vatSupplyType || 'standard_rated';
 
-      for (const line of lines) {
-        const lineAmount = line.quantity * line.unitPrice;
-        const lineVat = lineAmount * (line.vatRate || 0);
-        const supplyType = (line as any).vatSupplyType || 'standard_rated';
-
-        if (supplyType === 'zero_rated' || line.vatRate === 0) {
-          // Zero-rated supplies (exports, international services)
-          zeroRatedAmount += lineAmount;
-        } else if (supplyType === 'exempt') {
-          // Exempt supplies (financial services, residential rent, etc.)
-          exemptAmount += lineAmount;
-        } else {
-          // Standard rated (5% VAT)
-          standardRatedAmount += lineAmount;
-          standardRatedVat += lineVat;
-        }
+      if (supplyType === 'zero_rated' || line.vatRate === 0) {
+        // Zero-rated supplies (exports, international services)
+        zeroRatedAmount += lineAmount;
+      } else if (supplyType === 'exempt') {
+        // Exempt supplies (financial services, residential rent, etc.)
+        exemptAmount += lineAmount;
+      } else {
+        // Standard rated (5% VAT)
+        standardRatedAmount += lineAmount;
+        standardRatedVat += lineVat;
       }
     }
 
-    // Calculate input tax from receipts
+    // Calculate input tax from receipts — only posted receipts can be
+    // claimed for input VAT recovery on a VAT return.
     const periodReceipts = receipts.filter(rec => {
+      if (!rec.posted) return false;
       const recDate = new Date(rec.date || rec.createdAt);
       return recDate >= startDate && recDate <= endDate;
     });
 
-    const totalExpenses = periodReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
-    const inputTax = periodReceipts.reduce((sum, rec) => sum + (rec.vatAmount || 0), 0);
+    // Split receipts: reverse-charge are reported in Boxes 3 (output) and 10
+    // (input side, subject to partial-exemption recovery), ordinary receipts
+    // feed Box 9.
+    const ordinaryReceipts = periodReceipts.filter(r => !r.reverseCharge);
+    const reverseChargeReceipts = periodReceipts.filter(r => r.reverseCharge);
+
+    const totalExpenses = ordinaryReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
+    const inputTaxGross = ordinaryReceipts.reduce((sum, rec) => sum + (rec.vatAmount || 0), 0);
+
+    let reverseChargeAmount = reverseChargeReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
+    let reverseChargeVatGross = reverseChargeReceipts.reduce((sum, rec) => sum + (rec.vatAmount || 0), 0);
+
+    // Reverse-charge bills (foreign / unregistered vendor purchases) — pulled
+    // direct from vendor_bills since the bill module isn't in Drizzle yet.
+    try {
+      const billRes = await pool.query(
+        `SELECT COALESCE(SUM(subtotal), 0) AS amount, COALESCE(SUM(vat_amount), 0) AS vat
+         FROM vendor_bills
+         WHERE company_id = $1
+           AND reverse_charge = true
+           AND bill_date >= $2
+           AND bill_date <= $3
+           AND status NOT IN ('void','cancelled','draft')`,
+        [companyId, startDate, endDate],
+      );
+      reverseChargeAmount += Number(billRes.rows[0]?.amount || 0);
+      reverseChargeVatGross += Number(billRes.rows[0]?.vat || 0);
+    } catch (err) {
+      // Bill-pay schema may not be installed in dev — fail open, log via parent.
+    }
+
+    // Partial-exemption apportionment (FTA Article 55). When a company makes
+    // both taxable and exempt supplies, only the taxable portion of input VAT
+    // is recoverable. Output VAT (including reverse-charge output in Box 3) is
+    // unaffected — only the input/recovery side is reduced.
+    const exemptRatio = Math.min(1, Math.max(0, Number(company.exemptSupplyRatio || 0)));
+    const recoverableRatio = 1 - exemptRatio;
+    const inputTax = Math.round(inputTaxGross * recoverableRatio * 100) / 100;
+    const irrecoverableInputTax = Math.round((inputTaxGross - inputTax) * 100) / 100;
+    const reverseChargeVat = reverseChargeVatGross; // output side
+    const reverseChargeVatRecoverable = Math.round(reverseChargeVatGross * recoverableRatio * 100) / 100;
 
     // Due date is 28 days after period end (FTA requirement)
     const dueDate = new Date(endDate);
@@ -150,9 +203,13 @@ export function registerVATRoutes(app: Express) {
         break;
     }
 
-    // Calculate totals
-    const totalOutputAmount = standardRatedAmount + zeroRatedAmount + exemptAmount;
-    const totalOutputVat = standardRatedVat;
+    // Calculate totals. Reverse charge feeds Box 3 (output, full) and Box 10
+    // (input, partial-exemption-reduced). Standard input tax (Box 9) is also
+    // partial-exemption reduced via `inputTax`.
+    const totalOutputAmount = standardRatedAmount + zeroRatedAmount + exemptAmount + reverseChargeAmount;
+    const totalOutputVat = standardRatedVat + reverseChargeVat;
+    const totalInputAmount = totalExpenses + reverseChargeAmount;
+    const totalInputVat = inputTax + reverseChargeVatRecoverable;
 
     const vatReturn = await storage.createVatReturn({
       companyId,
@@ -166,9 +223,10 @@ export function registerVATRoutes(app: Express) {
       // Box 2: Tourist Refund Scheme (manual entry needed)
       box2TouristRefundAmount: 0,
       box2TouristRefundVat: 0,
-      // Box 3: Reverse charge supplies (imports requiring reverse charge)
-      box3ReverseChargeAmount: 0,
-      box3ReverseChargeVat: 0,
+      // Box 3: Reverse charge supplies (imports requiring reverse charge) —
+      // OUTPUT side: buyer must self-assess output VAT on these supplies.
+      box3ReverseChargeAmount: reverseChargeAmount,
+      box3ReverseChargeVat: reverseChargeVat,
       // Box 4: Zero-rated supplies (exports, international services)
       box4ZeroRatedAmount: zeroRatedAmount,
       // Box 5: Exempt supplies (financial services, residential rent)
@@ -187,17 +245,18 @@ export function registerVATRoutes(app: Express) {
       box9ExpensesAmount: totalExpenses,
       box9ExpensesVat: inputTax,
       box9ExpensesAdj: 0,
-      // Box 10: Reverse charge on imports (input side)
-      box10ReverseChargeAmount: 0,
-      box10ReverseChargeVat: 0,
+      // Box 10: Reverse charge on imports (input side) — buyer claims back the
+      // self-assessed VAT, reduced by partial-exemption ratio when applicable.
+      box10ReverseChargeAmount: reverseChargeAmount,
+      box10ReverseChargeVat: reverseChargeVatRecoverable,
       // Box 11: Total input amounts and VAT
-      box11TotalAmount: totalExpenses,
-      box11TotalVat: inputTax,
+      box11TotalAmount: totalInputAmount,
+      box11TotalVat: totalInputVat,
       box11TotalAdj: 0,
       // Box 12-14: VAT calculations
       box12TotalDueTax: totalOutputVat,
-      box13RecoverableTax: inputTax,
-      box14PayableTax: totalOutputVat - inputTax,
+      box13RecoverableTax: totalInputVat,
+      box14PayableTax: totalOutputVat - totalInputVat,
       // Legacy fields for backward compatibility
       box1SalesStandard: standardRatedAmount,
       box2SalesOtherEmirates: 0,
@@ -206,8 +265,8 @@ export function registerVATRoutes(app: Express) {
       box5TotalOutputTax: totalOutputVat,
       box6ExpensesStandard: totalExpenses,
       box7ExpensesTouristRefund: 0,
-      box8TotalInputTax: inputTax,
-      box9NetTax: totalOutputVat - inputTax,
+      box8TotalInputTax: totalInputVat,
+      box9NetTax: totalOutputVat - totalInputVat,
       createdBy: userId,
     });
 
@@ -222,19 +281,28 @@ export function registerVATRoutes(app: Express) {
         standardRatedSales: standardRatedAmount,
         zeroRatedSales: zeroRatedAmount,
         exemptSales: exemptAmount,
-        totalInputVat: inputTax,
-        netVatPayable: totalOutputVat - inputTax,
+        reverseChargeAmount,
+        reverseChargeVat,
+        reverseChargeVatRecoverable,
+        totalInputVat,
+        netVatPayable: totalOutputVat - totalInputVat,
+        partialExemption: {
+          exemptSupplyRatio: exemptRatio,
+          recoverableRatio,
+          grossInputVat: inputTaxGross,
+          recoverableInputVat: inputTax,
+          irrecoverableInputVat: irrecoverableInputTax,
+        },
       }
     });
   }));
 
   // Submit VAT return
-  app.post("/api/vat-returns/:id/submit", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/vat-returns/:id/submit", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { id } = req.params;
     const { adjustmentAmount, adjustmentReason, notes } = req.body;
 
-    // Look up the VAT return to verify it exists and check company access
     const existing = await storage.getVatReturn(id);
     if (!existing) {
       return res.status(404).json({ message: 'VAT return not found' });
@@ -244,6 +312,11 @@ export function registerVATRoutes(app: Express) {
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
     }
+
+    // Submitting the return finalises the VAT settlement against periodEnd —
+    // refuse if the underlying period is already closed.
+    await assertPeriodNotLocked(existing.companyId, existing.periodEnd as any);
+
 
     const vatReturn = await storage.updateVatReturn(id, {
       status: 'submitted',
@@ -258,12 +331,11 @@ export function registerVATRoutes(app: Express) {
   }));
 
   // Update VAT return (for editing draft returns)
-  app.patch("/api/vat-returns/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/vat-returns/:id", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { id } = req.params;
     const updateData = req.body;
 
-    // Look up the VAT return to verify it exists and check company access
     const existing = await storage.getVatReturn(id);
     if (!existing) {
       return res.status(404).json({ message: 'VAT return not found' });
@@ -273,6 +345,11 @@ export function registerVATRoutes(app: Express) {
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
     }
+
+    // Never allow the client to rewrite the tenant scope of a VAT return.
+    delete (updateData as any).companyId;
+    delete (updateData as any).id;
+
 
     const vatReturn = await storage.updateVatReturn(id, {
       ...updateData,

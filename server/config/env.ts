@@ -27,6 +27,13 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('gpt-3.5-turbo'),
 
+  // === Support contact surfaced in AI prompts (optional) ===
+  SUPPORT_CONTACT_NAME: z.string().optional(),
+  SUPPORT_CONTACT_PHONE: z.string().optional(),
+
+  // === AI / Anthropic (used for OCR vision if set) ===
+  ANTHROPIC_API_KEY: z.string().optional(),
+
   // === Google Sheets Integration ===
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().email().optional(),
   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: z.string().optional(),
@@ -61,6 +68,23 @@ const envSchema = z.object({
 
   // === Logging ===
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // === Database / migrations ===
+  AUTO_MIGRATE_ON_BOOT: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  // === Email / SMTP (optional — features gracefully degrade if not set) ===
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().transform(Number).pipe(z.number().int().min(1).max(65535)).optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+
+  // === Email / Resend (preferred over SMTP when set) ===
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
 
   // === Session store ===
   // When set, Express sessions are persisted in Redis so they survive

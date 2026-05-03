@@ -5,39 +5,29 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 
 import { storage } from '../storage';
-import { authMiddleware, requireCustomer } from '../middleware/auth';
+import { authMiddleware, requireCompanyAccess, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { getEnv } from '../config/env';
 import { createLogger } from '../config/logger';
 import { categorizationRequestSchema } from '../../shared/schema';
-import { LruCache } from '../lib/lru-cache';
+import {
+  classifyOcrReceipt,
+  runAutopilot,
+  recordClassificationFeedback,
+} from '../services/receipt-autopilot.service';
+import { saveReceiptImage } from '../services/fileStorage';
+import { randomUUID } from 'crypto';
+import {
+  getModelStats,
+  getClassifierConfig,
+  setClassifierConfig,
+} from '../services/training-data.service';
 
 const log = createLogger('ai');
 
-// Cache categorisation responses for 1 hour. The same merchant/description/
-// amount/currency for the same company gets the same answer — caching it
-// eliminates the OpenAI spend on repeats (OCR batches, receipt re-scans,
-// identical invoices, etc).
-interface CategorizationResult {
-  suggestedAccountCode: string;
-  suggestedAccountName: string;
-  confidence: number;
-  reason: string;
-}
-const categorizationCache = new LruCache<string, CategorizationResult>(500, 60 * 60 * 1000);
-
-function categorizationCacheKey(
-  companyId: string,
-  description: string,
-  amount: number,
-  currency: string,
-): string {
-  const normalizedDesc = description.trim().toLowerCase().replace(/\s+/g, ' ');
-  // Round amount to the cent — tiny rounding differences shouldn't bust
-  // the cache and create a second billable call.
-  const roundedAmount = Math.round(amount * 100) / 100;
-  return `${companyId}|${currency.toUpperCase()}|${roundedAmount}|${normalizedDesc}`;
-}
+// RFC 4122 UUID format guard — used before validating AI-returned IDs against
+// tenant ownership, so we don't waste a DB round-trip on garbage strings.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // =============================================
 // AI client initialisation
@@ -69,6 +59,10 @@ export function registerAIRoutes(app: Express) {
     log.warn('AI routes registered without OpenAI — AI endpoints will return 503');
   }
 
+  function getOpenAI(): OpenAI {
+    if (!openai) throw Object.assign(new Error('AI service not configured — set OPENAI_API_KEY'), { status: 503 });
+    return openai;
+  }
 
   // =====================================
   // AI Categorization Route
@@ -76,7 +70,6 @@ export function registerAIRoutes(app: Express) {
 
   // Customer-only: AI expense categorization
   app.post("/api/ai/categorize", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const validated = categorizationRequestSchema.parse(req.body);
       const userId = (req as any).user.id;
@@ -87,26 +80,44 @@ export function registerAIRoutes(app: Express) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      // Cache check — identical prompts get the same answer, so serve from
-      // memory and skip the billable OpenAI call.
-      const cacheKey = categorizationCacheKey(
-        validated.companyId,
-        validated.description,
-        validated.amount,
-        validated.currency,
-      );
-      const cached = categorizationCache.get(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      if (!openai) {
-        return res.status(503).json({ message: 'AI is not configured on this server' });
+      // Phase 2: Try internal classifier first. Only fall through to OpenAI when
+      // the internal pipeline returns < 0.8 confidence (or the company is in
+      // openai_only mode — handled inside classifyOcrReceipt itself).
+      // Wrapped: a transient internal-classifier failure (DB blip, etc.) must
+      // not break /categorize — fall through to the OpenAI path instead of
+      // surfacing a 500. This preserves the pre-Phase-2 behaviour as a floor.
+      let internal: Awaited<ReturnType<typeof classifyOcrReceipt>> | null = null;
+      try {
+        internal = await classifyOcrReceipt(validated.companyId, {
+          merchant: validated.description,
+          amount: parseFloat(String(validated.amount)) || 0,
+          lineItems: [],
+        });
+      } catch (err: any) {
+        log.warn({ err: err?.message || err }, 'Internal classifier failed — falling through to OpenAI');
       }
 
       // Get company's Chart of Accounts
       const accounts = await storage.getAccountsByCompanyId(validated.companyId);
       const expenseAccounts = accounts.filter(a => a.type === 'expense');
+
+      if (internal && internal.method !== 'openai' && internal.confidence >= 0.8) {
+        // We can short-circuit OpenAI entirely. Resolve the suggested account.
+        const suggested = internal.accountId
+          ? expenseAccounts.find(a => a.id === internal.accountId)
+          : expenseAccounts.find(a => a.nameEn.toLowerCase().includes(internal.category.toLowerCase()));
+        if (suggested) {
+          return res.json({
+            suggestedAccountCode: suggested.code,
+            suggestedAccountName: suggested.nameEn,
+            accountId: suggested.id,
+            confidence: internal.confidence,
+            reason: internal.reason,
+            method: internal.method,
+          });
+        }
+        // Fall through to OpenAI when our COA has no clean match for the category.
+      }
 
       // Build account list for AI prompt
       const accountList = expenseAccounts.map(acc =>
@@ -114,7 +125,7 @@ export function registerAIRoutes(app: Express) {
       ).join('\n');
 
       // Use OpenAI to categorize the expense
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -143,34 +154,41 @@ Amount: ${validated.amount} ${validated.currency}`
         temperature: 0.3,
       });
 
-      let aiResponse: any = {};
-      try {
-        aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
-      } catch {
-        // Model returned something that wasn't valid JSON despite the
-        // json_object response_format — log and fall back to empty.
-        log.warn({ raw: completion.choices[0].message.content }, 'Non-JSON response from AI');
+      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+
+      // Validate AI response scope: ensure the suggested account belongs to this company.
+      // Prevents AI hallucinations from referencing accounts outside the company's COA.
+      const suggestedAccount = expenseAccounts.find(
+        (a) =>
+          a.nameEn.toLowerCase() === (aiResponse.accountName || '').toLowerCase() ||
+          (a.nameAr && a.nameAr === aiResponse.accountName)
+      );
+
+      if (!suggestedAccount) {
+        log.warn(
+          { companyId: validated.companyId, accountName: aiResponse.accountName },
+          'AI suggested account not found in company COA'
+        );
+        return res.status(422).json({
+          message: 'AI suggested an account that does not exist in your Chart of Accounts',
+        });
       }
 
-      const result: CategorizationResult = {
-        suggestedAccountCode: String(aiResponse.accountCode ?? ''),
-        suggestedAccountName: String(aiResponse.accountName ?? ''),
-        confidence: Number.isFinite(aiResponse.confidence) ? Number(aiResponse.confidence) : 0,
-        reason: String(aiResponse.reason ?? ''),
-      };
-      categorizationCache.set(cacheKey, result);
-
-      res.json(result);
+      res.json({
+        suggestedAccountCode: aiResponse.accountCode,
+        suggestedAccountName: suggestedAccount.nameEn,
+        accountId: suggestedAccount.id,
+        confidence: aiResponse.confidence,
+        reason: aiResponse.reason,
+      });
     } catch (error: any) {
       log.error({ err: error }, 'AI categorization error');
-      // Don't leak internal error messages; client gets a generic failure.
-      res.status(500).json({ message: 'AI categorization failed. Please try again.' });
+      res.status(500).json({ message: error.message || 'AI categorization failed' });
     }
   }));
 
   // AI Bank Statement Parser Route
-  app.post("/api/ai/parse-bank-statement", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
+  app.post("/api/ai/parse-bank-statement", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { text } = req.body;
 
@@ -179,7 +197,7 @@ Amount: ${validated.amount} ${validated.currency}`
       }
 
       // Use OpenAI to parse bank statement transactions
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -230,31 +248,26 @@ If no valid transactions can be found, return { "transactions": [] }`
         reference: t.reference || null,
       }));
 
-      console.log('[AI] Parsed bank statement, found', validTransactions.length, 'transactions');
+      log.info({ count: validTransactions.length }, 'Parsed bank statement');
 
       res.json({ transactions: validTransactions });
     } catch (error: any) {
-      console.error('AI bank statement parsing error:', error);
+      log.error({ err: error }, 'AI bank statement parsing error');
       res.status(500).json({ message: error.message || 'Failed to parse bank statement' });
     }
   }));
 
   // AI CFO Advice Route
-  app.post("/api/ai/cfo-advice", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
+  app.post("/api/ai/cfo-advice", authMiddleware, requireCustomer, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user.id;
       const { companyId, question, context } = req.body;
 
       if (!companyId || !question) {
         return res.status(400).json({ message: 'Company ID and question are required' });
       }
 
-      // Verify company access
-      const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-      if (!hasAccess) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
+      // Tenant access already enforced by requireCompanyAccess middleware above
+      // — no inline check needed.
 
       // Get additional company data for context
       const company = await storage.getCompany(companyId);
@@ -278,7 +291,7 @@ If no valid transactions can be found, return { "transactions": [] }`
       };
 
       // Use OpenAI to provide CFO advice
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -319,7 +332,7 @@ Keep your tone professional but friendly, like a trusted advisor.`
         context: financialContext,
       });
     } catch (error: any) {
-      console.error('AI CFO advice error:', error);
+      log.error({ err: error }, 'AI CFO advice error');
       res.status(500).json({ message: error.message || 'Failed to get AI advice' });
     }
   }));
@@ -330,7 +343,6 @@ Keep your tone professional but friendly, like a trusted advisor.`
 
   // Enhanced AI Batch Transaction Categorization
   app.post("/api/ai/batch-categorize", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, transactions } = req.body;
       const userId = (req as any).user.id;
@@ -354,7 +366,43 @@ Keep your tone professional but friendly, like a trusted advisor.`
         `${acc.nameEn} (${acc.type})${acc.nameAr ? ` - ${acc.nameAr}` : ''}`
       ).join('\n');
 
-      // Get previous classifications for learning context
+      // Phase 2: try the internal classifier on each transaction. High-confidence
+      // hits (≥ 0.8) skip the OpenAI call entirely and are merged into the
+      // response; the rest are passed to OpenAI as a smaller batch.
+      // Pre-fetch config + accounts ONCE so the per-transaction loop doesn't
+      // re-issue getCompany / getAccountsByCompanyId on every call (N+1 fix).
+      const classifierConfig = await getClassifierConfig(companyId);
+      const internalResults: Record<number, { category: string; confidence: number; reason: string; method: string; accountName?: string }> = {};
+      const remaining: Array<{ originalIndex: number; t: any }> = [];
+      for (let i = 0; i < transactions.length; i++) {
+        const t = transactions[i];
+        try {
+          const r = await classifyOcrReceipt(companyId, {
+            merchant: t.description || t.merchant || '',
+            amount: parseFloat(String(t.amount)) || 0,
+            lineItems: [],
+          }, { config: classifierConfig, accounts });
+          if (r.method !== 'openai' && r.confidence >= 0.8) {
+            const matched = r.accountId
+              ? expenseAccounts.find(a => a.id === r.accountId)
+              : expenseAccounts.find(a => a.nameEn.toLowerCase().includes(r.category.toLowerCase()));
+            internalResults[i] = {
+              category: r.category,
+              confidence: r.confidence,
+              reason: r.reason,
+              method: r.method,
+              accountName: matched?.nameEn,
+            };
+          } else {
+            remaining.push({ originalIndex: i, t });
+          }
+        } catch (err: any) {
+          log.warn({ err: err?.message, idx: i }, 'Internal classifier failed for batch item — falling back to OpenAI');
+          remaining.push({ originalIndex: i, t });
+        }
+      }
+
+      // Get previous classifications for learning context (for OpenAI prompt only).
       const previousClassifications = await storage.getTransactionClassificationsByCompanyId(companyId);
       const learningContext = previousClassifications
         .filter(c => c.wasAccepted === true)
@@ -362,16 +410,44 @@ Keep your tone professional but friendly, like a trusted advisor.`
         .map(c => `"${c.description}" -> ${c.suggestedCategory}`)
         .join('\n');
 
-      const transactionList = transactions.map((t: any, i: number) =>
-        `${i + 1}. ${t.description} - Amount: ${t.amount} ${t.currency || 'AED'}`
+      const transactionList = remaining.map((row, i) =>
+        `${i + 1}. ${row.t.description} - Amount: ${row.t.amount} ${row.t.currency || 'AED'}`
       ).join('\n');
 
-      const completion = await openai.chat.completions.create({
-        model: AI_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert UAE accountant specializing in transaction categorization using machine learning principles.
+      // Build the merged response, starting with the internal-classifier hits.
+      const allClassifications: any[] = [];
+      for (const idxStr of Object.keys(internalResults)) {
+        const idx = parseInt(idxStr, 10);
+        const r = internalResults[idx];
+        const t = transactions[idx];
+        allClassifications.push({
+          index: idx,
+          accountName: r.accountName || r.category,
+          category: r.category,
+          confidence: r.confidence,
+          reason: r.reason,
+          method: r.method,
+        });
+        await storage.createTransactionClassification({
+          companyId,
+          description: t.description,
+          merchant: t.merchant,
+          amount: t.amount,
+          suggestedCategory: r.category,
+          aiConfidence: r.confidence,
+          aiReason: r.reason,
+          classifierMethod: r.method,
+        });
+      }
+
+      // Only call OpenAI for the remaining low-confidence transactions.
+      if (remaining.length > 0) {
+        const completion = await getOpenAI().chat.completions.create({
+          model: AI_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert UAE accountant specializing in transaction categorization using machine learning principles.
 
 Available accounts:
 ${accountList}
@@ -397,44 +473,53 @@ Respond with a JSON object:
     }
   ]
 }`
-          },
-          {
-            role: "user",
-            content: `Categorize these transactions:\n${transactionList}`
-          }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-      });
+            },
+            {
+              role: "user",
+              content: `Categorize these transactions:\n${transactionList}`
+            }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.2,
+        });
 
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+        const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
 
-      // Store classifications for learning
-      for (const classification of aiResponse.classifications || []) {
-        const transaction = transactions[classification.index];
-        if (transaction) {
+        for (const classification of aiResponse.classifications || []) {
+          // OpenAI's index is into `remaining` (1-based label 1 → array index 0).
+          const remainingIdx = typeof classification.index === 'number' ? classification.index : -1;
+          const row = remainingIdx >= 0 && remainingIdx < remaining.length ? remaining[remainingIdx] : null;
+          if (!row) continue;
+          const t = row.t;
+          allClassifications.push({
+            ...classification,
+            index: row.originalIndex,
+            method: 'openai',
+          });
           await storage.createTransactionClassification({
             companyId,
-            description: transaction.description,
-            merchant: transaction.merchant,
-            amount: transaction.amount,
+            description: t.description,
+            merchant: t.merchant,
+            amount: t.amount,
             suggestedCategory: classification.category,
             aiConfidence: classification.confidence,
             aiReason: classification.reason,
+            classifierMethod: 'openai',
           });
         }
       }
 
-      res.json(aiResponse);
+      // Sort by original index so the response order matches the input order.
+      allClassifications.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      res.json({ classifications: allClassifications });
     } catch (error: any) {
-      console.error('Batch categorization error:', error);
+      log.error({ err: error }, 'Batch categorization error');
       res.status(500).json({ message: error.message || 'Batch categorization failed' });
     }
   }));
 
   // Anomaly & Duplicate Detection
   app.post("/api/ai/detect-anomalies", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId } = req.body;
       const userId = (req as any).user.id;
@@ -473,7 +558,7 @@ Respond with a JSON object:
         })),
       };
 
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -520,8 +605,56 @@ Respond with JSON:
 
       const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
 
-      // Store detected anomalies
+      // Store detected anomalies. AI-returned UUIDs (entityId, duplicateOfId)
+      // are NOT trusted: a hallucinated or prompt-injected UUID could reference
+      // another tenant's record, producing cross-tenant pollution. We validate
+      // each ID belongs to the calling company before persisting; on mismatch
+      // we drop the field so the alert remains useful but not poisoned.
+      const validateBelongsToCompany = async (
+        entityType: string | undefined,
+        entityId: string | undefined,
+      ): Promise<string | undefined> => {
+        if (!entityId || typeof entityId !== 'string') return undefined;
+        if (!UUID_RE.test(entityId)) return undefined;
+        try {
+          // Storage getters are tenant-scoped: passing companyId means a
+          // hit also proves the record belongs to the tenant — no need to
+          // re-check r.companyId === companyId.
+          if (entityType === 'invoice') {
+            return (await storage.getInvoice(entityId, companyId)) ? entityId : undefined;
+          }
+          if (entityType === 'receipt') {
+            return (await storage.getReceipt(entityId, companyId)) ? entityId : undefined;
+          }
+          if (entityType === 'journal_entry') {
+            return (await storage.getJournalEntry(entityId, companyId)) ? entityId : undefined;
+          }
+        } catch (err) {
+          log.warn({ err, entityType, entityId }, 'AI anomaly entity validation failed');
+          return undefined;
+        }
+        return undefined;
+      };
+
       for (const anomaly of aiResponse.anomalies || []) {
+        const safeRelatedId = await validateBelongsToCompany(anomaly.entityType, anomaly.entityId);
+        // duplicateOfId must reference the same entity type as the anomaly
+        // (a "duplicate invoice" alert points at another invoice).
+        const safeDuplicateId = await validateBelongsToCompany(anomaly.entityType, anomaly.duplicateOfId);
+
+        if (anomaly.entityId && !safeRelatedId) {
+          log.warn(
+            { companyId, entityType: anomaly.entityType, aiReturnedId: anomaly.entityId },
+            'AI returned entityId not owned by tenant — dropping field',
+          );
+        }
+        if (anomaly.duplicateOfId && !safeDuplicateId) {
+          log.warn(
+            { companyId, entityType: anomaly.entityType, aiReturnedId: anomaly.duplicateOfId },
+            'AI returned duplicateOfId not owned by tenant — dropping field',
+          );
+        }
+
         await storage.createAnomalyAlert({
           companyId,
           type: anomaly.type,
@@ -529,15 +662,15 @@ Respond with JSON:
           title: anomaly.title,
           description: anomaly.description,
           relatedEntityType: anomaly.entityType,
-          relatedEntityId: anomaly.entityId,
-          duplicateOfId: anomaly.duplicateOfId,
+          relatedEntityId: safeRelatedId,
+          duplicateOfId: safeDuplicateId,
           aiConfidence: anomaly.confidence,
         });
       }
 
       res.json(aiResponse);
     } catch (error: any) {
-      console.error('Anomaly detection error:', error);
+      log.error({ err: error }, 'Anomaly detection error');
       res.status(500).json({ message: error.message || 'Anomaly detection failed' });
     }
   }));
@@ -595,7 +728,6 @@ Respond with JSON:
 
   // AI-Assisted Bank Reconciliation
   app.post("/api/ai/reconcile", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId } = req.body;
       const userId = (req as any).user.id;
@@ -646,7 +778,7 @@ Respond with JSON:
         })),
       };
 
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -703,13 +835,13 @@ ${JSON.stringify(ledgerData, null, 2)}`
       const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
       res.json(aiResponse);
     } catch (error: any) {
-      console.error('Reconciliation error:', error);
+      log.error({ err: error }, 'Reconciliation error');
       res.status(500).json({ message: error.message || 'Reconciliation failed' });
     }
   }));
 
   // Apply Reconciliation Match
-  app.post("/api/bank-transactions/:id/reconcile", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/bank-transactions/:id/reconcile", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = (req as any).user?.id;
@@ -721,18 +853,18 @@ ${JSON.stringify(ledgerData, null, 2)}`
         return res.status(400).json({ message: 'matchId and matchType are required' });
       }
 
-      // Verify user has access to the company that owns this transaction
-      const txn = await storage.getBankTransactionById(id);
+      // Find the transaction within the user's accessible companies (tenant-scoped).
+      const userCompanies = await storage.getCompaniesByUserId(userId);
+      let txn: Awaited<ReturnType<typeof storage.getBankTransactionById>> | undefined;
+      for (const c of userCompanies) {
+        txn = await storage.getBankTransactionById(id, c.id);
+        if (txn) break;
+      }
       if (!txn) {
         return res.status(404).json({ message: 'Transaction not found' });
       }
 
-      const hasAccess = await storage.hasCompanyAccess(userId, txn.companyId);
-      if (!hasAccess) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      const transaction = await storage.reconcileBankTransaction(id, matchId, matchType);
+      const transaction = await storage.reconcileBankTransaction(id, txn.companyId, matchId, matchType);
       res.json(transaction);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -817,7 +949,6 @@ ${JSON.stringify(ledgerData, null, 2)}`
 
   // Predictive Cash Flow Forecasting
   app.post("/api/ai/forecast-cashflow", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, forecastMonths = 3 } = req.body;
       const userId = (req as any).user.id;
@@ -873,7 +1004,7 @@ ${JSON.stringify(ledgerData, null, 2)}`
         }).reverse(),
       };
 
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -958,23 +1089,15 @@ Respond with JSON:
         historicalData,
       });
     } catch (error: any) {
-      console.error('Cash flow forecast error:', error);
+      log.error({ err: error }, 'Cash flow forecast error');
       res.status(500).json({ message: error.message || 'Forecasting failed' });
     }
   }));
 
   // Get stored forecasts
-  app.get("/api/companies/:companyId/forecasts", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/forecasts", authMiddleware, requireCompanyAccess('params'), asyncHandler(async (req: Request, res: Response) => {
     try {
       const { companyId } = req.params;
-      const userId = (req as any).user.id;
-
-      // Verify company access
-      const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-      if (!hasAccess) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
       const forecasts = await storage.getCashFlowForecastsByCompanyId(companyId);
       res.json(forecasts);
     } catch (error: any) {
@@ -983,31 +1106,189 @@ Respond with JSON:
   }));
 
   // Transaction Classification Feedback (for ML learning)
-  app.post("/api/ai/classification-feedback", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    try {
-      const userId = (req as any).user.id;
-      const { classificationId, wasAccepted, userSelectedAccountId } = req.body;
+  const classificationFeedbackSchema = z.object({
+    classificationId: z.string().uuid(),
+    wasAccepted: z.boolean(),
+    // null clears the column; undefined leaves it untouched.
+    userSelectedAccountId: z.string().uuid().nullable().optional(),
+  });
 
-      // Look up the classification to verify it exists and check company access
+  app.post("/api/ai/classification-feedback", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      const parsed = classificationFeedbackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() });
+      }
+      const { classificationId, wasAccepted, userSelectedAccountId } = parsed.data;
+
+      // Verify the classification belongs to a company the caller can access
+      // BEFORE mutating it. Without this read-then-check, a malicious user
+      // could mutate (and corrupt the training data of) any tenant's row by
+      // submitting that row's id.
       const existing = await storage.getTransactionClassification(classificationId);
       if (!existing) {
         return res.status(404).json({ message: 'Classification not found' });
       }
-
       const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
       if (!hasAccess) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      const classification = await storage.updateTransactionClassification(classificationId, {
+      // Cross-tenant guard: a feedback submission for our own classification id
+      // could still smuggle a sibling company's accountId into the row. That
+      // bad row then leaks back via training-data joins (e.g. autonomous-gl's
+      // few-shot prompt joins user_selected_account_id and would pull the
+      // foreign account name into another tenant's OpenAI context). Reject
+      // outright when the account doesn't belong to this classification's
+      // company.
+      if (typeof userSelectedAccountId === 'string') {
+        const account = await storage.getAccount(userSelectedAccountId, existing.companyId);
+        if (!account) {
+          return res.status(403).json({ message: 'userSelectedAccountId does not belong to this company' });
+        }
+      }
+
+      // Single write via recordClassificationFeedback — also invalidates the
+      // cached classifier model and re-evaluates the accuracy failsafe for the
+      // company that owns this classification.
+      await recordClassificationFeedback(
+        existing.companyId,
+        classificationId,
         wasAccepted,
         userSelectedAccountId,
-      });
+      );
 
+      const classification = await storage.getTransactionClassification(classificationId);
       res.json(classification);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
+  }));
+
+  // ===========================================
+  // Phase 2: Receipt Autopilot endpoints
+  // ===========================================
+
+  // Hard caps protect the receipts table from oversized payloads and keep auto-
+  // post side effects bounded; they also prevent setting accuracyThreshold low
+  // enough to disable the OpenAI fallback / failsafe entirely.
+  //
+  // `imagePath` is intentionally NOT accepted from the client. The server
+  // derives a sanitized path itself by writing `imageData` (base64) through
+  // saveReceiptImage(); accepting a client-supplied filesystem path would
+  // allow path traversal — a forged value like "../../../etc/passwd" would
+  // round-trip through resolveImagePath() in the receipts image-serve route
+  // and disclose arbitrary server-readable files to anyone with access to
+  // their own company.
+  const autopilotProcessSchema = z.object({
+    companyId: z.string().uuid(),
+    ocr: z.object({
+      merchant: z.string().min(1).max(200),
+      amount: z.number().finite().nonnegative().optional().default(0),
+      vatAmount: z.number().finite().nonnegative().optional().default(0),
+      total: z.number().finite().nonnegative(),
+      currency: z.string().min(1).max(8).optional().default('AED'),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      lineItems: z.array(z.object({ description: z.string().max(500).optional() }).passthrough())
+        .max(200)
+        .optional()
+        .default([]),
+      rawText: z.string().max(50_000).nullable().optional(),
+      imageData: z.string().max(15 * 1024 * 1024).nullable().optional(),
+    }),
+  });
+
+  const classifierConfigPatchSchema = z.object({
+    companyId: z.string().uuid(),
+    mode: z.enum(['hybrid', 'openai_only']).optional(),
+    // Floor at 0.5 so a user cannot effectively disable the OpenAI fallback or
+    // the auto-failsafe by setting an unreachable threshold. Cap at 0.99 so
+    // the failsafe condition `internalAccuracy < threshold` stays satisfiable.
+    accuracyThreshold: z.number().min(0.5).max(0.99).optional(),
+    autopilotEnabled: z.boolean().optional(),
+  });
+
+  const companyIdQuerySchema = z.object({
+    companyId: z.string().uuid(),
+  });
+
+  // Run the full Receipt Autopilot pipeline on an OCR-extracted receipt.
+  app.post("/api/ai/autopilot/process", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const parsed = autopilotProcessSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() });
+    }
+    const { companyId, ocr } = parsed.data;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ message: 'Access denied' });
+
+    // Persist any submitted image bytes through the sanitizing helper so the
+    // DB only ever sees a server-generated relative path under uploads/receipts.
+    let safeImagePath: string | null = null;
+    if (ocr.imageData) {
+      safeImagePath = await saveReceiptImage(ocr.imageData, `${randomUUID()}.jpg`);
+    }
+
+    const result = await runAutopilot(companyId, userId, {
+      merchant: ocr.merchant.slice(0, 200),
+      amount: ocr.amount,
+      vatAmount: ocr.vatAmount,
+      total: ocr.total,
+      currency: ocr.currency,
+      date: ocr.date || new Date().toISOString().slice(0, 10),
+      lineItems: ocr.lineItems,
+      rawText: ocr.rawText ?? null,
+      imagePath: safeImagePath,
+      imageData: null,
+    });
+    res.json(result);
+  }));
+
+  // Aggregate accuracy stats for the AI Accuracy dashboard.
+  app.get("/api/ai/classifier-stats", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const parsed = companyIdQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'companyId is required (uuid)' });
+    }
+    const { companyId } = parsed.data;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ message: 'Access denied' });
+    const stats = await getModelStats(companyId);
+    res.json(stats);
+  }));
+
+  // Get / update the per-company classifier config (mode, threshold, autopilot toggle).
+  app.get("/api/ai/classifier-config", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const parsed = companyIdQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'companyId is required (uuid)' });
+    }
+    const { companyId } = parsed.data;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ message: 'Access denied' });
+    const config = await getClassifierConfig(companyId);
+    res.json(config);
+  }));
+
+  app.patch("/api/ai/classifier-config", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const parsed = classifierConfigPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() });
+    }
+    const { companyId, mode, accuracyThreshold, autopilotEnabled } = parsed.data;
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) return res.status(403).json({ message: 'Access denied' });
+    const patch: Partial<{ mode: 'hybrid' | 'openai_only'; accuracyThreshold: number; autopilotEnabled: boolean }> = {};
+    if (mode !== undefined) patch.mode = mode;
+    if (accuracyThreshold !== undefined) patch.accuracyThreshold = accuracyThreshold;
+    if (autopilotEnabled !== undefined) patch.autopilotEnabled = autopilotEnabled;
+    const config = await setClassifierConfig(companyId, patch);
+    res.json(config);
   }));
 
   // =====================================
@@ -1016,7 +1297,6 @@ Respond with JSON:
 
   // Main Natural Language Query Endpoint
   app.post("/api/ai/nl-gateway", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, message, locale = 'en', context = {} } = req.body;
       const userId = (req as any).user.id;
@@ -1035,30 +1315,31 @@ Respond with JSON:
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      // Gather comprehensive financial context
-      const accounts = await storage.getAccountsByCompanyId(companyId);
-      const invoices = await storage.getInvoicesByCompanyId(companyId);
-      const receipts = await storage.getReceiptsByCompanyId(companyId);
-      const entries = await storage.getJournalEntriesByCompanyId(companyId);
+      // Gather comprehensive financial context — parallel + single line fetch.
+      const [accounts, invoices, receipts, entries, allLines] = await Promise.all([
+        storage.getAccountsByCompanyId(companyId),
+        storage.getInvoicesByCompanyId(companyId),
+        storage.getReceiptsByCompanyId(companyId),
+        storage.getJournalEntriesByCompanyId(companyId),
+        storage.getJournalLinesByCompanyId(companyId),
+      ]);
+      const accountById = new Map(accounts.map(a => [a.id, a]));
 
-      // Calculate account balances
+      // Calculate account balances in a single pass.
       const accountBalances = new Map<string, { debit: number; credit: number; balance: number }>();
-      for (const entry of entries) {
-        const lines = await storage.getJournalLinesByEntryId(entry.id);
-        for (const line of lines) {
-          const current = accountBalances.get(line.accountId) || { debit: 0, credit: 0, balance: 0 };
-          current.debit += Number(line.debit) || 0;
-          current.credit += Number(line.credit) || 0;
-          const account = accounts.find(a => a.id === line.accountId);
-          if (account) {
-            if (['asset', 'expense'].includes(account.type)) {
-              current.balance = current.debit - current.credit;
-            } else {
-              current.balance = current.credit - current.debit;
-            }
+      for (const line of allLines) {
+        const current = accountBalances.get(line.accountId) || { debit: 0, credit: 0, balance: 0 };
+        current.debit += Number(line.debit) || 0;
+        current.credit += Number(line.credit) || 0;
+        const account = accountById.get(line.accountId);
+        if (account) {
+          if (['asset', 'expense'].includes(account.type)) {
+            current.balance = current.debit - current.credit;
+          } else {
+            current.balance = current.credit - current.debit;
           }
-          accountBalances.set(line.accountId, current);
         }
+        accountBalances.set(line.accountId, current);
       }
 
       // Prepare financial summary for AI
@@ -1126,6 +1407,21 @@ Respond with JSON:
         }
       }
 
+      const supportName = getEnv().SUPPORT_CONTACT_NAME;
+      const supportPhone = getEnv().SUPPORT_CONTACT_PHONE;
+      const supportLine = supportName && supportPhone
+        ? `${supportName} at ${supportPhone}`
+        : supportName || supportPhone || 'a qualified professional';
+      const supportGuidance = supportName && supportPhone
+        ? `- IMPORTANT: When users ask for professional advice, complex accounting guidance, tax planning, or need expert consultation, always encourage them to contact ${supportLine} for personalized professional assistance`
+        : `- IMPORTANT: When users ask for professional advice, complex accounting guidance, tax planning, or need expert consultation, always encourage them to consult a qualified professional`;
+      const followUpLine = supportName && supportPhone
+        ? `4. When professional advice is needed, suggest contacting ${supportLine}`
+        : `4. When professional advice is needed, suggest consulting a qualified professional`;
+      const closingGuidance = supportName && supportPhone
+        ? `Always conclude with: "For personalized professional advice on this matter, I recommend contacting ${supportLine}. They can provide expert guidance tailored to your specific situation."`
+        : `Always conclude with: "For personalized professional advice on this matter, I recommend consulting a qualified professional who can provide expert guidance tailored to your specific situation."`;
+
       const systemPrompt = `You are an intelligent bookkeeping assistant for a UAE business. You help users query and manage their financial data using natural language.
 
 CAPABILITIES:
@@ -1149,14 +1445,14 @@ RULES:
 - Format numbers properly with thousand separators
 - For date ranges, interpret "this month" as current calendar month, "last month" as previous calendar month, "this year" as current calendar year
 - When suggesting actions, explain what the user should do but don't claim to have done it
-- IMPORTANT: When users ask for professional advice, complex accounting guidance, tax planning, or need expert consultation, always encourage them to contact NR Accounting Services at +971507042270 for personalized professional assistance
+${supportGuidance}
 
 RESPONSE FORMAT:
 Respond naturally in conversational language. Include:
 1. Direct answer to the question
 2. Relevant context or insights if helpful
 3. Suggestions for follow-up questions or actions if appropriate
-4. When professional advice is needed, suggest contacting NR Accounting Services at +971507042270
+${followUpLine}
 
 PROFESSIONAL ADVICE GUIDANCE:
 Whenever a user asks about:
@@ -1167,12 +1463,12 @@ Whenever a user asks about:
 - Professional accounting services
 - Or any topic requiring expert consultation
 
-Always conclude with: "For personalized professional advice on this matter, I recommend contacting NR Accounting Services at +971507042270. They can provide expert guidance tailored to your specific situation."
+${closingGuidance}
 
 Current date: ${new Date().toISOString().split('T')[0]}
 Company: ${company.name}`;
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: AI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
@@ -1217,31 +1513,31 @@ Company: ${company.name}`;
         timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
-      console.error('NL Gateway error:', error);
+      log.error({ err: error }, 'NL Gateway error');
       res.status(500).json({ message: error.message || 'Failed to process query' });
     }
   }));
 
   // Enhanced /api/ask endpoint with streaming support
   app.post("/api/ask", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     const startTime = Date.now();
     let fullResponse = '';
     let conversationId: string | undefined;
-    let isStreaming = false; // Track if we're in streaming mode (headers sent)
-    let validated: { message: string; companyId?: string; model: string; systemPrompt?: string; stream: boolean } | undefined;
+    let isStreaming = false;
+    // Whitelist of models a client may request. Expensive models (gpt-4, gpt-4-turbo)
+    // are intentionally excluded — only cost-controlled models can be selected.
+    const ALLOWED_AI_MODELS = ['gpt-3.5-turbo', 'gpt-4o-mini'] as const;
+    const validationSchema = z.object({
+      message: z.string().min(1, 'Message is required').max(10000, 'Message is too long'),
+      companyId: z.string().uuid('Invalid company ID format').optional(),
+      model: z.enum(ALLOWED_AI_MODELS).optional().default('gpt-3.5-turbo'),
+      systemPrompt: z.string().max(2000, 'System prompt too long').optional(),
+      stream: z.boolean().optional().default(false),
+    });
+    let validated: z.infer<typeof validationSchema> | undefined;
 
     try {
       const userId = (req as any).user.id;
-
-      // Validate input with Zod schema
-      const validationSchema = z.object({
-        message: z.string().min(1, 'Message is required').max(10000, 'Message is too long'),
-        companyId: z.string().uuid('Invalid company ID format').optional(),
-        model: z.enum(['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']).optional().default('gpt-3.5-turbo'),
-        systemPrompt: z.string().max(2000, 'System prompt too long').optional(),
-        stream: z.boolean().optional().default(false),
-      });
 
       validated = validationSchema.parse(req.body);
 
@@ -1258,12 +1554,22 @@ Company: ${company.name}`;
         return res.status(500).json({ message: 'OpenAI API key is not configured' });
       }
 
+      const askSupportName = getEnv().SUPPORT_CONTACT_NAME;
+      const askSupportPhone = getEnv().SUPPORT_CONTACT_PHONE;
+      const askSupportLine = askSupportName && askSupportPhone
+        ? `${askSupportName} at ${askSupportPhone}`
+        : askSupportName || askSupportPhone || 'a qualified professional';
+      const askGuidanceBlock = askSupportName && askSupportPhone
+        ? `- When users ask for professional advice, complex accounting guidance, tax planning, or need expert consultation, always encourage them to contact ${askSupportLine} for personalized professional assistance.
+- For complex tax matters, legal compliance, advanced financial strategies, business structure advice, or any topic requiring expert consultation, always suggest: "For personalized professional advice on this matter, I recommend contacting ${askSupportLine}. They can provide expert guidance tailored to your specific situation."`
+        : `- When users ask for professional advice, complex accounting guidance, tax planning, or need expert consultation, always encourage them to consult a qualified professional.
+- For complex tax matters, legal compliance, advanced financial strategies, business structure advice, or any topic requiring expert consultation, always suggest: "For personalized professional advice on this matter, I recommend consulting a qualified professional who can provide expert guidance tailored to your specific situation."`;
+
       const systemPrompt = validated.systemPrompt ||
         `You are a helpful AI assistant for accounting and financial management. Provide clear, accurate, and professional responses.
 
 IMPORTANT GUIDELINES:
-- When users ask for professional advice, complex accounting guidance, tax planning, or need expert consultation, always encourage them to contact NR Accounting Services at +971507042270 for personalized professional assistance.
-- For complex tax matters, legal compliance, advanced financial strategies, business structure advice, or any topic requiring expert consultation, always suggest: "For personalized professional advice on this matter, I recommend contacting NR Accounting Services at +971507042270. They can provide expert guidance tailored to your specific situation."`;
+${askGuidanceBlock}`;
 
       // Setup streaming if requested
       if (validated.stream) {
@@ -1274,7 +1580,7 @@ IMPORTANT GUIDELINES:
         isStreaming = true; // Mark that headers are committed
 
         try {
-          const stream = await openai.chat.completions.create({
+          const stream = await getOpenAI().chat.completions.create({
             model: validated.model,
             messages: [
               { role: "system", content: systemPrompt },
@@ -1295,7 +1601,7 @@ IMPORTANT GUIDELINES:
           }
         } catch (streamError: any) {
           // Error occurred during streaming - headers already sent, must use SSE format
-          console.error('/api/ask streaming error:', streamError);
+          log.error({ err: streamError }, '/api/ask streaming error');
 
           // Send error as SSE message
           const errorMessage = streamError.message || 'An error occurred while streaming the response';
@@ -1319,7 +1625,7 @@ IMPORTANT GUIDELINES:
               error: errorMessage,
             });
           } catch (dbError) {
-            console.error('Failed to store error conversation:', dbError);
+            log.error({ err: dbError }, 'Failed to store error conversation');
           }
 
           return; // Exit early, response already sent
@@ -1340,7 +1646,7 @@ IMPORTANT GUIDELINES:
             responseTime,
           });
         } catch (dbError) {
-          console.error('Failed to store conversation:', dbError);
+          log.error({ err: dbError }, 'Failed to store conversation');
           // Continue even if storage fails - still send completion signal
         }
 
@@ -1349,7 +1655,7 @@ IMPORTANT GUIDELINES:
         res.end();
       } else {
         // Non-streaming response
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
           model: validated.model,
           messages: [
             { role: "system", content: systemPrompt },
@@ -1386,7 +1692,7 @@ IMPORTANT GUIDELINES:
         });
       }
     } catch (error: any) {
-      console.error('/api/ask error:', error);
+      log.error({ err: error }, '/api/ask error');
 
       // Check if headers have already been sent (streaming mode)
       // If headers are committed, we cannot send JSON responses - must use SSE format
@@ -1402,7 +1708,7 @@ IMPORTANT GUIDELINES:
           res.end();
         } catch (writeError) {
           // Response already ended or connection closed - log but don't throw
-          console.error('Failed to send SSE error message:', writeError);
+          log.error({ err: writeError }, 'Failed to send SSE error message');
         }
 
         // Store error conversation if we have partial data
@@ -1422,7 +1728,7 @@ IMPORTANT GUIDELINES:
             });
           }
         } catch (dbError) {
-          console.error('Failed to store error conversation:', dbError);
+          log.error({ err: dbError }, 'Failed to store error conversation');
         }
         return; // Exit early, response already sent
       }
@@ -1471,7 +1777,7 @@ IMPORTANT GUIDELINES:
 
       res.json(conversations);
     } catch (error: any) {
-      console.error('/api/ask/history error:', error);
+      log.error({ err: error }, '/api/ask/history error');
       res.status(500).json({ message: error.message || 'Failed to fetch history' });
     }
   }));
@@ -1672,16 +1978,14 @@ IMPORTANT GUIDELINES:
         }
       }
 
-      // Collect descriptions from invoice lines
+      // Collect descriptions from invoice lines — single batched query.
       if (!type || type === 'invoice') {
         const invoices = await storage.getInvoicesByCompanyId(companyId as string);
-        for (const invoice of invoices) {
-          const lines = await storage.getInvoiceLinesByInvoiceId(invoice.id);
-          for (const line of lines) {
-            if (line.description) {
-              const key = line.description.toLowerCase().trim();
-              descriptions.set(key, (descriptions.get(key) || 0) + 1);
-            }
+        const allLines = await storage.getInvoiceLinesByInvoiceIds(invoices.map(i => i.id));
+        for (const line of allLines) {
+          if (line.description) {
+            const key = line.description.toLowerCase().trim();
+            descriptions.set(key, (descriptions.get(key) || 0) + 1);
           }
         }
       }
@@ -1708,7 +2012,6 @@ IMPORTANT GUIDELINES:
 
   // Smart suggestions based on context
   app.post("/api/ai/smart-suggest", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-    if (!openai) return res.status(503).json({ message: 'AI service not configured' });
     try {
       const { companyId, context, fieldType, currentValue } = req.body;
       const userId = (req as any).user.id;
@@ -1729,6 +2032,32 @@ IMPORTANT GUIDELINES:
       const suggestions: Array<{ value: string; label: string; confidence: number; reason: string }> = [];
 
       if (fieldType === 'account' && context.merchant) {
+        // Phase 2: ask the internal classifier first. If it has a high-confidence
+        // suggestion we surface it before the merchant-history lookup.
+        try {
+          const internal = await classifyOcrReceipt(companyId, {
+            merchant: context.merchant,
+            amount: parseFloat(String(context.amount || 0)) || 0,
+            lineItems: [],
+          });
+          if (internal.method !== 'openai' && internal.confidence >= 0.8) {
+            const expenseAccounts = accounts.filter(a => a.type === 'expense');
+            const matched = internal.accountId
+              ? expenseAccounts.find(a => a.id === internal.accountId)
+              : expenseAccounts.find(a => a.nameEn.toLowerCase().includes(internal.category.toLowerCase()));
+            if (matched) {
+              suggestions.push({
+                value: matched.id,
+                label: matched.nameEn,
+                confidence: internal.confidence,
+                reason: `${internal.reason} (${internal.method})`,
+              });
+            }
+          }
+        } catch (err: any) {
+          log.warn({ err: err?.message }, 'smart-suggest internal classifier failed');
+        }
+
         // Learn from past categorizations for this merchant
         const receipts = await storage.getReceiptsByCompanyId(companyId);
         const merchantReceipts = receipts.filter(r =>
@@ -1736,17 +2065,16 @@ IMPORTANT GUIDELINES:
         );
 
         if (merchantReceipts.length > 0) {
-          // Find most common account used
+          // Single batched fetch instead of one query per receipt.
+          const entryIds = merchantReceipts
+            .map(r => r.journalEntryId)
+            .filter((id): id is string => Boolean(id));
+          const allLines = await storage.getJournalLinesByEntryIds(entryIds);
           const accountCounts = new Map<string, number>();
-          for (const receipt of merchantReceipts) {
-            if (receipt.journalEntryId) {
-              const lines = await storage.getJournalLinesByEntryId(receipt.journalEntryId);
-              for (const line of lines) {
-                const account = accounts.find(a => a.id === line.accountId);
-                if (account && account.type === 'expense') {
-                  accountCounts.set(account.id, (accountCounts.get(account.id) || 0) + 1);
-                }
-              }
+          for (const line of allLines) {
+            const account = accounts.find(a => a.id === line.accountId);
+            if (account && account.type === 'expense') {
+              accountCounts.set(account.id, (accountCounts.get(account.id) || 0) + 1);
             }
           }
 
@@ -1772,7 +2100,7 @@ ${expenseAccounts.map(a => `- ${a.nameEn}`).join('\n')}
 
 Respond with just the account name, nothing else.`;
 
-          const response = await openai.chat.completions.create({
+          const response = await getOpenAI().chat.completions.create({
             model: AI_MODEL,
             messages: [{ role: "user", content: prompt }],
             temperature: 0.3,
@@ -1807,7 +2135,7 @@ Respond with just the account name, nothing else.`;
 
 Respond with just the category name, nothing else.`;
 
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
           model: AI_MODEL,
           messages: [{ role: "user", content: prompt }],
           temperature: 0.3,
@@ -1827,7 +2155,7 @@ Respond with just the category name, nothing else.`;
 
       res.json({ suggestions });
     } catch (error: any) {
-      console.error('Smart suggest error:', error);
+      log.error({ err: error }, 'Smart suggest error');
       res.status(500).json({ message: error.message || 'Failed to generate suggestions' });
     }
   }));

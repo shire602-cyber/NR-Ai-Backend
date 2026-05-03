@@ -20,6 +20,7 @@ import {
   getRefreshTokenFromRequest,
   setAuthCookies,
 } from '../services/auth-cookies.service';
+import { blacklistToken, isTokenBlacklisted } from '../services/auth-tokens.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { insertUserSchema } from '../../shared/schema';
 import { createDefaultAccountsForCompany } from '../defaultChartOfAccounts';
@@ -172,14 +173,6 @@ export function registerAuthRoutes(app: Express): void {
         maxInvoices: 20,
         maxReceipts: 20,
         aiCreditsRemaining: 10,
-        billingCycle: 'monthly',
-        maxCompanies: 1,
-        maxStorageMb: 500,
-        aiCreditsPerMonth: 10,
-        aiCreditsUsedThisMonth: 0,
-        invoicesCreatedThisMonth: 0,
-        receiptsCreatedThisMonth: 0,
-        usagePeriodStart: now,
       });
 
       const { token, refreshToken } = issueAuthTokens(res, user);
@@ -281,7 +274,7 @@ export function registerAuthRoutes(app: Express): void {
     // Revocation check — refresh tokens are long-lived (7d), so a
     // denylist hit here is the main defence against a stolen refresh
     // token being replayed after logout.
-    if (payload.jti && (await storage.isJwtRevoked(payload.jti))) {
+    if (await isTokenBlacklisted(refreshToken)) {
       return res.status(401).json({ message: 'Refresh token has been revoked' });
     }
 
@@ -293,14 +286,7 @@ export function registerAuthRoutes(app: Express): void {
 
     // Refresh-token rotation: revoke the one we just consumed so it
     // cannot be replayed, and issue a fresh pair.
-    if (payload.jti && payload.exp) {
-      await storage.revokeJwt(
-        payload.jti,
-        new Date(payload.exp * 1000),
-        user.id,
-        'refresh_rotation',
-      );
-    }
+    await blacklistToken(refreshToken);
     const newToken = generateToken(user);
     const newRefreshToken = generateRefreshToken(user);
     setAuthCookies(res, newToken, newRefreshToken);
@@ -339,10 +325,9 @@ export function registerAuthRoutes(app: Express): void {
       const revokeIfValid = async (raw: string | undefined, reason: string) => {
         if (!raw) return;
         const decoded = decodeTokenUnsafe(raw);
-        if (!decoded?.jti || !decoded.exp) return;
-        const expiresAt = new Date(decoded.exp * 1000);
-        if (expiresAt.getTime() < Date.now()) return; // already expired
-        await storage.revokeJwt(decoded.jti, expiresAt, decoded.userId, reason);
+        if (!decoded?.exp) return;
+        if (decoded.exp * 1000 < Date.now()) return; // already expired
+        await blacklistToken(raw);
       };
 
       const authHeader = req.headers.authorization;

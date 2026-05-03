@@ -9,17 +9,20 @@ import {
   Plus,
   Edit,
   Trash2,
-  Search,
-  CalendarClock,
+  Calculator,
   Ban,
+  DollarSign,
+  TrendingDown,
+  BarChart3,
+  PlayCircle,
 } from 'lucide-react';
-import { useSubscription } from '@/hooks/useSubscription';
-import { UpgradePrompt } from '@/components/UpgradePrompt';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TableSkeleton, StatCardSkeleton } from '@/components/ui/loading-skeletons';
 import {
   Table,
   TableBody,
@@ -35,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -50,28 +54,66 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency } from '@/lib/format';
 
-// ─── Schemas ──────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────
+
+interface FixedAsset {
+  id: string;
+  company_id: string;
+  asset_name: string;
+  asset_name_ar: string | null;
+  asset_number: string | null;
+  category: string;
+  purchase_date: string;
+  purchase_cost: string;
+  salvage_value: string;
+  useful_life_years: number;
+  depreciation_method: string;
+  accumulated_depreciation: string;
+  net_book_value: string;
+  location: string | null;
+  serial_number: string | null;
+  status: string;
+  disposal_date: string | null;
+  disposal_amount: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+interface AssetSummary {
+  totalAssets: number;
+  totalCost: number;
+  totalAccumulatedDepreciation: number;
+  totalNetBookValue: number;
+  byCategory: {
+    category: string;
+    count: number;
+    totalCost: number;
+    totalAccumulatedDepreciation: number;
+    totalNetBookValue: number;
+  }[];
+}
+
+// ─── Schemas ─────────────────────────────────────────────
+
+const CATEGORIES = ['Vehicles', 'Furniture', 'Equipment', 'Electronics', 'Building', 'Land', 'Other'] as const;
 
 const assetFormSchema = z.object({
-  name: z.string().min(1, 'Asset name is required'),
-  assetCode: z.string().min(1, 'Asset code is required'),
-  description: z.string().optional().nullable(),
-  categoryId: z.string().optional().nullable(),
+  assetName: z.string().min(1, 'Asset name is required'),
+  assetNameAr: z.string().optional().nullable(),
+  assetNumber: z.string().optional().nullable(),
+  category: z.string().min(1, 'Category is required'),
   purchaseDate: z.string().min(1, 'Purchase date is required'),
-  purchasePrice: z.coerce.number().min(0, 'Purchase price must be >= 0'),
-  residualValue: z.coerce.number().min(0, 'Residual value must be >= 0'),
-  usefulLifeMonths: z.coerce.number().min(1, 'Useful life must be at least 1 month'),
-  depreciationMethod: z.enum(['straight_line', 'declining_balance']),
-  assetAccountId: z.string().optional().nullable(),
-  depreciationExpenseAccountId: z.string().optional().nullable(),
-  accumulatedDepAccountId: z.string().optional().nullable(),
+  purchaseCost: z.coerce.number().min(0, 'Purchase cost must be >= 0'),
+  salvageValue: z.coerce.number().min(0, 'Salvage value must be >= 0').optional().nullable(),
+  usefulLifeYears: z.coerce.number().int().min(1, 'Useful life must be at least 1 year'),
+  depreciationMethod: z.string().optional().nullable(),
   location: z.string().optional().nullable(),
   serialNumber: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -79,178 +121,139 @@ const assetFormSchema = z.object({
 
 type AssetFormData = z.infer<typeof assetFormSchema>;
 
-interface FixedAsset {
-  id: string;
-  companyId: string;
-  name: string;
-  assetCode: string;
-  description: string | null;
-  categoryId: string | null;
-  purchaseDate: string;
-  purchasePrice: number;
-  residualValue: number;
-  usefulLifeMonths: number;
-  depreciationMethod: string;
-  assetAccountId: string | null;
-  depreciationExpenseAccountId: string | null;
-  accumulatedDepAccountId: string | null;
-  location: string | null;
-  serialNumber: string | null;
-  notes: string | null;
-  status: string;
-  accumulatedDepreciation: number;
-  bookValue: number;
-  createdAt: string;
-}
+const disposeFormSchema = z.object({
+  disposalDate: z.string().min(1, 'Disposal date is required'),
+  disposalAmount: z.coerce.number().min(0, 'Disposal amount must be >= 0'),
+  notes: z.string().optional().nullable(),
+});
 
-interface AssetCategory {
-  id: string;
-  companyId: string;
-  name: string;
-  defaultUsefulLifeMonths: number | null;
-  defaultDepreciationMethod: string | null;
-}
+type DisposeFormData = z.infer<typeof disposeFormSchema>;
 
-interface Account {
-  id: string;
-  name: string;
-  code: string;
-  type: string;
-}
+const depreciationRunSchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
+});
 
-interface DepreciationEntry {
-  id: string;
-  assetId: string;
-  assetName: string;
-  period: string;
-  amount: number;
-  accumulatedAmount: number;
-  bookValue: number;
-}
+type DepreciationRunData = z.infer<typeof depreciationRunSchema>;
 
-// ─── Component ────────────────────────────────────────────
+// ─── Component ───────────────────────────────────────────
 
 export default function FixedAssets() {
-  const { locale } = useTranslation();
+  const { t, locale } = useTranslation();
   const { toast } = useToast();
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
-  const { canAccess, getRequiredTier } = useSubscription();
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [assetDialogOpen, setAssetDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<FixedAsset | null>(null);
+  const [disposeDialogOpen, setDisposeDialogOpen] = useState(false);
+  const [disposingAsset, setDisposingAsset] = useState<FixedAsset | null>(null);
+  const [depRunDialogOpen, setDepRunDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('assets');
+  const [assetToDelete, setAssetToDelete] = useState<string | null>(null);
 
-  // ─── Queries ──────────────────────────────────────────
+  // ─── Queries ────────────────────────────────────────────
 
-  const { data: assets = [], isLoading } = useQuery<FixedAsset[]>({
+  const { data: assets = [], isLoading: isLoadingAssets } = useQuery<FixedAsset[]>({
     queryKey: [`/api/companies/${companyId}/fixed-assets`],
     enabled: !!companyId,
   });
 
-  const { data: categories = [] } = useQuery<AssetCategory[]>({
-    queryKey: [`/api/companies/${companyId}/fixed-asset-categories`],
+  const { data: summary } = useQuery<AssetSummary>({
+    queryKey: [`/api/companies/${companyId}/fixed-assets/summary`],
     enabled: !!companyId,
   });
 
-  const { data: accounts = [] } = useQuery<Account[]>({
-    queryKey: [`/api/companies/${companyId}/accounts`],
-    enabled: !!companyId,
-  });
+  // ─── Forms ──────────────────────────────────────────────
 
-  const { data: depreciationSchedule = [] } = useQuery<DepreciationEntry[]>({
-    queryKey: [`/api/companies/${companyId}/fixed-assets/depreciation-schedule`],
-    enabled: !!companyId && activeTab === 'depreciation',
-  });
-
-  // ─── Derived data ────────────────────────────────────
-
-  const assetAccounts = accounts.filter((a) => a.type === 'asset');
-  const expenseAccounts = accounts.filter((a) => a.type === 'expense');
-
-  const totalAssetValue = assets.reduce((sum, a) => sum + (a.purchasePrice || 0), 0);
-  const totalAccumulatedDep = assets.reduce((sum, a) => sum + (a.accumulatedDepreciation || 0), 0);
-  const totalNetBookValue = assets.reduce((sum, a) => sum + (a.bookValue || 0), 0);
-  const activeAssets = assets.filter((a) => a.status === 'active').length;
-
-  // ─── Form ─────────────────────────────────────────────
-
-  const form = useForm<AssetFormData>({
+  const assetForm = useForm<AssetFormData>({
     resolver: zodResolver(assetFormSchema),
     defaultValues: {
-      name: '',
-      assetCode: '',
-      description: '',
-      categoryId: '',
+      assetName: '',
+      assetNameAr: '',
+      assetNumber: '',
+      category: '',
       purchaseDate: '',
-      purchasePrice: 0,
-      residualValue: 0,
-      usefulLifeMonths: 60,
+      purchaseCost: 0,
+      salvageValue: 0,
+      usefulLifeYears: 5,
       depreciationMethod: 'straight_line',
-      assetAccountId: '',
-      depreciationExpenseAccountId: '',
-      accumulatedDepAccountId: '',
       location: '',
       serialNumber: '',
       notes: '',
     },
   });
 
-  // ─── Mutations ────────────────────────────────────────
-
-  const createMutation = useMutation({
-    mutationFn: async (data: AssetFormData) => {
-      const res = await apiRequest('POST', `/api/companies/${companyId}/fixed-assets`, {
-        ...data,
-        purchaseDate: new Date(data.purchaseDate).toISOString(),
-        categoryId: data.categoryId || null,
-        assetAccountId: data.assetAccountId || null,
-        depreciationExpenseAccountId: data.depreciationExpenseAccountId || null,
-        accumulatedDepAccountId: data.accumulatedDepAccountId || null,
-      });
-      return res.json();
+  const disposeForm = useForm<DisposeFormData>({
+    resolver: zodResolver(disposeFormSchema),
+    defaultValues: {
+      disposalDate: '',
+      disposalAmount: 0,
+      notes: '',
     },
+  });
+
+  const depRunForm = useForm<DepreciationRunData>({
+    resolver: zodResolver(depreciationRunSchema),
+    defaultValues: {
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+    },
+  });
+
+  // ─── Mutations ──────────────────────────────────────────
+
+  const createAssetMutation = useMutation({
+    mutationFn: (data: AssetFormData) =>
+      apiRequest('POST', `/api/companies/${companyId}/fixed-assets`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
-      toast({ title: 'Asset Created', description: 'Fixed asset has been added successfully.' });
-      setDialogOpen(false);
-      form.reset();
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets/summary`] });
+      toast({ title: 'Asset Created', description: 'The fixed asset has been added successfully.' });
+      setAssetDialogOpen(false);
+      assetForm.reset();
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<AssetFormData> }) => {
-      const res = await apiRequest('PUT', `/api/companies/${companyId}/fixed-assets/${id}`, {
-        ...data,
-        purchaseDate: data.purchaseDate ? new Date(data.purchaseDate).toISOString() : undefined,
-        categoryId: data.categoryId || null,
-        assetAccountId: data.assetAccountId || null,
-        depreciationExpenseAccountId: data.depreciationExpenseAccountId || null,
-        accumulatedDepAccountId: data.accumulatedDepAccountId || null,
-      });
-      return res.json();
-    },
+  const updateAssetMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<AssetFormData> }) =>
+      apiRequest('PATCH', `/api/fixed-assets/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
-      toast({ title: 'Asset Updated', description: 'Fixed asset has been updated successfully.' });
-      setDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets/summary`] });
+      toast({ title: 'Asset Updated', description: 'The fixed asset has been updated successfully.' });
+      setAssetDialogOpen(false);
       setEditingAsset(null);
-      form.reset();
+      assetForm.reset();
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest('DELETE', `/api/companies/${companyId}/fixed-assets/${id}`),
+  const deleteAssetMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/fixed-assets/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
-      toast({ title: 'Asset Deleted', description: 'Fixed asset has been removed.' });
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets/summary`] });
+      toast({ title: 'Asset Deleted', description: 'The fixed asset has been deleted.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
+    },
+  });
+
+  const depreciateMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('POST', `/api/fixed-assets/${id}/depreciate`, {}),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets/summary`] });
+      toast({
+        title: 'Depreciation Recorded',
+        description: `Monthly depreciation of ${formatCurrency(data.monthlyDepreciation, 'AED', locale)} recorded.`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error?.message, variant: 'destructive' });
@@ -258,819 +261,785 @@ export default function FixedAssets() {
   });
 
   const disposeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest('POST', `/api/companies/${companyId}/fixed-assets/${id}/dispose`);
-      return res.json();
-    },
-    onSuccess: () => {
+    mutationFn: ({ id, data }: { id: string; data: DisposeFormData }) =>
+      apiRequest('POST', `/api/fixed-assets/${id}/dispose`, data),
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
-      toast({ title: 'Asset Disposed', description: 'Fixed asset has been marked as disposed.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
-    },
-  });
-
-  const generateScheduleMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest(
-        'POST',
-        `/api/companies/${companyId}/fixed-assets/${id}/generate-schedule`,
-      );
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
-      queryClient.invalidateQueries({
-        queryKey: [`/api/companies/${companyId}/fixed-assets/depreciation-schedule`],
-      });
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets/summary`] });
+      const glType = data.gainLossType === 'gain' ? 'Gain' : 'Loss';
       toast({
-        title: 'Schedule Generated',
-        description: 'Depreciation schedule has been generated.',
+        title: 'Asset Disposed',
+        description: `${glType} on disposal: ${formatCurrency(Math.abs(data.gainLoss), 'AED', locale)}`,
       });
+      setDisposeDialogOpen(false);
+      setDisposingAsset(null);
+      disposeForm.reset();
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error?.message, variant: 'destructive' });
     },
   });
 
-  // ─── Handlers ─────────────────────────────────────────
+  const runDepreciationMutation = useMutation({
+    mutationFn: (data: DepreciationRunData) =>
+      apiRequest('POST', `/api/companies/${companyId}/fixed-assets/run-depreciation`, data),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/fixed-assets/summary`] });
+      toast({
+        title: 'Batch Depreciation Complete',
+        description: `Processed ${data.assetsProcessed} assets for ${data.month}/${data.year}.`,
+      });
+      setDepRunDialogOpen(false);
+      depRunForm.reset({ month: new Date().getMonth() + 1, year: new Date().getFullYear() });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error?.message, variant: 'destructive' });
+    },
+  });
+
+  // ─── Handlers ───────────────────────────────────────────
 
   const handleOpenCreateDialog = () => {
     setEditingAsset(null);
-    form.reset({
-      name: '',
-      assetCode: '',
-      description: '',
-      categoryId: '',
+    assetForm.reset({
+      assetName: '',
+      assetNameAr: '',
+      assetNumber: '',
+      category: '',
       purchaseDate: '',
-      purchasePrice: 0,
-      residualValue: 0,
-      usefulLifeMonths: 60,
+      purchaseCost: 0,
+      salvageValue: 0,
+      usefulLifeYears: 5,
       depreciationMethod: 'straight_line',
-      assetAccountId: '',
-      depreciationExpenseAccountId: '',
-      accumulatedDepAccountId: '',
       location: '',
       serialNumber: '',
       notes: '',
     });
-    setDialogOpen(true);
+    setAssetDialogOpen(true);
   };
 
   const handleOpenEditDialog = (asset: FixedAsset) => {
     setEditingAsset(asset);
-    form.reset({
-      name: asset.name,
-      assetCode: asset.assetCode,
-      description: asset.description || '',
-      categoryId: asset.categoryId || '',
-      purchaseDate: asset.purchaseDate ? format(new Date(asset.purchaseDate), 'yyyy-MM-dd') : '',
-      purchasePrice: asset.purchasePrice || 0,
-      residualValue: asset.residualValue || 0,
-      usefulLifeMonths: asset.usefulLifeMonths || 60,
-      depreciationMethod:
-        (asset.depreciationMethod as 'straight_line' | 'declining_balance') || 'straight_line',
-      assetAccountId: asset.assetAccountId || '',
-      depreciationExpenseAccountId: asset.depreciationExpenseAccountId || '',
-      accumulatedDepAccountId: asset.accumulatedDepAccountId || '',
+    assetForm.reset({
+      assetName: asset.asset_name,
+      assetNameAr: asset.asset_name_ar || '',
+      assetNumber: asset.asset_number || '',
+      category: asset.category,
+      purchaseDate: asset.purchase_date ? format(new Date(asset.purchase_date), 'yyyy-MM-dd') : '',
+      purchaseCost: parseFloat(asset.purchase_cost),
+      salvageValue: parseFloat(asset.salvage_value || '0'),
+      usefulLifeYears: asset.useful_life_years,
+      depreciationMethod: asset.depreciation_method || 'straight_line',
       location: asset.location || '',
-      serialNumber: asset.serialNumber || '',
+      serialNumber: asset.serial_number || '',
       notes: asset.notes || '',
     });
-    setDialogOpen(true);
+    setAssetDialogOpen(true);
   };
 
-  const handleSubmit = (data: AssetFormData) => {
+  const handleOpenDisposeDialog = (asset: FixedAsset) => {
+    setDisposingAsset(asset);
+    disposeForm.reset({
+      disposalDate: format(new Date(), 'yyyy-MM-dd'),
+      disposalAmount: 0,
+      notes: '',
+    });
+    setDisposeDialogOpen(true);
+  };
+
+  const handleAssetSubmit = (data: AssetFormData) => {
     if (editingAsset) {
-      updateMutation.mutate({ id: editingAsset.id, data });
+      updateAssetMutation.mutate({ id: editingAsset.id, data });
     } else {
-      createMutation.mutate(data);
+      createAssetMutation.mutate(data);
     }
   };
 
-  // ─── Helpers ──────────────────────────────────────────
+  const handleDisposeSubmit = (data: DisposeFormData) => {
+    if (!disposingAsset) return;
+    disposeMutation.mutate({ id: disposingAsset.id, data });
+  };
+
+  const handleDepRunSubmit = (data: DepreciationRunData) => {
+    runDepreciationMutation.mutate(data);
+  };
+
+  // ─── Helpers ────────────────────────────────────────────
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Active</Badge>;
+        return <StatusBadge tone="success">Active</StatusBadge>;
       case 'disposed':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Disposed</Badge>;
+        return <StatusBadge tone="danger">Disposed</StatusBadge>;
       case 'fully_depreciated':
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-            Fully Depreciated
-          </Badge>
-        );
+        return <StatusBadge tone="warning">Fully Depreciated</StatusBadge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
-  const getCategoryName = (categoryId: string | null) => {
-    if (!categoryId) return '-';
-    const cat = categories.find((c) => c.id === categoryId);
-    return cat?.name || '-';
-  };
-
-  const filteredAssets = assets.filter((asset) => {
+  const filteredAssets = assets.filter(asset => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
-      asset.name.toLowerCase().includes(q) ||
-      asset.assetCode.toLowerCase().includes(q) ||
-      (asset.location?.toLowerCase().includes(q) ?? false) ||
-      (asset.serialNumber?.toLowerCase().includes(q) ?? false)
+      asset.asset_name.toLowerCase().includes(q) ||
+      asset.category.toLowerCase().includes(q) ||
+      (asset.asset_number && asset.asset_number.toLowerCase().includes(q)) ||
+      (asset.serial_number && asset.serial_number.toLowerCase().includes(q)) ||
+      (asset.asset_name_ar && asset.asset_name_ar.includes(q))
     );
   });
 
-  if (!canAccess('fixedAssets')) {
-    return <UpgradePrompt feature="fixedAssets" requiredTier={getRequiredTier('fixedAssets')} />;
-  }
+  // ─── Loading State ─────────────────────────────────────
 
-  if (isLoadingCompany || isLoading) {
+  if (isLoadingCompany) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="space-y-6">
+        <StatCardSkeleton count={3} />
+        <Card>
+          <CardContent className="pt-6">
+            <TableSkeleton rows={5} columns={7} />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  // ─── Render ───────────────────────────────────────────
+  if (!companyId) {
+    return (
+      <EmptyState
+        icon={Building2}
+        title="No company selected"
+        description="Create or select a company before tracking fixed assets."
+      />
+    );
+  }
+
+  // ─── Render ─────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fixed Assets</h1>
-          <p className="text-muted-foreground">
-            Track, depreciate, and manage your company fixed assets
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Building2 className="w-8 h-8" />
+            Fixed Assets
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage fixed assets, depreciation, and disposals
           </p>
         </div>
-        <Button onClick={handleOpenCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Asset
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setDepRunDialogOpen(true)} className="flex items-center gap-2">
+            <PlayCircle className="w-4 h-4" />
+            Run Depreciation
+          </Button>
+          <Button onClick={handleOpenCreateDialog} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Add Asset
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Asset Value</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(totalAssetValue, 'AED', locale)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Accumulated Depreciation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(totalAccumulatedDep, 'AED', locale)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Book Value</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(totalNetBookValue, 'AED', locale)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Assets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeAssets}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {summary && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(summary.totalCost, 'AED', locale)}</div>
+              <p className="text-xs text-muted-foreground">{summary.totalAssets} active asset{summary.totalAssets !== 1 ? 's' : ''}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Accumulated Depreciation</CardTitle>
+              <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(summary.totalAccumulatedDepreciation, 'AED', locale)}</div>
+              <p className="text-xs text-muted-foreground">
+                {summary.totalCost > 0
+                  ? `${((summary.totalAccumulatedDepreciation / summary.totalCost) * 100).toFixed(1)}% depreciated`
+                  : '0% depreciated'}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Net Book Value</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(summary.totalNetBookValue, 'AED', locale)}</div>
+              <p className="text-xs text-muted-foreground">Current carrying value</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="assets">Assets List</TabsTrigger>
-          <TabsTrigger value="categories">Categories</TabsTrigger>
-          <TabsTrigger value="depreciation">Depreciation Schedule</TabsTrigger>
-        </TabsList>
+      {/* Category Breakdown */}
+      {summary && summary.byCategory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Asset Category Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Count</TableHead>
+                    <TableHead className="text-right">Total Cost</TableHead>
+                    <TableHead className="text-right">Accum. Depreciation</TableHead>
+                    <TableHead className="text-right">Net Book Value</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summary.byCategory.map((cat) => (
+                    <TableRow key={cat.category}>
+                      <TableCell className="font-medium">{cat.category}</TableCell>
+                      <TableCell className="text-right">{cat.count}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(cat.totalCost, 'AED', locale)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(cat.totalAccumulatedDepreciation, 'AED', locale)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(cat.totalNetBookValue, 'AED', locale)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* ── Assets List Tab ── */}
-        <TabsContent value="assets" className="space-y-4">
-          {/* Search */}
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search assets..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+      {/* Assets Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Fixed Assets</CardTitle>
+              <CardDescription>
+                {assets.length} asset{assets.length !== 1 ? 's' : ''} registered
+              </CardDescription>
             </div>
           </div>
-
-          <Card>
-            <CardContent className="p-0">
+          <div className="mt-4">
+            <Input
+              placeholder="Search assets by name, category, number..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="max-w-sm"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingAssets ? (
+            <TableSkeleton rows={5} columns={7} />
+          ) : filteredAssets.length === 0 ? (
+            searchQuery ? (
+              <EmptyState
+                icon={Building2}
+                title="No matching assets"
+                description={`No assets match "${searchQuery}". Try a different keyword or clear the search.`}
+                action={{ label: 'Clear search', onClick: () => setSearchQuery(''), variant: 'outline' }}
+                testId="empty-state-fixed-assets-search"
+              />
+            ) : (
+              <EmptyState
+                icon={Building2}
+                title="No fixed assets yet"
+                description="Track equipment, vehicles, and other depreciable assets to keep your books accurate."
+                action={{ label: 'Add Asset', icon: Plus, onClick: handleOpenCreateDialog }}
+                testId="empty-state-fixed-assets"
+              />
+            )
+          ) : (
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Asset Name</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Purchase Date</TableHead>
-                    <TableHead className="text-right">Purchase Price</TableHead>
-                    <TableHead className="text-right">Book Value</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead className="text-right">Accum. Dep.</TableHead>
+                    <TableHead className="text-right">NBV</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right">{t.actions || 'Actions'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAssets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        {searchQuery
-                          ? 'No assets match your search'
-                          : 'No fixed assets yet. Add your first asset to get started.'}
+                  {filteredAssets.map((asset) => (
+                    <TableRow key={asset.id}>
+                      <TableCell className="font-medium">
+                        <div>
+                          {asset.asset_name}
+                          {asset.asset_name_ar && (
+                            <div className="text-xs text-muted-foreground">{asset.asset_name_ar}</div>
+                          )}
+                          {asset.asset_number && (
+                            <div className="text-xs text-muted-foreground">#{asset.asset_number}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{asset.category}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {asset.purchase_date ? format(new Date(asset.purchase_date), 'MMM dd, yyyy') : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">{formatCurrency(parseFloat(asset.purchase_cost), 'AED', locale)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(parseFloat(asset.accumulated_depreciation || '0'), 'AED', locale)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(parseFloat(asset.net_book_value || '0'), 'AED', locale)}</TableCell>
+                      <TableCell>{getStatusBadge(asset.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {asset.status === 'active' && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => depreciateMutation.mutate(asset.id)}
+                                title="Record Depreciation"
+                                disabled={depreciateMutation.isPending}
+                              >
+                                <Calculator className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEditDialog(asset)}
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenDisposeDialog(asset)}
+                                title="Dispose"
+                                className="text-[hsl(var(--chart-4))] hover:text-[hsl(var(--chart-4))]"
+                              >
+                                <Ban className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAssetToDelete(asset.id)}
+                            title="Delete"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredAssets.map((asset) => (
-                      <TableRow key={asset.id}>
-                        <TableCell className="font-mono text-sm">{asset.assetCode}</TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{asset.name}</div>
-                            {asset.serialNumber && (
-                              <div className="text-sm text-muted-foreground">
-                                S/N: {asset.serialNumber}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{getCategoryName(asset.categoryId)}</TableCell>
-                        <TableCell>
-                          {asset.purchaseDate ? formatDate(asset.purchaseDate, locale) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatCurrency(asset.purchasePrice || 0, 'AED', locale)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatCurrency(asset.bookValue || 0, 'AED', locale)}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(asset.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Edit"
-                              onClick={() => handleOpenEditDialog(asset)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Generate Schedule"
-                              disabled={
-                                asset.status === 'disposed' ||
-                                generateScheduleMutation.isPending
-                              }
-                              onClick={() => generateScheduleMutation.mutate(asset.id)}
-                            >
-                              <CalendarClock className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Dispose"
-                              disabled={asset.status !== 'active' || disposeMutation.isPending}
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    `Are you sure you want to dispose of "${asset.name}"? This cannot be undone.`,
-                                  )
-                                ) {
-                                  disposeMutation.mutate(asset.id);
-                                }
-                              }}
-                            >
-                              <Ban className="h-4 w-4 text-orange-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Delete"
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    'Are you sure you want to delete this asset?',
-                                  )
-                                ) {
-                                  deleteMutation.mutate(asset.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* ── Categories Tab ── */}
-        <TabsContent value="categories" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Asset Categories</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Category Name</TableHead>
-                    <TableHead>Default Useful Life</TableHead>
-                    <TableHead>Default Method</TableHead>
-                    <TableHead className="text-right">Assets</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {categories.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        No asset categories defined.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    categories.map((cat) => (
-                      <TableRow key={cat.id}>
-                        <TableCell className="font-medium">{cat.name}</TableCell>
-                        <TableCell>
-                          {cat.defaultUsefulLifeMonths
-                            ? `${cat.defaultUsefulLifeMonths} months (${(cat.defaultUsefulLifeMonths / 12).toFixed(1)} years)`
-                            : '-'}
-                        </TableCell>
-                        <TableCell>
-                          {cat.defaultDepreciationMethod === 'straight_line'
-                            ? 'Straight Line'
-                            : cat.defaultDepreciationMethod === 'declining_balance'
-                              ? 'Declining Balance'
-                              : cat.defaultDepreciationMethod || '-'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {assets.filter((a) => a.categoryId === cat.id).length}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── Depreciation Schedule Tab ── */}
-        <TabsContent value="depreciation" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Depreciation Schedule</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Asset</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead className="text-right">Depreciation Amount</TableHead>
-                    <TableHead className="text-right">Accumulated</TableHead>
-                    <TableHead className="text-right">Book Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {depreciationSchedule.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No depreciation entries yet. Generate a schedule from the Assets tab.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    depreciationSchedule.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="font-medium">{entry.assetName}</TableCell>
-                        <TableCell>{entry.period}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatCurrency(entry.amount, 'AED', locale)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatCurrency(entry.accumulatedAmount, 'AED', locale)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatCurrency(entry.bookValue, 'AED', locale)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Create / Edit Asset Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* ─── Create/Edit Asset Dialog ──────────────────────── */}
+      <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingAsset ? 'Edit Fixed Asset' : 'Add Fixed Asset'}</DialogTitle>
             <DialogDescription>
-              {editingAsset
-                ? 'Update the asset details below.'
-                : 'Fill in the details to register a new fixed asset.'}
+              {editingAsset ? 'Update asset details.' : 'Register a new fixed asset.'}
             </DialogDescription>
           </DialogHeader>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-              <Tabs defaultValue="general" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="general">General</TabsTrigger>
-                  <TabsTrigger value="depreciation">Depreciation</TabsTrigger>
-                  <TabsTrigger value="accounts">Accounts & Notes</TabsTrigger>
-                </TabsList>
+          <Form {...assetForm}>
+            <form onSubmit={assetForm.handleSubmit(handleAssetSubmit)} className="space-y-4">
+              <FormField
+                control={assetForm.control}
+                name="assetName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Asset Name *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Toyota Hilux 2024" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                {/* General Tab */}
-                <TabsContent value="general" className="space-y-4 pt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="assetCode"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Asset Code *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="FA-001" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Asset Name *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Office Building" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
+              <FormField
+                control={assetForm.control}
+                name="assetNameAr"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Asset Name (Arabic)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="اسم الأصل" dir="rtl" {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={assetForm.control}
+                  name="assetNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Asset Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., FA-001" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={assetForm.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <Textarea
-                            placeholder="Brief description of the asset"
-                            {...field}
-                            value={field.value || ''}
-                          />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="categoryId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ''}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {categories.map((cat) => (
-                                <SelectItem key={cat.id} value={cat.id}>
-                                  {cat.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="purchaseDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Purchase Date *</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="purchasePrice"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Purchase Price (AED) *</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" min="0" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="residualValue"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Residual Value (AED)</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" min="0" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="location"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Location</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Main Office, Warehouse, etc."
-                              {...field}
-                              value={field.value || ''}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="serialNumber"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Serial Number</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="SN-123456"
-                              {...field}
-                              value={field.value || ''}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </TabsContent>
+                        <SelectContent>
+                          {CATEGORIES.map((cat) => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-                {/* Depreciation Tab */}
-                <TabsContent value="depreciation" className="space-y-4 pt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="depreciationMethod"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Depreciation Method *</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select method" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="straight_line">Straight Line</SelectItem>
-                              <SelectItem value="declining_balance">Declining Balance</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="usefulLifeMonths"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Useful Life (months) *</FormLabel>
-                          <FormControl>
-                            <Input type="number" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={assetForm.control}
+                  name="purchaseDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Purchase Date *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  {/* Depreciation Preview Card */}
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>Purchase Price</span>
-                          <span className="font-mono">
-                            {formatCurrency(form.watch('purchasePrice') || 0, 'AED', locale)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Residual Value</span>
-                          <span className="font-mono">
-                            {formatCurrency(form.watch('residualValue') || 0, 'AED', locale)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Depreciable Amount</span>
-                          <span className="font-mono">
-                            {formatCurrency(
-                              Math.max(
-                                0,
-                                (form.watch('purchasePrice') || 0) -
-                                  (form.watch('residualValue') || 0),
-                              ),
-                              'AED',
-                              locale,
-                            )}
-                          </span>
-                        </div>
-                        <div className="border-t pt-2 flex justify-between font-bold">
-                          <span>Monthly Depreciation (SL)</span>
-                          <span className="font-mono">
-                            {formatCurrency(
-                              form.watch('usefulLifeMonths') > 0
-                                ? Math.max(
-                                    0,
-                                    (form.watch('purchasePrice') || 0) -
-                                      (form.watch('residualValue') || 0),
-                                  ) / form.watch('usefulLifeMonths')
-                                : 0,
-                              'AED',
-                              locale,
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
+                <FormField
+                  control={assetForm.control}
+                  name="purchaseCost"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Purchase Cost (AED) *</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-                {/* Accounts & Notes Tab */}
-                <TabsContent value="accounts" className="space-y-4 pt-4">
-                  <FormField
-                    control={form.control}
-                    name="assetAccountId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset Account</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select asset account" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {assetAccounts.map((acc) => (
-                              <SelectItem key={acc.id} value={acc.id}>
-                                {acc.code} - {acc.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="depreciationExpenseAccountId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Depreciation Expense Account</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select expense account" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {expenseAccounts.map((acc) => (
-                              <SelectItem key={acc.id} value={acc.id}>
-                                {acc.code} - {acc.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="accumulatedDepAccountId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Accumulated Depreciation Account</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select contra-asset account" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {assetAccounts.map((acc) => (
-                              <SelectItem key={acc.id} value={acc.id}>
-                                {acc.code} - {acc.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notes</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Additional notes about this asset"
-                            rows={4}
-                            {...field}
-                            value={field.value || ''}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </TabsContent>
-              </Tabs>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={assetForm.control}
+                  name="salvageValue"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Salvage Value (AED)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" {...field} value={field.value ?? 0} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <div className="flex justify-end gap-3 pt-2">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
+                <FormField
+                  control={assetForm.control}
+                  name="usefulLifeYears"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Useful Life (Years) *</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="1" step="1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={assetForm.control}
+                name="depreciationMethod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Depreciation Method</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || 'straight_line'}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select method" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="straight_line">Straight-Line</SelectItem>
+                        <SelectItem value="declining_balance">Declining Balance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={assetForm.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Dubai Office" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={assetForm.control}
+                  name="serialNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Serial Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., SN-12345" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={assetForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Optional notes about this asset" {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setAssetDialogOpen(false)}>
+                  {t.cancel || 'Cancel'}
                 </Button>
                 <Button
                   type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  disabled={createAssetMutation.isPending || updateAssetMutation.isPending}
                 >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  )}
-                  {editingAsset ? 'Update Asset' : 'Add Asset'}
+                  {(createAssetMutation.isPending || updateAssetMutation.isPending)
+                    ? (t.loading || 'Loading...')
+                    : editingAsset
+                      ? (t.save || 'Save')
+                      : 'Add Asset'}
                 </Button>
               </div>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Dispose Dialog ────────────────────────────────── */}
+      <Dialog open={disposeDialogOpen} onOpenChange={setDisposeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Dispose Asset</DialogTitle>
+            <DialogDescription>
+              {disposingAsset
+                ? `Record disposal for "${disposingAsset.asset_name}" (NBV: ${formatCurrency(parseFloat(disposingAsset.net_book_value || '0'), 'AED', locale)})`
+                : 'Record asset disposal'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...disposeForm}>
+            <form onSubmit={disposeForm.handleSubmit(handleDisposeSubmit)} className="space-y-4">
+              <FormField
+                control={disposeForm.control}
+                name="disposalDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Disposal Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={disposeForm.control}
+                name="disposalAmount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Disposal Amount (AED)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" min="0" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={disposeForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Reason for disposal" {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setDisposeDialogOpen(false)}>
+                  {t.cancel || 'Cancel'}
+                </Button>
+                <Button type="submit" variant="destructive" disabled={disposeMutation.isPending}>
+                  {disposeMutation.isPending ? (t.loading || 'Loading...') : 'Dispose Asset'}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Run Depreciation Dialog ───────────────────────── */}
+      <Dialog open={depRunDialogOpen} onOpenChange={setDepRunDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Run Monthly Depreciation</DialogTitle>
+            <DialogDescription>
+              Calculate and record depreciation for all active assets for the selected month.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...depRunForm}>
+            <form onSubmit={depRunForm.handleSubmit(handleDepRunSubmit)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={depRunForm.control}
+                  name="month"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Month *</FormLabel>
+                      <Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select month" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="1">January</SelectItem>
+                          <SelectItem value="2">February</SelectItem>
+                          <SelectItem value="3">March</SelectItem>
+                          <SelectItem value="4">April</SelectItem>
+                          <SelectItem value="5">May</SelectItem>
+                          <SelectItem value="6">June</SelectItem>
+                          <SelectItem value="7">July</SelectItem>
+                          <SelectItem value="8">August</SelectItem>
+                          <SelectItem value="9">September</SelectItem>
+                          <SelectItem value="10">October</SelectItem>
+                          <SelectItem value="11">November</SelectItem>
+                          <SelectItem value="12">December</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={depRunForm.control}
+                  name="year"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Year *</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="2000" max="2100" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setDepRunDialogOpen(false)}>
+                  {t.cancel || 'Cancel'}
+                </Button>
+                <Button type="submit" disabled={runDepreciationMutation.isPending}>
+                  {runDepreciationMutation.isPending ? (t.loading || 'Loading...') : 'Run Depreciation'}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!assetToDelete} onOpenChange={(open) => { if (!open) setAssetToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Fixed Asset?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this asset record. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (assetToDelete) {
+                  deleteAssetMutation.mutate(assetToDelete);
+                  setAssetToDelete(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

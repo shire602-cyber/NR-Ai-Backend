@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware, requireCustomer } from "../middleware/auth";
+import { authMiddleware } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { z } from "zod";
 
@@ -10,7 +10,7 @@ export function registerReminderRoutes(app: Express) {
   // =====================================
 
   // Get reminder settings
-  app.get("/api/companies/:companyId/reminder-settings", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reminder-settings", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -24,7 +24,7 @@ export function registerReminderRoutes(app: Express) {
   }));
 
   // Create reminder setting
-  app.post("/api/companies/:companyId/reminder-settings", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/reminder-settings", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -61,26 +61,14 @@ export function registerReminderRoutes(app: Express) {
   }));
 
   // Update reminder setting
-  app.patch("/api/reminder-settings/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/reminder-settings/:id", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const userId = (req as any).user?.id;
-
-    const existing = await storage.getReminderSetting(id);
-    if (!existing) {
-      return res.status(404).json({ message: 'Reminder setting not found' });
-    }
-
-    const hasAccess = await storage.hasCompanyAccess(userId, existing.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     const setting = await storage.updateReminderSetting(id, req.body);
     res.json(setting);
   }));
 
   // Get reminder logs
-  app.get("/api/companies/:companyId/reminder-logs", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/reminder-logs", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -98,7 +86,7 @@ export function registerReminderRoutes(app: Express) {
   // =====================================
 
   // Get upcoming deadlines
-  app.get("/api/deadlines", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/deadlines", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const { companyId } = req.query;
 

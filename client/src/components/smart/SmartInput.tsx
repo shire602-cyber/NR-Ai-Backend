@@ -10,7 +10,7 @@ import { Loader2, HelpCircle, Sparkles, Check } from 'lucide-react';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { getAuthHeaders } from '@/lib/auth';
+import { getToken } from '@/lib/auth';
 
 interface SmartInputProps {
   value: string;
@@ -97,7 +97,7 @@ export function SmartInput({
       }
       const res = await fetch(`${endpointMap[type]}?${params}`, {
         headers: {
-          ...getAuthHeaders(),
+          Authorization: `Bearer ${getToken()}`,
         },
       });
       if (!res.ok) throw new Error('Failed to fetch suggestions');
@@ -345,7 +345,7 @@ export function SmartAccountSelect({
       }
       const res = await fetch(`/api/autocomplete/accounts?${params}`, {
         headers: {
-          ...getAuthHeaders(),
+          Authorization: `Bearer ${getToken()}`,
         },
       });
       if (!res.ok) throw new Error('Failed to fetch accounts');

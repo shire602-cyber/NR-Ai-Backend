@@ -4,6 +4,9 @@ import * as XLSX from 'xlsx';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('contacts');
 
 export function registerContactRoutes(app: Express) {
   // =====================================
@@ -107,7 +110,6 @@ export function registerContactRoutes(app: Express) {
             address: contact.address || null,
             city: contact.city || null,
             country: contact.country || 'UAE',
-            isVatRegistered: !!contact.trnNumber || !!contact.trn,
             isActive: true,
           });
         }
@@ -127,10 +129,53 @@ export function registerContactRoutes(app: Express) {
       }
     }
 
-    console.log('[CustomerContacts] Import completed:', results);
+    log.info({ results }, 'Customer contacts import completed');
     res.json({
       message: `Import completed: ${results.created} created, ${results.updated} updated, ${results.skipped} skipped`,
       ...results
+    });
+  }));
+
+  // Preview impact of clearing all contacts (counts of contacts and invoices that would be detached)
+  app.get("/api/companies/:companyId/customer-contacts/clear-preview", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const { companyId } = req.params;
+    const userId = (req as any).user.id;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const [contactCount, linkedInvoiceCount] = await Promise.all([
+      storage.countCustomerContactsByCompanyId(companyId),
+      storage.countInvoicesWithContactByCompanyId(companyId),
+    ]);
+
+    res.json({ contactCount, linkedInvoiceCount });
+  }));
+
+  // Clear all customer contacts for a company (destructive bulk delete)
+  app.delete("/api/companies/:companyId/customer-contacts/clear-all", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+    const { companyId } = req.params;
+    const userId = (req as any).user.id;
+
+    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Require an explicit confirmation phrase in the body to guard against accidental calls
+    const { confirm } = req.body ?? {};
+    if (confirm !== 'DELETE ALL') {
+      return res.status(400).json({ message: 'Confirmation phrase required' });
+    }
+
+    const deletedCount = await storage.deleteAllCustomerContactsByCompanyId(companyId);
+
+    log.info({ companyId, userId, deletedCount }, 'Cleared all customer contacts for company');
+    res.json({
+      message: `Deleted ${deletedCount} contact${deletedCount === 1 ? '' : 's'}`,
+      deletedCount,
     });
   }));
 

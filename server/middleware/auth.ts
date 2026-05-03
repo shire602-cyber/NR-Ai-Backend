@@ -5,6 +5,7 @@ import { storage } from '../storage';
 import { getEnv } from '../config/env';
 import { createLogger } from '../config/logger';
 import { getAccessTokenFromRequest } from '../services/auth-cookies.service';
+import { isTokenBlacklisted } from '../services/auth-tokens.service';
 
 const log = createLogger('auth');
 
@@ -15,7 +16,8 @@ export interface AuthUser {
   id: string;
   email: string;
   isAdmin: boolean;
-  userType: 'admin' | 'customer' | 'client';
+  userType: 'admin' | 'customer' | 'client' | 'client_portal';
+  firmRole: 'firm_owner' | 'firm_admin' | null;
 }
 
 /**
@@ -28,6 +30,7 @@ declare global {
       email: string;
       isAdmin: boolean;
       userType: string;
+      firmRole: string | null;
     }
     interface Request {
       subscription?: any; // Cached subscription for feature gating
@@ -72,7 +75,7 @@ export async function authMiddleware(
     // password change, or admin-revoked) is refused here even though its
     // signature is still valid. Tokens issued before we added the jti
     // claim have no `jti` and skip the check; they'll naturally expire.
-    if (decoded.jti && (await storage.isJwtRevoked(decoded.jti))) {
+    if (await isTokenBlacklisted(token)) {
       res.status(401).json({ message: 'Token has been revoked' });
       return;
     }
@@ -90,6 +93,7 @@ export async function authMiddleware(
       email: user.email,
       isAdmin: user.isAdmin === true,
       userType: (user.userType as AuthUser['userType']) || 'customer',
+      firmRole: (user.firmRole as AuthUser['firmRole']) ?? null,
     };
     next();
   } catch (error) {
@@ -183,9 +187,57 @@ export function requireUserType(...allowedTypes: string[]) {
 }
 
 /**
+ * Require that the authenticated user has access to the company referenced
+ * by the request. Reads companyId from req.params, then req.body, then
+ * req.query unless a source is provided.
+ */
+export function requireCompanyAccess(
+  paramSource?: 'params' | 'body' | 'query',
+) {
+  return async function (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    if (!req.user) {
+      res.status(401).json({ message: 'Authentication required' });
+      return;
+    }
+
+    const candidate =
+      paramSource === 'params'
+        ? req.params?.companyId
+        : paramSource === 'body'
+          ? req.body?.companyId
+          : paramSource === 'query'
+            ? (req.query?.companyId as string | undefined)
+            : (req.params?.companyId ??
+              req.body?.companyId ??
+              (req.query?.companyId as string | undefined));
+
+    if (!candidate || typeof candidate !== 'string') {
+      res.status(400).json({ message: 'Company ID required' });
+      return;
+    }
+
+    const allowed = await storage.hasCompanyAccess(req.user.id, candidate);
+    if (!allowed) {
+      log.warn(
+        { userId: req.user.id, companyId: candidate, path: req.path },
+        'requireCompanyAccess denied',
+      );
+      res.status(403).json({ message: 'Access denied to this company' });
+      return;
+    }
+
+    next();
+  };
+}
+
+/**
  * Generate a JWT token for a user.
  */
-export function generateToken(user: { id: string; email: string; isAdmin?: boolean; userType?: string }): string {
+export function generateToken(user: { id: string; email: string; isAdmin?: boolean; userType?: string; firmRole?: string | null }): string {
   const env = getEnv();
   return jwt.sign(
     {
@@ -193,6 +245,7 @@ export function generateToken(user: { id: string; email: string; isAdmin?: boole
       email: user.email,
       isAdmin: user.isAdmin === true,
       userType: user.userType || 'customer',
+      firmRole: user.firmRole ?? null,
       jti: randomUUID(),
     },
     env.JWT_SECRET,

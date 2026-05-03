@@ -2,9 +2,12 @@ import { Router, type Express, type Request, type Response } from 'express';
 import { storage } from '../storage';
 import { z } from 'zod';
 import * as googleSheets from '../integrations/googleSheets';
-import { authMiddleware, requireCustomer } from '../middleware/auth';
+import { authMiddleware, requireCompanyAccess, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { insertWaitlistSchema } from '../../shared/schema';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('integrations');
 
 export function registerIntegrationRoutes(app: Express) {
   // =====================================
@@ -33,7 +36,7 @@ export function registerIntegrationRoutes(app: Express) {
   // =====================================
 
   // Get integration status
-  app.get("/api/integrations/status", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/integrations/status", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const googleSheetsConnected = await googleSheets.isGoogleSheetsConnected();
 
     res.json({
@@ -64,17 +67,10 @@ export function registerIntegrationRoutes(app: Express) {
   }));
 
   // Get sync history
-  app.get("/api/integrations/sync-history", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.get("/api/integrations/sync-history", authMiddleware, requireCompanyAccess('query'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, integrationType } = req.query;
     if (!companyId) {
       return res.status(400).json({ message: 'Company ID required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId as string);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     let syncs;
@@ -88,7 +84,7 @@ export function registerIntegrationRoutes(app: Express) {
   }));
 
   // List available Google Sheets spreadsheets
-  app.get("/api/integrations/google-sheets/spreadsheets", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/integrations/google-sheets/spreadsheets", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const isConnected = await googleSheets.isGoogleSheetsConnected();
     if (!isConnected) {
       return res.status(400).json({ message: 'Google Sheets not connected' });
@@ -100,17 +96,10 @@ export function registerIntegrationRoutes(app: Express) {
 
   // Export invoices to Google Sheets
   // Customer-only: Export invoices to Google Sheets
-  app.post("/api/integrations/google-sheets/export/invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/export/invoices", authMiddleware, requireCustomer, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, spreadsheetId } = req.body;
     if (!companyId) {
       return res.status(400).json({ message: 'Company ID required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();
@@ -145,17 +134,10 @@ export function registerIntegrationRoutes(app: Express) {
 
   // Export expenses to Google Sheets
   // Customer-only: Export expenses to Google Sheets
-  app.post("/api/integrations/google-sheets/export/expenses", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/export/expenses", authMiddleware, requireCustomer, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, spreadsheetId } = req.body;
     if (!companyId) {
       return res.status(400).json({ message: 'Company ID required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();
@@ -190,17 +172,10 @@ export function registerIntegrationRoutes(app: Express) {
 
   // Export journal entries to Google Sheets
   // Customer-only: Export journal entries to Google Sheets
-  app.post("/api/integrations/google-sheets/export/journal-entries", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/export/journal-entries", authMiddleware, requireCustomer, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, spreadsheetId } = req.body;
     if (!companyId) {
       return res.status(400).json({ message: 'Company ID required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();
@@ -208,26 +183,30 @@ export function registerIntegrationRoutes(app: Express) {
       return res.status(400).json({ message: 'Google Sheets not connected' });
     }
 
-    // Fetch journal entries with lines
-    const entries = await storage.getJournalEntriesByCompanyId(companyId);
-    const accounts = await storage.getAccountsByCompanyId(companyId);
+    // Fetch journal entries with lines — single batched join instead of one
+    // round-trip per entry.
+    const [entries, accounts] = await Promise.all([
+      storage.getJournalEntriesByCompanyId(companyId),
+      storage.getAccountsByCompanyId(companyId),
+    ]);
+    const allLines = await storage.getJournalLinesByEntryIds(entries.map(e => e.id));
+    const accountById = new Map(accounts.map(a => [a.id, a]));
+    const linesByEntryId = new Map<string, typeof allLines>();
+    for (const line of allLines) {
+      const list = linesByEntryId.get(line.entryId) ?? [];
+      list.push(line);
+      linesByEntryId.set(line.entryId, list);
+    }
 
-    // Enrich entries with lines and account info
-    const enrichedEntries = await Promise.all(entries.map(async (entry, index) => {
-      const lines = await storage.getJournalLinesByEntryId(entry.id);
-      return {
-        entryNumber: index + 1,
-        date: entry.date instanceof Date ? entry.date.toISOString().split('T')[0] : entry.date,
-        description: entry.memo || '',
-        lines: lines.map(line => {
-          const account = accounts.find(a => a.id === line.accountId);
-          return {
-            accountName: account?.nameEn || '',
-            debit: line.debit,
-            credit: line.credit,
-          };
-        }),
-      };
+    const enrichedEntries = entries.map((entry, index) => ({
+      entryNumber: index + 1,
+      date: entry.date instanceof Date ? entry.date.toISOString().split('T')[0] : entry.date,
+      description: entry.memo || '',
+      lines: (linesByEntryId.get(entry.id) ?? []).map(line => ({
+        accountName: accountById.get(line.accountId)?.nameEn || '',
+        debit: line.debit,
+        credit: line.credit,
+      })),
     }));
 
     // Export to sheet
@@ -254,17 +233,10 @@ export function registerIntegrationRoutes(app: Express) {
 
   // Export chart of accounts to Google Sheets
   // Customer-only: Export chart of accounts to Google Sheets
-  app.post("/api/integrations/google-sheets/export/chart-of-accounts", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/export/chart-of-accounts", authMiddleware, requireCustomer, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, spreadsheetId } = req.body;
     if (!companyId) {
       return res.status(400).json({ message: 'Company ID required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();
@@ -298,17 +270,10 @@ export function registerIntegrationRoutes(app: Express) {
   }));
 
   // Import invoices from Google Sheets
-  app.post("/api/integrations/google-sheets/import/invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/import/invoices", authMiddleware, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, sheetUrl } = req.body;
     if (!companyId || !sheetUrl) {
       return res.status(400).json({ message: 'Company ID and sheet URL required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();
@@ -344,7 +309,7 @@ export function registerIntegrationRoutes(app: Express) {
         });
         createdCount++;
       } catch (err) {
-        console.error('Error creating invoice:', err);
+        log.error({ err }, 'Error creating invoice');
       }
     }
 
@@ -366,17 +331,11 @@ export function registerIntegrationRoutes(app: Express) {
   }));
 
   // Import expenses from Google Sheets
-  app.post("/api/integrations/google-sheets/import/expenses", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/import/expenses", authMiddleware, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
     const { companyId, sheetUrl } = req.body;
-    if (!companyId || !sheetUrl) {
-      return res.status(400).json({ message: 'Company ID and sheet URL required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
+    if (!companyId || !sheetUrl || !userId) {
+      return res.status(400).json({ message: 'Company ID, sheet URL, and user authentication required' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();
@@ -412,7 +371,7 @@ export function registerIntegrationRoutes(app: Express) {
         });
         createdCount++;
       } catch (err) {
-        console.error('Error creating expense:', err);
+        log.error({ err }, 'Error creating expense');
       }
     }
 
@@ -435,17 +394,10 @@ export function registerIntegrationRoutes(app: Express) {
 
   // Custom export to Google Sheets (for filtered/custom data from frontend)
   // Customer-only: Custom export to Google Sheets
-  app.post("/api/integrations/google-sheets/export/custom", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
+  app.post("/api/integrations/google-sheets/export/custom", authMiddleware, requireCustomer, requireCompanyAccess('body'), asyncHandler(async (req: Request, res: Response) => {
     const { companyId, title, sheets } = req.body;
     if (!companyId || !title || !sheets) {
       return res.status(400).json({ message: 'Company ID, title, and sheets data required' });
-    }
-
-    // Verify access
-    const hasAccess = await storage.hasCompanyAccess(userId, companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const isConnected = await googleSheets.isGoogleSheetsConnected();

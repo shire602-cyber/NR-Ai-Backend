@@ -79,44 +79,42 @@ export default function Admin() {
   });
 
   useEffect(() => {
-    if (settings.length > 0) {
-      // Load settings into state
-      const settingsMap = settings.reduce((acc: Record<string, string>, setting: AdminSetting) => {
-        acc[setting.key] = setting.value;
-        return acc;
-      }, {} as Record<string, string>);
+    if (settings.length === 0) return;
+    const settingsMap = settings.reduce((acc: Record<string, string>, setting: AdminSetting) => {
+      acc[setting.key] = setting.value;
+      return acc;
+    }, {} as Record<string, string>);
 
-      setSystemSettings(prev => ({
-        ...prev,
-        defaultCurrency: settingsMap['system.defaultCurrency'] || prev.defaultCurrency,
-        defaultVatRate: settingsMap['system.defaultVatRate'] || prev.defaultVatRate,
-        freeAiCredits: settingsMap['system.freeAiCredits'] || prev.freeAiCredits,
-        trialPeriod: settingsMap['system.trialPeriod'] || prev.trialPeriod,
-        aiCategorization: 'feature.aiCategorization' in settingsMap
-          ? settingsMap['feature.aiCategorization'] === 'true'
-          : prev.aiCategorization,
-        ocrScanning: 'feature.ocrScanning' in settingsMap
-          ? settingsMap['feature.ocrScanning'] === 'true'
-          : prev.ocrScanning,
-        whatsappIntegration: 'feature.whatsappIntegration' in settingsMap
-          ? settingsMap['feature.whatsappIntegration'] === 'true'
-          : prev.whatsappIntegration,
-        smartAssistant: 'feature.smartAssistant' in settingsMap
-          ? settingsMap['feature.smartAssistant'] === 'true'
-          : prev.smartAssistant,
-        referralProgram: 'feature.referralProgram' in settingsMap
-          ? settingsMap['feature.referralProgram'] === 'true'
-          : prev.referralProgram,
-        supportEmail: settingsMap['notification.supportEmail'] || prev.supportEmail,
-        fromEmail: settingsMap['notification.fromEmail'] || prev.fromEmail,
-        sendWelcomeEmail: 'notification.sendWelcomeEmail' in settingsMap
-          ? settingsMap['notification.sendWelcomeEmail'] === 'true'
-          : prev.sendWelcomeEmail,
-        paymentReminders: 'notification.paymentReminders' in settingsMap
-          ? settingsMap['notification.paymentReminders'] === 'true'
-          : prev.paymentReminders,
-      }));
-    }
+    setSystemSettings(prev => ({
+      ...prev,
+      defaultCurrency: settingsMap['system.defaultCurrency'] || prev.defaultCurrency,
+      defaultVatRate: settingsMap['system.defaultVatRate'] || prev.defaultVatRate,
+      freeAiCredits: settingsMap['system.freeAiCredits'] || prev.freeAiCredits,
+      trialPeriod: settingsMap['system.trialPeriod'] || prev.trialPeriod,
+      aiCategorization: 'feature.aiCategorization' in settingsMap
+        ? settingsMap['feature.aiCategorization'] === 'true'
+        : prev.aiCategorization,
+      ocrScanning: 'feature.ocrScanning' in settingsMap
+        ? settingsMap['feature.ocrScanning'] === 'true'
+        : prev.ocrScanning,
+      whatsappIntegration: 'feature.whatsappIntegration' in settingsMap
+        ? settingsMap['feature.whatsappIntegration'] === 'true'
+        : prev.whatsappIntegration,
+      smartAssistant: 'feature.smartAssistant' in settingsMap
+        ? settingsMap['feature.smartAssistant'] === 'true'
+        : prev.smartAssistant,
+      referralProgram: 'feature.referralProgram' in settingsMap
+        ? settingsMap['feature.referralProgram'] === 'true'
+        : prev.referralProgram,
+      supportEmail: settingsMap['notification.supportEmail'] || prev.supportEmail,
+      fromEmail: settingsMap['notification.fromEmail'] || prev.fromEmail,
+      sendWelcomeEmail: 'notification.sendWelcomeEmail' in settingsMap
+        ? settingsMap['notification.sendWelcomeEmail'] === 'true'
+        : prev.sendWelcomeEmail,
+      paymentReminders: 'notification.paymentReminders' in settingsMap
+        ? settingsMap['notification.paymentReminders'] === 'true'
+        : prev.paymentReminders,
+    }));
   }, [settings]);
 
   const { data: plans = [], isLoading: plansLoading } = useQuery<SubscriptionPlan[]>({
@@ -279,7 +277,7 @@ export default function Admin() {
   );
 
   // Group settings by category
-  const settingsByCategory = (settings as AdminSetting[]).reduce((acc: Record<string, AdminSetting[]>, setting: AdminSetting) => {
+  const settingsByCategory = settings.reduce((acc, setting) => {
     if (!acc[setting.category]) {
       acc[setting.category] = [];
     }

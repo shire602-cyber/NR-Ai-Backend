@@ -13,8 +13,6 @@ import { Separator } from '@/components/ui/separator';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/hooks/use-toast';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
-import { useSubscription } from '@/hooks/useSubscription';
-import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { formatCurrency } from '@/lib/format';
 import { 
   BarChart, 
@@ -88,7 +86,6 @@ export default function AdvancedReports() {
   const { t, locale } = useTranslation();
   const { toast } = useToast();
   const { companyId, isLoading: isLoadingCompany } = useDefaultCompany();
-  const { canAccess, getRequiredTier } = useSubscription();
   const [selectedPeriod, setSelectedPeriod] = useState('quarter');
   const [comparisonPeriod, setComparisonPeriod] = useState('previous');
   const [activeTab, setActiveTab] = useState('cashflow');
@@ -135,7 +132,7 @@ export default function AdvancedReports() {
   });
 
   const agingSummary = useMemo(() => {
-    if (!agingData) return { receivables: { current: 0, overdue: 0, total: 0 }, payables: { current: 0, overdue: 0, total: 0 } };
+    if (!agingData) return { receivables: { current: 0, overdue: 0 }, payables: { current: 0, overdue: 0 } };
     
     const receivables = agingData.filter(a => a.type === 'receivable');
     const payables = agingData.filter(a => a.type === 'payable');
@@ -196,10 +193,6 @@ export default function AdvancedReports() {
       description: `${reportType} report has been downloaded.`,
     });
   };
-
-  if (!canAccess('advancedReports')) {
-    return <UpgradePrompt feature="advancedReports" requiredTier={getRequiredTier('advancedReports')} />;
-  }
 
   if (isLoadingCompany) {
     return (
@@ -389,7 +382,7 @@ export default function AdvancedReports() {
                   <Separator />
                   <div className="flex justify-between font-medium">
                     <span>{locale === 'ar' ? 'الإجمالي' : 'Total'}</span>
-                    <span className="font-mono">{formatCurrency(agingSummary.receivables.total)}</span>
+                    <span className="font-mono">{formatCurrency(agingSummary.receivables.total ?? 0)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -413,7 +406,7 @@ export default function AdvancedReports() {
                   <Separator />
                   <div className="flex justify-between font-medium">
                     <span>{locale === 'ar' ? 'الإجمالي' : 'Total'}</span>
-                    <span className="font-mono">{formatCurrency(agingSummary.payables.total)}</span>
+                    <span className="font-mono">{formatCurrency(agingSummary.payables.total ?? 0)}</span>
                   </div>
                 </div>
               </CardContent>

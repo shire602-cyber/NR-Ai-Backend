@@ -3,7 +3,9 @@ import { storage } from '../storage';
 import { z } from 'zod';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
-import { requireFeature } from '../middleware/featureGate';
+import { createLogger } from '../config/logger';
+
+const log = createLogger('recurring-invoices');
 
 export function registerRecurringInvoiceRoutes(app: Express) {
   // =====================================
@@ -11,7 +13,7 @@ export function registerRecurringInvoiceRoutes(app: Express) {
   // =====================================
 
   // List all recurring invoices for a company
-  app.get("/api/companies/:companyId/recurring-invoices", authMiddleware, requireCustomer, requireFeature('recurringInvoices'), asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/companies/:companyId/recurring-invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -25,7 +27,7 @@ export function registerRecurringInvoiceRoutes(app: Express) {
   }));
 
   // Get a single recurring invoice
-  app.get("/api/recurring-invoices/:id", authMiddleware, requireCustomer, requireFeature('recurringInvoices'), asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/recurring-invoices/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -43,7 +45,7 @@ export function registerRecurringInvoiceRoutes(app: Express) {
   }));
 
   // Create a recurring invoice
-  app.post("/api/companies/:companyId/recurring-invoices", authMiddleware, requireCustomer, requireFeature('recurringInvoices'), asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/companies/:companyId/recurring-invoices", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { companyId } = req.params;
     const userId = (req as any).user.id;
 
@@ -93,12 +95,12 @@ export function registerRecurringInvoiceRoutes(app: Express) {
       totalGenerated: 0,
     });
 
-    console.log('[RecurringInvoices] Created recurring invoice:', item.id, 'for company:', companyId);
+    log.info({ id: item.id, companyId }, 'Created recurring invoice');
     res.json(item);
   }));
 
   // Update a recurring invoice
-  app.patch("/api/recurring-invoices/:id", authMiddleware, requireCustomer, requireFeature('recurringInvoices'), asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/recurring-invoices/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -133,12 +135,12 @@ export function registerRecurringInvoiceRoutes(app: Express) {
     if (linesJson !== undefined) updateData.linesJson = typeof linesJson === 'string' ? linesJson : JSON.stringify(linesJson);
 
     const item = await storage.updateRecurringInvoice(id, updateData);
-    console.log('[RecurringInvoices] Updated recurring invoice:', id);
+    log.info({ id }, 'Updated recurring invoice');
     res.json(item);
   }));
 
   // Toggle active status
-  app.patch("/api/recurring-invoices/:id/toggle", authMiddleware, requireCustomer, requireFeature('recurringInvoices'), asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/recurring-invoices/:id/toggle", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -156,12 +158,12 @@ export function registerRecurringInvoiceRoutes(app: Express) {
       isActive: !existing.isActive,
     });
 
-    console.log('[RecurringInvoices] Toggled recurring invoice:', id, 'isActive:', item.isActive);
+    log.info({ id, isActive: item.isActive }, 'Toggled recurring invoice');
     res.json(item);
   }));
 
   // Delete a recurring invoice
-  app.delete("/api/recurring-invoices/:id", authMiddleware, requireCustomer, requireFeature('recurringInvoices'), asyncHandler(async (req: Request, res: Response) => {
+  app.delete("/api/recurring-invoices/:id", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
@@ -176,7 +178,7 @@ export function registerRecurringInvoiceRoutes(app: Express) {
     }
 
     await storage.deleteRecurringInvoice(id);
-    console.log('[RecurringInvoices] Deleted recurring invoice:', id);
+    log.info({ id }, 'Deleted recurring invoice');
     res.json({ message: 'Recurring invoice deleted successfully' });
   }));
 }

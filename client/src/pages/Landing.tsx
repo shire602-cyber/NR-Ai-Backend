@@ -53,7 +53,6 @@ export default function Landing() {
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   useEffect(() => {
     setMounted(true);
@@ -87,7 +86,7 @@ export default function Landing() {
       subheadline: locale === 'en'
         ? 'Never miss a filing deadline. AI-driven categorization with 99% accuracy and local tax compliance built-in. Save 20+ hours monthly with automated bookkeeping from NR Accounting Services.'
         : 'لا تفوت موعد التقديم أبداً. تصنيف مدعوم بالذكاء الاصطناعي بدقة 99% وامتثال ضريبي محلي مدمج. وفّر 20+ ساعة شهرياً مع المحاسبة الآلية من NR Accounting Services.',
-      ctaPrimary: locale === 'en' ? 'Start Free Today' : 'ابدأ مجاناً اليوم',
+      ctaPrimary: locale === 'en' ? 'Start Now for AED 99/month' : 'ابدأ الآن بـ 99 درهم/شهر',
       ctaSecondary: locale === 'en' ? 'Book a Demo' : 'احجز عرض توضيحي',
       noCreditCard: locale === 'en' ? 'Talk to an Expert' : 'تحدث مع خبير',
       cancelAnytime: locale === 'en' ? 'Full FTA Compliance' : 'امتثال كامل للهيئة الاتحادية للضرائب',
@@ -112,14 +111,9 @@ export default function Landing() {
       title: locale === 'en' ? 'Choose Your Plan' : 'اختر خطتك',
       subtitle: locale === 'en' ? 'Start free, scale as you grow. No hidden fees.' : 'ابدأ مجاناً، توسع مع نموك. بدون رسوم خفية.',
       monthly: locale === 'en' ? '/month' : '/شهر',
-      yearly: locale === 'en' ? '/mo (billed yearly)' : '/شهر (فاتورة سنوية)',
       popular: locale === 'en' ? 'Most Popular' : 'الأكثر شعبية',
       getStarted: locale === 'en' ? 'Get Started' : 'ابدأ الآن',
       contactSales: locale === 'en' ? 'Contact Sales' : 'تواصل مع المبيعات',
-      billingMonthly: locale === 'en' ? 'Monthly' : 'شهري',
-      billingYearly: locale === 'en' ? 'Yearly' : 'سنوي',
-      savePercent: locale === 'en' ? 'Save up to 23%' : 'وفّر حتى 23%',
-      free: locale === 'en' ? 'Free' : 'مجاني',
     },
     cta: {
       title: locale === 'en' ? 'Ready to Transform Your Business?' : 'مستعد لتحويل عملك؟',
@@ -222,52 +216,34 @@ export default function Landing() {
 
   const pricingPlans = [
     {
-      name: locale === 'en' ? 'Free' : 'مجاني',
-      monthlyPrice: 0,
-      yearlyPrice: 0,
-      description: locale === 'en' ? 'Get started with basic accounting' : 'ابدأ مع المحاسبة الأساسية',
+      name: locale === 'en' ? 'Starter' : 'المبتدئ',
+      price: 'AED 99',
+      priceNote: locale === 'en' ? 'per month' : 'شهرياً',
+      description: locale === 'en' ? 'Perfect for freelancers and small businesses' : 'مثالي للعاملين المستقلين والشركات الصغيرة',
       features: [
-        locale === 'en' ? '1 user' : 'مستخدم واحد',
-        locale === 'en' ? '20 invoices/month' : '20 فاتورة/شهر',
-        locale === 'en' ? 'Basic dashboard & reports' : 'لوحة تحكم وتقارير أساسية',
-        locale === 'en' ? 'VAT calculation' : 'حساب ضريبة القيمة المضافة',
-        locale === 'en' ? 'Email support' : 'دعم بالبريد الإلكتروني',
+        locale === 'en' ? 'Up to 100 invoices/month' : 'حتى 100 فاتورة/شهر',
+        locale === 'en' ? 'AI expense categorization' : 'تصنيف مصروفات بالذكاء الاصطناعي',
+        locale === 'en' ? 'Unlimited receipt OCR scans' : 'مسح إيصالات OCR غير محدود',
+        locale === 'en' ? 'VAT/CIT filing reports' : 'تقارير تقديم ضريبة القيمة المضافة/الشركات',
+        locale === 'en' ? 'Email & chat support' : 'دعم البريد والدردشة',
       ],
-      cta: locale === 'en' ? 'Start Free' : 'ابدأ مجاناً',
+      cta: locale === 'en' ? 'Start Now' : 'ابدأ الآن',
       popular: false,
       icon: Layers,
     },
     {
-      name: locale === 'en' ? 'Starter' : 'المبتدئ',
-      monthlyPrice: 49,
-      yearlyPrice: 39,
-      description: locale === 'en' ? 'For freelancers and small teams' : 'للعاملين المستقلين والفرق الصغيرة',
-      features: [
-        locale === 'en' ? '3 users' : '3 مستخدمين',
-        locale === 'en' ? '200 invoices/month' : '200 فاتورة/شهر',
-        locale === 'en' ? 'OCR receipt scanning' : 'مسح الإيصالات بالذكاء الاصطناعي',
-        locale === 'en' ? 'Bank feeds & reconciliation' : 'تغذية بنكية ومطابقة',
-        locale === 'en' ? 'E-invoicing (FTA compliant)' : 'فوترة إلكترونية متوافقة مع الهيئة',
-        locale === 'en' ? 'Multi-currency & recurring invoices' : 'متعدد العملات وفواتير متكررة',
-        locale === 'en' ? 'Priority email support' : 'دعم بريد إلكتروني أولوية',
-      ],
-      cta: locale === 'en' ? 'Start Now' : 'ابدأ الآن',
-      popular: false,
-      icon: Zap,
-    },
-    {
       name: locale === 'en' ? 'Professional' : 'الاحترافي',
-      monthlyPrice: 129,
-      yearlyPrice: 99,
-      description: locale === 'en' ? 'For growing businesses that need full power' : 'للشركات النامية التي تحتاج قوة كاملة',
+      price: 'AED 299',
+      priceNote: locale === 'en' ? 'per month' : 'شهرياً',
+      description: locale === 'en' ? 'For growing businesses that need more power' : 'للشركات النامية التي تحتاج قوة أكبر',
       features: [
-        locale === 'en' ? '10 users' : '10 مستخدمين',
-        locale === 'en' ? 'Unlimited invoices & receipts' : 'فواتير وإيصالات غير محدودة',
-        locale === 'en' ? 'Full AI CFO & advanced reports' : 'مستشار مالي ذكي وتقارير متقدمة',
-        locale === 'en' ? 'Payroll & inventory management' : 'الرواتب وإدارة المخزون',
-        locale === 'en' ? 'Purchase orders & bulk ops' : 'أوامر شراء وعمليات جماعية',
-        locale === 'en' ? 'Automated VAT/CIT filing' : 'تقديم ضريبة القيمة المضافة آلياً',
-        locale === 'en' ? 'Phone & chat support' : 'دعم هاتفي ودردشة',
+        locale === 'en' ? 'Unlimited invoices & transactions' : 'فواتير ومعاملات غير محدودة',
+        locale === 'en' ? 'AI CFO financial advisor' : 'مستشار مالي ذكي',
+        locale === 'en' ? 'Automated VAT/CIT filing' : 'تقديم ضريبة القيمة المضافة/الشركات آلي',
+        locale === 'en' ? 'Multi-currency support' : 'دعم متعدد العملات',
+        locale === 'en' ? 'Bank reconciliation' : 'مطابقة بنكية',
+        locale === 'en' ? 'Priority phone support' : 'دعم هاتفي أولوية',
+        locale === 'en' ? 'Custom financial reports' : 'تقارير مالية مخصصة',
       ],
       cta: locale === 'en' ? 'Start Now' : 'ابدأ الآن',
       popular: true,
@@ -275,19 +251,18 @@ export default function Landing() {
     },
     {
       name: locale === 'en' ? 'Enterprise' : 'المؤسسات',
-      monthlyPrice: 299,
-      yearlyPrice: 249,
+      price: locale === 'en' ? 'Custom' : 'مخصص',
+      priceNote: locale === 'en' ? 'Contact us' : 'تواصل معنا',
       description: locale === 'en' ? 'For large organizations with complex needs' : 'للمؤسسات الكبيرة ذات الاحتياجات المعقدة',
       features: [
-        locale === 'en' ? 'Unlimited users' : 'مستخدمين غير محدودين',
         locale === 'en' ? 'Everything in Professional' : 'كل ما في الاحترافي',
-        locale === 'en' ? 'API access & custom integrations' : 'وصول API وتكاملات مخصصة',
-        locale === 'en' ? 'White-label options' : 'خيارات العلامة البيضاء',
-        locale === 'en' ? 'Dedicated accountant' : 'محاسب مخصص',
         locale === 'en' ? 'Multi-company support' : 'دعم متعدد الشركات',
+        locale === 'en' ? 'Dedicated accountant' : 'محاسب مخصص',
+        locale === 'en' ? 'API access & integrations' : 'وصول API وتكاملات',
+        locale === 'en' ? 'White-label options' : 'خيارات العلامة البيضاء',
         locale === 'en' ? 'SLA & 24/7 support' : 'اتفاقية مستوى خدمة ودعم 24/7',
       ],
-      cta: locale === 'en' ? 'Contact Sales' : 'تواصل مع المبيعات',
+      cta: locale === 'en' ? 'Talk to an Expert' : 'تحدث مع خبير',
       popular: false,
       icon: Gem,
     },
@@ -947,101 +922,68 @@ export default function Landing() {
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto" data-testid="pricing-subtitle">{t.pricing.subtitle}</p>
           </div>
 
-          {/* Billing Cycle Toggle */}
-          <div className="flex items-center justify-center gap-4 mb-12">
-            <span className={`text-sm font-medium transition-colors ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {t.pricing.billingMonthly}
-            </span>
-            <button
-              onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${billingCycle === 'yearly' ? 'bg-primary' : 'bg-muted'}`}
-              data-testid="billing-cycle-toggle"
-            >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${billingCycle === 'yearly' ? 'translate-x-8' : 'translate-x-1'}`} />
-            </button>
-            <span className={`text-sm font-medium transition-colors ${billingCycle === 'yearly' ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {t.pricing.billingYearly}
-            </span>
-            {billingCycle === 'yearly' && (
-              <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20">
-                {t.pricing.savePercent}
-              </Badge>
-            )}
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-            {pricingPlans.map((plan, index) => {
-              const price = billingCycle === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
-              return (
-                <Card
-                  key={index}
-                  className={`relative overflow-hidden p-8 border transition-all duration-300 hover:-translate-y-2 ${
-                    plan.popular
-                      ? 'border-primary/50 bg-gradient-to-b from-primary/10 to-transparent shadow-xl shadow-primary/10'
-                      : 'border-white/10 bg-white/[0.02]'
-                  }`}
-                  data-testid={`pricing-${plan.name.toLowerCase()}`}
-                >
-                  {plan.popular && (
-                    <div className="absolute top-0 right-0 px-4 py-1.5 bg-gradient-to-r from-primary to-violet-600 text-white text-sm font-medium rounded-bl-lg">
-                      {t.pricing.popular}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-12 h-12 rounded-xl ${plan.popular ? 'bg-gradient-to-br from-primary to-violet-600' : 'bg-white/10'} flex items-center justify-center`}>
-                      <plan.icon className={`w-6 h-6 ${plan.popular ? 'text-white' : 'text-foreground'}`} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">{plan.name}</h3>
-                      <p className="text-sm text-muted-foreground">{plan.description}</p>
-                    </div>
+          <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {pricingPlans.map((plan, index) => (
+              <Card 
+                key={index}
+                className={`relative overflow-hidden p-8 border transition-all duration-300 hover:-translate-y-2 ${
+                  plan.popular 
+                    ? 'border-primary/50 bg-gradient-to-b from-primary/10 to-transparent shadow-xl shadow-primary/10' 
+                    : 'border-white/10 bg-white/[0.02]'
+                }`}
+                data-testid={`pricing-${plan.name.toLowerCase()}`}
+              >
+                {plan.popular && (
+                  <div className="absolute top-0 right-0 px-4 py-1.5 bg-gradient-to-r from-primary to-violet-600 text-white text-sm font-medium rounded-bl-lg">
+                    {t.pricing.popular}
                   </div>
+                )}
+                
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-12 h-12 rounded-xl ${plan.popular ? 'bg-gradient-to-br from-primary to-violet-600' : 'bg-white/10'} flex items-center justify-center`}>
+                    <plan.icon className={`w-6 h-6 ${plan.popular ? 'text-white' : 'text-foreground'}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">{plan.name}</h3>
+                    <p className="text-sm text-muted-foreground">{plan.description}</p>
+                  </div>
+                </div>
 
-                  <div className="mb-6 pb-6 border-b border-white/10">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold">
-                        {price === 0 ? t.pricing.free : `AED ${price}`}
-                      </span>
-                      {price > 0 && (
-                        <span className="text-muted-foreground">{t.pricing.monthly}</span>
-                      )}
-                    </div>
-                    {billingCycle === 'yearly' && plan.monthlyPrice > 0 && (
-                      <p className="text-xs text-green-600 mt-1">
-                        {locale === 'en'
-                          ? `Save AED ${(plan.monthlyPrice - plan.yearlyPrice) * 12}/year`
-                          : `وفّر ${(plan.monthlyPrice - plan.yearlyPrice) * 12} درهم/سنة`}
-                      </p>
+                <div className="mb-6 pb-6 border-b border-white/10">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold">{plan.price}</span>
+                    {plan.price !== 'Free' && plan.price !== 'Custom' && (
+                      <span className="text-muted-foreground">{t.pricing.monthly}</span>
                     )}
                   </div>
+                  <p className="text-sm text-muted-foreground mt-1">{plan.priceNote}</p>
+                </div>
 
-                  <ul className="space-y-4 mb-8">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <ul className="space-y-4 mb-8">
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
 
-                  <Link href="/register">
-                    <Button
-                      className={`w-full py-6 font-semibold ${
-                        plan.popular
-                          ? 'bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-lg shadow-primary/25'
-                          : ''
-                      }`}
-                      variant={plan.popular ? 'default' : 'outline'}
-                      data-testid={`pricing-button-${plan.name.toLowerCase()}`}
-                    >
-                      {plan.cta}
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </Card>
-              );
-            })}
+                <Link href="/register">
+                  <Button 
+                    className={`w-full py-6 font-semibold ${
+                      plan.popular 
+                        ? 'bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-600/90 shadow-lg shadow-primary/25' 
+                        : ''
+                    }`}
+                    variant={plan.popular ? 'default' : 'outline'}
+                    data-testid={`pricing-button-${plan.name.toLowerCase()}`}
+                  >
+                    {plan.cta}
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </Link>
+              </Card>
+            ))}
           </div>
         </div>
       </section>

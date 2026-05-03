@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,7 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,13 +28,15 @@ import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TableSkeleton } from '@/components/ui/loading-skeletons';
 import { exportToExcel, exportToGoogleSheets, prepareInvoicesForExport } from '@/lib/export';
-import { Plus, FileText, FileCode, CalendarIcon, Trash2, Download, Edit, Palette, Save, Info, XCircle, AlertCircle, FileSpreadsheet, Send } from 'lucide-react';
+import { Plus, FileText, FileCode, CalendarIcon, Trash2, Download, Edit, Palette, Save, Info, XCircle, AlertCircle, FileSpreadsheet, Send, DollarSign, RefreshCw, RotateCcw } from 'lucide-react';
 import { SiGooglesheets, SiWhatsapp } from 'react-icons/si';
-import type { Invoice, Company, CustomerContact } from '@shared/schema';
-import { MESSAGE_TEMPLATES, fillTemplate, openWhatsApp } from '@/lib/whatsapp-templates';
+import type { Invoice, Company, CustomerContact, InvoicePayment } from '@shared/schema';
+import { MESSAGE_TEMPLATES, fillTemplate, pickWhatsAppNumber } from '@/lib/whatsapp-templates';
+import { WhatsAppComposer } from '@/components/WhatsAppComposer';
 import { cn } from '@/lib/utils';
-import { toDate } from '@/lib/date-safe';
 import { downloadInvoicePDF } from '@/lib/pdf-invoice';
 
 const invoiceLineSchema = z.object({
@@ -80,6 +84,35 @@ export default function Invoices() {
   const [pendingInvoiceData, setPendingInvoiceData] = useState<any>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [isExporting, setIsExporting] = useState(false);
+
+  // Virtual scrolling for large invoice lists.
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+
+  // Recurring invoice dialog state
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [invoiceForRecurring, setInvoiceForRecurring] = useState<Invoice | null>(null);
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurringInterval, setRecurringInterval] = useState('monthly');
+  const [recurringNextDate, setRecurringNextDate] = useState<Date | undefined>(undefined);
+  const [recurringEndDate, setRecurringEndDate] = useState<Date | undefined>(undefined);
+
+  // Payment tracking dialog state
+  const [addPaymentDialogOpen, setAddPaymentDialogOpen] = useState(false);
+  const [viewPaymentsDialogOpen, setViewPaymentsDialogOpen] = useState(false);
+  const [invoiceForPaymentDetail, setInvoiceForPaymentDetail] = useState<Invoice | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('bank');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentAccountForAdd, setPaymentAccountForAdd] = useState('');
+  const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
+
+  // WhatsApp composer state. We open this with a pre-filled message rather
+  // than redirecting to wa.me directly, so the user can review/edit before
+  // sending — important when share links are baked into the body.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerRecipient, setComposerRecipient] = useState<{ name?: string | null; phone?: string | null; whatsappNumber?: string | null } | null>(null);
+  const [composerMessage, setComposerMessage] = useState('');
 
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'invoices'],
@@ -185,6 +218,15 @@ export default function Invoices() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status, paymentAccountId }: { id: string; status: string; paymentAccountId?: string }) =>
       apiRequest('PATCH', `/api/invoices/${id}/status`, { status, paymentAccountId }),
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      const previous = queryClient.getQueryData<Invoice[]>(['/api/companies', selectedCompanyId, 'invoices']);
+      queryClient.setQueryData<Invoice[]>(
+        ['/api/companies', selectedCompanyId, 'invoices'],
+        (old) => old?.map((inv) => inv.id === id ? { ...inv, status: status as any } : inv) ?? []
+      );
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
       toast({
@@ -195,7 +237,10 @@ export default function Invoices() {
       setInvoiceForPayment(null);
       setSelectedPaymentAccount('');
     },
-    onError: (error: any) => {
+    onError: (error: any, _vars, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['/api/companies', selectedCompanyId, 'invoices'], context.previous);
+      }
       toast({
         variant: 'destructive',
         title: 'Failed to update status',
@@ -206,25 +251,81 @@ export default function Invoices() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `/api/invoices/${id}`),
+    onMutate: async (id: string) => {
+      const queryKey = ['/api/companies', selectedCompanyId, 'invoices'] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Invoice[]>(queryKey);
+      queryClient.setQueryData<Invoice[]>(queryKey, (old) => old?.filter((inv) => inv.id !== id) ?? []);
+      return { previous, queryKey };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
       toast({
         title: t.invoiceDeleted,
         description: t.invoiceDeletedDesc,
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, _id, context: any) => {
+      if (context?.previous && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
       toast({
         variant: 'destructive',
         title: t.deleteFailed,
         description: error?.message || t.tryAgain,
       });
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+    },
   });
 
   const checkSimilarMutation = useMutation({
-    mutationFn: (data: any) => 
+    mutationFn: (data: any) =>
       apiRequest('POST', `/api/companies/${selectedCompanyId}/invoices/check-similar`, data),
+  });
+
+  const setRecurringMutation = useMutation({
+    mutationFn: ({ invoiceId, data }: { invoiceId: string; data: any }) =>
+      apiRequest('POST', `/api/companies/${selectedCompanyId}/invoices/${invoiceId}/set-recurring`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      toast({ title: 'Recurring settings saved' });
+      setRecurringDialogOpen(false);
+      setInvoiceForRecurring(null);
+    },
+    onError: (error: any) => {
+      toast({ variant: 'destructive', title: 'Failed to save recurring settings', description: error?.message });
+    },
+  });
+
+  const addPaymentMutation = useMutation({
+    mutationFn: ({ invoiceId, data }: { invoiceId: string; data: any }) =>
+      apiRequest('POST', `/api/companies/${selectedCompanyId}/invoices/${invoiceId}/payments`, data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      toast({ title: 'Payment recorded', description: `Status updated to ${result.status}` });
+      setAddPaymentDialogOpen(false);
+      setInvoiceForPaymentDetail(null);
+      setPaymentAmount('');
+      setPaymentReference('');
+      setPaymentNotes('');
+      setPaymentAccountForAdd('');
+    },
+    onError: (error: any) => {
+      toast({ variant: 'destructive', title: 'Failed to record payment', description: error?.message });
+    },
+  });
+
+  const createCreditNoteMutation = useMutation({
+    mutationFn: (invoiceId: string) =>
+      apiRequest('POST', `/api/companies/${selectedCompanyId}/invoices/${invoiceId}/credit-note`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+      toast({ title: 'Credit note created', description: 'A credit note has been created and the journal entry reversed.' });
+    },
+    onError: (error: any) => {
+      toast({ variant: 'destructive', title: 'Failed to create credit note', description: error?.message });
+    },
   });
 
   const handleStatusChange = (invoice: Invoice, newStatus: string) => {
@@ -340,6 +441,7 @@ export default function Invoices() {
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'paid': return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400';
+      case 'partial': return 'bg-teal-100 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400';
       case 'sent': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400';
       case 'void': return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
       default: return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400';
@@ -488,7 +590,7 @@ export default function Invoices() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold mb-2">{t.invoices}</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">{t.invoices}</h1>
         <p className="text-muted-foreground">Manage invoices and customize their appearance</p>
       </div>
 
@@ -798,12 +900,19 @@ export default function Invoices() {
       </div>
 
       {isLoading ? (
-        <Skeleton className="h-96" />
+        <TableSkeleton rows={8} columns={6} />
       ) : (
         <Card>
-          <div className="overflow-x-auto">
+          <div
+            ref={tableScrollRef}
+            className={cn(
+              'overflow-auto',
+              filteredInvoices && filteredInvoices.length > 100 && 'max-h-[720px]',
+            )}
+            style={filteredInvoices && filteredInvoices.length > 100 ? { contain: 'strict' } : undefined}
+          >
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead className="font-semibold">{t.invoiceNumber}</TableHead>
                   <TableHead className="font-semibold">{t.customerName}</TableHead>
@@ -813,9 +922,10 @@ export default function Invoices() {
                   <TableHead className="font-semibold text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {filteredInvoices && filteredInvoices.length > 0 ? (
-                  filteredInvoices.map((invoice) => (
+              <VirtualizedInvoiceRows
+                invoices={filteredInvoices || []}
+                scrollRef={tableScrollRef}
+                renderRow={(invoice) => (
                     <TableRow key={invoice.id} data-testid={`invoice-row-${invoice.id}`}>
                       <TableCell className="font-mono font-medium">{invoice.number}</TableCell>
                       <TableCell>{invoice.customerName}</TableCell>
@@ -846,6 +956,9 @@ export default function Invoices() {
                             </SelectItem>
                             <SelectItem value="paid" data-testid={`status-option-paid-${invoice.id}`}>
                               {t.paid}
+                            </SelectItem>
+                            <SelectItem value="partial" data-testid={`status-option-partial-${invoice.id}`}>
+                              Partial
                             </SelectItem>
                             <SelectItem value="void" data-testid={`status-option-void-${invoice.id}`}>
                               {t.void}
@@ -930,61 +1043,57 @@ export default function Invoices() {
                             variant="ghost"
                             size="sm"
                             className="text-green-600 hover:text-green-700"
+                            title="Send via WhatsApp"
                             onClick={async () => {
                               try {
-                                // Find customer phone
                                 const customer = customers.find(c => c.name === invoice.customerName);
-                                if (!customer?.phone) {
+                                const recipientNumber = customer ? pickWhatsAppNumber(customer) : null;
+                                if (!customer || !recipientNumber) {
                                   toast({
-                                    title: 'No phone number',
-                                    description: `No phone number found for ${invoice.customerName}. Add one in Customer Contacts.`,
+                                    title: 'No WhatsApp number',
+                                    description: `No phone or WhatsApp number found for ${invoice.customerName}. Add one in Customer Contacts.`,
                                     variant: 'destructive',
                                   });
                                   return;
                                 }
 
-                                // Generate share link
                                 const shareResult = await apiRequest('POST', `/api/invoices/${invoice.id}/share`);
                                 const shareUrl = `${window.location.origin}${shareResult.shareUrl}`;
 
-                                // Calculate due date — fall back to today if
-                                // invoice.date is missing or malformed.
-                                const safeInvoiceDate = toDate(invoice.date) ?? new Date();
+                                const invoiceDate = new Date(invoice.date);
                                 const paymentTerms = customer.paymentTerms || 30;
-                                const dueDate = new Date(safeInvoiceDate);
+                                const dueDate = new Date(invoiceDate);
                                 dueDate.setDate(dueDate.getDate() + paymentTerms);
 
-                                // Fill template
                                 const tpl = MESSAGE_TEMPLATES.find(t => t.id === 'invoice_with_link');
                                 const templateStr = locale === 'en' ? (tpl?.template || '') : (tpl?.templateAr || '');
                                 const message = fillTemplate(templateStr, {
                                   customer_name: invoice.customerName,
                                   invoice_number: invoice.number,
-                                  amount: `${invoice.currency} ${Number(invoice.total ?? 0).toFixed(2)}`,
+                                  amount: `${invoice.currency} ${invoice.total.toFixed(2)}`,
                                   due_date: dueDate.toLocaleDateString(locale === 'en' ? 'en-AE' : 'ar-AE'),
                                   link: shareUrl,
                                   company_name: company?.name || '',
                                 });
 
-                                // Log and open WhatsApp
-                                apiRequest('POST', '/api/integrations/whatsapp/log-message', {
-                                  to: customer.phone,
-                                  message,
-                                }).catch(() => {});
+                                setComposerRecipient({
+                                  name: customer.name,
+                                  phone: customer.phone,
+                                  whatsappNumber: customer.whatsappNumber,
+                                });
+                                setComposerMessage(message);
+                                setComposerOpen(true);
 
-                                openWhatsApp(customer.phone, message);
-
-                                // Update invoice status to sent
+                                // Mark drafts as sent — opening composer is intent enough.
                                 if (invoice.status === 'draft') {
-                                  await apiRequest('PATCH', `/api/invoices/${invoice.id}/status`, { status: 'sent' });
-                                  queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] });
+                                  apiRequest('PATCH', `/api/invoices/${invoice.id}/status`, { status: 'sent' })
+                                    .then(() => queryClient.invalidateQueries({ queryKey: ['/api/companies', selectedCompanyId, 'invoices'] }))
+                                    .catch(() => {});
                                 }
-
-                                toast({ title: 'Opening WhatsApp...' });
                               } catch (error: any) {
                                 toast({
                                   title: 'Error',
-                                  description: error?.message || 'Failed to send via WhatsApp',
+                                  description: error?.message || 'Failed to prepare WhatsApp message',
                                   variant: 'destructive',
                                 });
                               }
@@ -1013,28 +1122,142 @@ export default function Invoices() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            title="Add Payment"
                             onClick={() => {
-                              if (window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
-                                deleteMutation.mutate(invoice.id);
+                              setInvoiceForPaymentDetail(invoice);
+                              setPaymentAmount('');
+                              setPaymentAccountForAdd('');
+                              setPaymentMethod('bank');
+                              setPaymentReference('');
+                              setPaymentNotes('');
+                              setAddPaymentDialogOpen(true);
+                            }}
+                            data-testid={`button-add-payment-${invoice.id}`}
+                          >
+                            <DollarSign className="w-4 h-4 text-green-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="View Payments"
+                            onClick={async () => {
+                              setInvoiceForPaymentDetail(invoice);
+                              try {
+                                const payments = await apiRequest('GET', `/api/companies/${selectedCompanyId}/invoices/${invoice.id}/payments`);
+                                setInvoicePayments(payments);
+                                setViewPaymentsDialogOpen(true);
+                              } catch (e: any) {
+                                toast({ variant: 'destructive', title: 'Error', description: e?.message });
                               }
                             }}
-                            disabled={deleteMutation.isPending}
-                            data-testid={`button-delete-invoice-${invoice.id}`}
+                            data-testid={`button-view-payments-${invoice.id}`}
                           >
-                            <Trash2 className="w-4 h-4 text-destructive" />
+                            <FileText className="w-4 h-4 text-blue-500" />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Set Recurring"
+                            onClick={() => {
+                              setInvoiceForRecurring(invoice);
+                              setRecurringEnabled((invoice as any).isRecurring || false);
+                              setRecurringInterval((invoice as any).recurringInterval || 'monthly');
+                              const next = (invoice as any).nextRecurringDate;
+                              setRecurringNextDate(next ? new Date(next) : undefined);
+                              const end = (invoice as any).recurringEndDate;
+                              setRecurringEndDate(end ? new Date(end) : undefined);
+                              setRecurringDialogOpen(true);
+                            }}
+                            data-testid={`button-set-recurring-${invoice.id}`}
+                          >
+                            <RefreshCw className={`w-4 h-4 ${(invoice as any).isRecurring ? 'text-purple-500' : 'text-muted-foreground'}`} />
+                          </Button>
+                          {(invoice as any).invoiceType !== 'credit_note' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Create Credit Note"
+                              onClick={() => {
+                                if (window.confirm(`Create a credit note for Invoice ${invoice.number}? This will reverse the journal entry.`)) {
+                                  createCreditNoteMutation.mutate(invoice.id);
+                                }
+                              }}
+                              disabled={createCreditNoteMutation.isPending}
+                              data-testid={`button-credit-note-${invoice.id}`}
+                            >
+                              <RotateCcw className="w-4 h-4 text-orange-500" />
+                            </Button>
+                          )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={deleteMutation.isPending}
+                                data-testid={`button-delete-invoice-${invoice.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Invoice {invoice.number}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete this invoice. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate(invoice.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      {t.noData}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
+                  )}
+                emptyState={
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-0">
+                        <EmptyState
+                          icon={FileText}
+                          title={dateRange.from || dateRange.to ? 'No invoices in this date range' : 'No invoices yet'}
+                          description={
+                            dateRange.from || dateRange.to
+                              ? 'Try widening the date filter or clearing it to see all invoices.'
+                              : 'Create your first invoice — VAT, sequential numbering, and PDFs are handled automatically.'
+                          }
+                          action={
+                            !dateRange.from && !dateRange.to
+                              ? {
+                                  label: 'New invoice',
+                                  icon: Plus,
+                                  onClick: () => setDialogOpen(true),
+                                  testId: 'button-create-first-invoice',
+                                }
+                              : undefined
+                          }
+                          secondaryAction={
+                            dateRange.from || dateRange.to
+                              ? {
+                                  label: 'Clear filter',
+                                  onClick: () => setDateRange({ from: undefined, to: undefined }),
+                                }
+                              : undefined
+                          }
+                          testId="empty-state-invoices"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                }
+              />
             </Table>
           </div>
         </Card>
@@ -1349,6 +1572,257 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
 
+      {/* Set Recurring Dialog */}
+      <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-purple-500" />
+              Recurring Invoice Settings
+            </DialogTitle>
+            <DialogDescription>
+              Configure automatic recurring copies for Invoice {invoiceForRecurring?.number}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div>
+                <p className="font-medium">Enable Recurring</p>
+                <p className="text-sm text-muted-foreground">Automatically create new invoice copies on schedule</p>
+              </div>
+              <Switch checked={recurringEnabled} onCheckedChange={setRecurringEnabled} />
+            </div>
+
+            {recurringEnabled && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Frequency</label>
+                  <Select value={recurringInterval} onValueChange={setRecurringInterval}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Next Run Date</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {recurringNextDate ? format(recurringNextDate, 'PPP') : 'Pick a date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={recurringNextDate} onSelect={setRecurringNextDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">End Date (optional)</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {recurringEndDate ? format(recurringEndDate, 'PPP') : 'No end date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={recurringEndDate} onSelect={setRecurringEndDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                  {recurringEndDate && (
+                    <Button variant="ghost" size="sm" onClick={() => setRecurringEndDate(undefined)} className="text-xs text-muted-foreground">
+                      Clear end date
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setRecurringDialogOpen(false)} className="flex-1">Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!invoiceForRecurring) return;
+                setRecurringMutation.mutate({
+                  invoiceId: invoiceForRecurring.id,
+                  data: {
+                    isRecurring: recurringEnabled,
+                    recurringInterval: recurringEnabled ? recurringInterval : null,
+                    nextRecurringDate: recurringEnabled && recurringNextDate ? recurringNextDate.toISOString() : null,
+                    recurringEndDate: recurringEndDate ? recurringEndDate.toISOString() : null,
+                  },
+                });
+              }}
+              disabled={setRecurringMutation.isPending || (recurringEnabled && !recurringNextDate)}
+              className="flex-1"
+            >
+              {setRecurringMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Payment Dialog */}
+      <Dialog open={addPaymentDialogOpen} onOpenChange={setAddPaymentDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-green-600" />
+              Record Payment
+            </DialogTitle>
+            <DialogDescription>
+              Record a payment received for Invoice {invoiceForPaymentDetail?.number} (Total: {invoiceForPaymentDetail ? formatCurrency(invoiceForPaymentDetail.total, invoiceForPaymentDetail.currency, locale) : ''})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Amount</label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                className="font-mono"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Payment Method</label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="online">Online Payment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Deposit Account</label>
+              {paymentAccounts.length > 0 ? (
+                <Select value={paymentAccountForAdd} onValueChange={setPaymentAccountForAdd}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentAccounts.map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.code} — {acc.nameEn}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>No cash/bank accounts found. Create one in Chart of Accounts.</AlertDescription>
+                </Alert>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reference (optional)</label>
+              <Input placeholder="e.g. Bank ref, cheque no." value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Notes (optional)</label>
+              <Input placeholder="Additional notes" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setAddPaymentDialogOpen(false)} className="flex-1">Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!invoiceForPaymentDetail || !paymentAmount || !paymentAccountForAdd) return;
+                addPaymentMutation.mutate({
+                  invoiceId: invoiceForPaymentDetail.id,
+                  data: {
+                    amount: parseFloat(paymentAmount),
+                    method: paymentMethod,
+                    paymentAccountId: paymentAccountForAdd,
+                    reference: paymentReference || undefined,
+                    notes: paymentNotes || undefined,
+                    date: new Date().toISOString(),
+                  },
+                });
+              }}
+              disabled={addPaymentMutation.isPending || !paymentAmount || !paymentAccountForAdd}
+              className="flex-1"
+            >
+              {addPaymentMutation.isPending ? 'Recording...' : 'Record Payment'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Payments Dialog */}
+      <Dialog open={viewPaymentsDialogOpen} onOpenChange={setViewPaymentsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Payment History — Invoice {invoiceForPaymentDetail?.number}</DialogTitle>
+            <DialogDescription>
+              All payments recorded for this invoice
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {invoicePayments.length === 0 ? (
+              <p className="text-center text-muted-foreground py-6">No payments recorded yet.</p>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoicePayments.map((p: InvoicePayment) => (
+                      <TableRow key={p.id}>
+                        <TableCell>{formatDate(p.date, locale)}</TableCell>
+                        <TableCell className="capitalize">{p.method}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.reference || '—'}</TableCell>
+                        <TableCell className="text-right font-mono font-medium">
+                          {formatCurrency(p.amount, invoiceForPaymentDetail?.currency || 'AED', locale)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="flex justify-between pt-2 border-t font-semibold">
+                  <span>Total Paid</span>
+                  <span className="font-mono">
+                    {formatCurrency(
+                      invoicePayments.reduce((s: number, p: InvoicePayment) => s + p.amount, 0),
+                      invoiceForPaymentDetail?.currency || 'AED',
+                      locale
+                    )}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+          <Button variant="outline" onClick={() => setViewPaymentsDialogOpen(false)} className="w-full mt-2">Close</Button>
+        </DialogContent>
+      </Dialog>
+
       {/* Payment Account Selection Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent>
@@ -1435,6 +1909,70 @@ export default function Invoices() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <WhatsAppComposer
+        open={composerOpen}
+        onOpenChange={(open) => {
+          setComposerOpen(open);
+          if (!open) {
+            setComposerMessage('');
+            setComposerRecipient(null);
+          }
+        }}
+        recipient={composerRecipient}
+        defaultMessage={composerMessage}
+        allowedCategories={["invoice", "payment", "alert"]}
+      />
     </div>
+  );
+}
+
+const VIRTUALIZE_THRESHOLD = 100;
+const ROW_ESTIMATE = 64;
+
+interface VirtualizedInvoiceRowsProps {
+  invoices: Invoice[];
+  scrollRef: React.RefObject<HTMLDivElement>;
+  renderRow: (invoice: Invoice) => React.ReactElement;
+  emptyState: React.ReactNode;
+}
+
+function VirtualizedInvoiceRows({ invoices, scrollRef, renderRow, emptyState }: VirtualizedInvoiceRowsProps) {
+  const virtualizer = useVirtualizer({
+    count: invoices.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_ESTIMATE,
+    overscan: 10,
+  });
+
+  if (invoices.length === 0) {
+    return <>{emptyState}</>;
+  }
+
+  // Below the threshold, the cost of measuring exceeds the benefit — render normally.
+  if (invoices.length < VIRTUALIZE_THRESHOLD) {
+    return <TableBody>{invoices.map((invoice) => renderRow(invoice))}</TableBody>;
+  }
+
+  const totalSize = virtualizer.getTotalSize();
+  const virtualItems = virtualizer.getVirtualItems();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+
+  return (
+    <TableBody>
+      {paddingTop > 0 && (
+        <tr aria-hidden="true">
+          <td colSpan={6} style={{ height: paddingTop, padding: 0, border: 0 }} />
+        </tr>
+      )}
+      {virtualItems.map((virtualRow) => renderRow(invoices[virtualRow.index]))}
+      {paddingBottom > 0 && (
+        <tr aria-hidden="true">
+          <td colSpan={6} style={{ height: paddingBottom, padding: 0, border: 0 }} />
+        </tr>
+      )}
+    </TableBody>
   );
 }

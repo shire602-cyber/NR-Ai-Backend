@@ -1,72 +1,74 @@
-import { randomBytes, timingSafeEqual } from 'crypto';
-import type { NextFunction, Request, Response } from 'express';
-import { isProduction } from '../config/env';
-import { authCookieBaseOptions } from '../config/cookies';
+import { doubleCsrf } from 'csrf-csrf';
+import type { Request, Response, NextFunction } from 'express';
+import { getEnv, isProduction } from '../config/env';
 import { createLogger } from '../config/logger';
 
 const log = createLogger('csrf');
 
-const CSRF_COOKIE_NAME = isProduction() ? '__Host-x-csrf' : 'x-csrf';
-const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const CSRF_EXEMPT = [
+// Routes whose state-changing requests are authenticated only by Bearer token.
+// These are exempt from CSRF (cookies are not used for auth → no CSRF risk).
+const CSRF_BEARER_EXEMPT = [
   /^\/api\/auth\/login$/,
   /^\/api\/auth\/register$/,
-  /^\/api\/auth\/refresh-token$/,
   /^\/api\/auth\/refresh$/,
-  /^\/api\/invitations\/accept\//,
-  /^\/api\/webhooks\//,
+  /^\/api\/portal\//,
 ];
-
-function parseCookieHeader(header: string | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!header) return result;
-  for (const part of header.split(';')) {
-    const [rawName, ...rawValue] = part.trim().split('=');
-    if (!rawName || rawValue.length === 0) continue;
-    result[rawName] = decodeURIComponent(rawValue.join('='));
-  }
-  return result;
-}
 
 function hasBearerAuth(req: Request): boolean {
   const auth = req.headers.authorization;
   return typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ');
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
+const env = getEnv();
 
-export function csrfTokenHandler(_req: Request, res: Response): void {
-  const token = randomBytes(32).toString('hex');
-  res.cookie(CSRF_COOKIE_NAME, token, {
-    ...authCookieBaseOptions(),
-    maxAge: 24 * 60 * 60 * 1000,
-  });
+const {
+  generateCsrfToken,
+  doubleCsrfProtection,
+  invalidCsrfTokenError,
+} = doubleCsrf({
+  getSecret: () => env.SESSION_SECRET,
+  getSessionIdentifier: (req) => {
+    const sid = (req as any).sessionID as string | undefined;
+    return sid || req.ip || 'anonymous';
+  },
+  cookieName: isProduction() ? '__Host-x-csrf' : 'x-csrf',
+  cookieOptions: {
+    sameSite: 'strict',
+    secure: isProduction(),
+    httpOnly: true,
+    path: '/',
+  },
+  size: 32,
+  ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
+  getCsrfTokenFromRequest: (req) =>
+    (req.headers['x-csrf-token'] as string | undefined) ||
+    (req.headers['x-xsrf-token'] as string | undefined),
+  skipCsrfProtection: (req) => {
+    if (hasBearerAuth(req)) return true;
+    return CSRF_BEARER_EXEMPT.some((rx) => rx.test(req.path));
+  },
+});
+
+export const csrfProtection = doubleCsrfProtection;
+
+export function csrfTokenHandler(req: Request, res: Response): void {
+  const token = generateCsrfToken(req, res);
   res.json({ csrfToken: token });
 }
 
-export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
-  if (!STATE_CHANGING.has(req.method.toUpperCase())) return next();
-  if (hasBearerAuth(req)) return next();
-  if (CSRF_EXEMPT.some((rx) => rx.test(req.path))) return next();
-
-  const headerToken =
-    (req.headers['x-csrf-token'] as string | undefined) ||
-    (req.headers['x-xsrf-token'] as string | undefined);
-  const cookieToken = parseCookieHeader(req.headers.cookie)[CSRF_COOKIE_NAME];
-
-  if (!headerToken || !cookieToken || !safeEqual(headerToken, cookieToken)) {
-    log.warn({ path: req.path, method: req.method }, 'CSRF token validation failed');
+export function csrfErrorHandler(
+  err: any,
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (err === invalidCsrfTokenError || err?.code === 'EBADCSRFTOKEN' || err?.code === invalidCsrfTokenError.code) {
+    log.warn({ msg: err?.message }, 'CSRF token validation failed');
     res.status(403).json({
       message: 'Invalid or missing CSRF token',
       code: 'CSRF_INVALID',
     });
     return;
   }
-
-  next();
+  next(err);
 }

@@ -2,7 +2,20 @@ import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { authMiddleware, requireCustomer } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
-import { insertAccountSchema } from "../../shared/schema";
+import { insertAccountSchema, type Account } from "../../shared/schema";
+import { recordAudit } from "../services/audit.service";
+
+// Walk the user's companies and return the first match. Storage queries are
+// already tenant-scoped, so this also enforces the access check — if no
+// company owns the row, the user has no business seeing it.
+async function findAccountForUser(userId: string, accountId: string): Promise<Account | undefined> {
+  const userCompanies = await storage.getCompaniesByUserId(userId);
+  for (const c of userCompanies) {
+    const account = await storage.getAccount(accountId, c.id);
+    if (account) return account;
+  }
+  return undefined;
+}
 
 export function registerAccountRoutes(app: Express) {
   // =====================================
@@ -38,6 +51,18 @@ export function registerAccountRoutes(app: Express) {
     const validated = insertAccountSchema.parse({ ...req.body, companyId });
 
     const account = await storage.createAccount(validated);
+
+    await recordAudit({
+      userId,
+      companyId,
+      action: 'account.create',
+      entityType: 'account',
+      entityId: account.id,
+      before: null,
+      after: { code: account.code, type: account.type, nameEn: account.nameEn },
+      req,
+    });
+
     res.json(account);
   }));
 
@@ -46,19 +71,41 @@ export function registerAccountRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
-    // Get account to verify it exists and get company access
-    const account = await storage.getAccount(id);
+    // Find which of the user's companies owns this account.
+    const account = await findAccountForUser(userId, id);
     if (!account) {
       return res.status(404).json({ message: 'Account not found' });
     }
 
-    // Check if user has access to this company
-    const hasAccess = await storage.hasCompanyAccess(userId, account.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
+    // Block account type changes once the account has any journal lines.
+    // Switching e.g. an asset to an income account would silently invert all
+    // historical balances on every report.
+    if (req.body?.type !== undefined && req.body.type !== account.type) {
+      const hasTransactions = await storage.accountHasTransactions(id);
+      if (hasTransactions) {
+        return res.status(422).json({
+          message: 'Cannot change account type — account has existing transactions.',
+        });
+      }
     }
 
-    const updatedAccount = await storage.updateAccount(id, req.body);
+    const updatedAccount = await storage.updateAccount(id, account.companyId, req.body);
+
+    // Account-type changes are especially sensitive — they re-classify how
+    // every existing balance rolls into the trial balance / financial
+    // statements — so log them with extra emphasis.
+    const typeChanged = req.body.type && req.body.type !== account.type;
+    await recordAudit({
+      userId,
+      companyId: account.companyId,
+      action: typeChanged ? 'account.type_change' : 'account.update',
+      entityType: 'account',
+      entityId: id,
+      before: { code: account.code, type: account.type, nameEn: account.nameEn },
+      after: { code: updatedAccount.code, type: updatedAccount.type, nameEn: updatedAccount.nameEn },
+      req,
+    });
+
     res.json(updatedAccount);
   }));
 
@@ -67,14 +114,9 @@ export function registerAccountRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
-    const account = await storage.getAccount(id);
+    const account = await findAccountForUser(userId, id);
     if (!account) {
       return res.status(404).json({ message: 'Account not found' });
-    }
-
-    const hasAccess = await storage.hasCompanyAccess(userId, account.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     // System accounts cannot be archived (pre-check for better error message)
@@ -89,7 +131,7 @@ export function registerAccountRoutes(app: Express) {
       res.json(archivedAccount);
     } catch (archiveError: any) {
       // Handle race condition where account was marked as system between read and update
-      if (archiveError?.message?.includes('system account')) {
+      if (archiveError.message.includes('system account')) {
         return res.status(409).json({
           message: 'System accounts cannot be archived. These are essential for proper bookkeeping.'
         });
@@ -103,17 +145,12 @@ export function registerAccountRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
-    const account = await storage.getAccount(id);
+    const account = await findAccountForUser(userId, id);
     if (!account) {
       return res.status(404).json({ message: 'Account not found' });
     }
 
-    const hasAccess = await storage.hasCompanyAccess(userId, account.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const unarchivedAccount = await storage.updateAccount(id, {
+    const unarchivedAccount = await storage.updateAccount(id, account.companyId, {
       isArchived: false,
       isActive: true,
     });
@@ -125,16 +162,9 @@ export function registerAccountRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
-    // Get account to verify it exists and get company access
-    const account = await storage.getAccount(id);
+    const account = await findAccountForUser(userId, id);
     if (!account) {
       return res.status(404).json({ message: 'Account not found' });
-    }
-
-    // Check if user has access to this company
-    const hasAccess = await storage.hasCompanyAccess(userId, account.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     // System accounts cannot be deleted
@@ -152,7 +182,7 @@ export function registerAccountRoutes(app: Express) {
       });
     }
 
-    await storage.deleteAccount(id);
+    await storage.deleteAccount(id, account.companyId);
     res.json({ message: 'Account deleted successfully' });
   }));
 
@@ -187,14 +217,9 @@ export function registerAccountRoutes(app: Express) {
     const { id } = req.params;
     const userId = (req as any).user.id;
 
-    const account = await storage.getAccount(id);
+    const account = await findAccountForUser(userId, id);
     if (!account) {
       return res.status(404).json({ message: 'Account not found' });
-    }
-
-    const hasAccess = await storage.hasCompanyAccess(userId, account.companyId);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const { dateStart, dateEnd, search, limit, offset } = req.query;

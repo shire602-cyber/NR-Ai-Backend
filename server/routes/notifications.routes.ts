@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { authMiddleware, requireCustomer } from "../middleware/auth";
+import { authMiddleware } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { z } from "zod";
 
@@ -10,7 +10,7 @@ export function registerNotificationRoutes(app: Express) {
   // =====================================
 
   // Get user notifications
-  app.get("/api/notifications", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/notifications", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const notifications = await storage.getNotificationsByUserId(userId);
     const unreadCount = await storage.getUnreadNotificationCount(userId);
@@ -18,48 +18,28 @@ export function registerNotificationRoutes(app: Express) {
   }));
 
   // Mark notification as read
-  app.patch("/api/notifications/:id/read", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/notifications/:id/read", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const userId = (req as any).user?.id;
-
-    const existing = await storage.getNotification(id);
-    if (!existing) {
-      return res.status(404).json({ message: 'Notification not found' });
-    }
-    if (existing.userId !== userId) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     const notification = await storage.markNotificationAsRead(id);
     res.json(notification);
   }));
 
   // Mark all notifications as read
-  app.post("/api/notifications/read-all", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/notifications/read-all", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     await storage.markAllNotificationsAsRead(userId);
     res.json({ message: 'All notifications marked as read' });
   }));
 
   // Dismiss notification
-  app.patch("/api/notifications/:id/dismiss", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.patch("/api/notifications/:id/dismiss", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const userId = (req as any).user?.id;
-
-    const existing = await storage.getNotification(id);
-    if (!existing) {
-      return res.status(404).json({ message: 'Notification not found' });
-    }
-    if (existing.userId !== userId) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     const notification = await storage.dismissNotification(id);
     res.json(notification);
   }));
 
   // Create notification (for current user only - system notifications should be created server-side)
-  app.post("/api/notifications", authMiddleware, requireCustomer, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/notifications", authMiddleware, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
 
     // Validate input with comprehensive schema

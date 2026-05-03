@@ -7,20 +7,24 @@ import { fileURLToPath } from 'url';
 
 import express from 'express';
 import session from 'express-session';
-import MemoryStore from 'memorystore';
+import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
 
 import { validateEnv, isProduction, isDevelopment } from './config/env';
-import { authCookieSameSite } from './config/cookies';
 import { createLogger } from './config/logger';
 import { applySecurityMiddleware } from './middleware/security';
-import { csrfProtection, csrfTokenHandler } from './middleware/csrf';
+import { requestId } from './middleware/requestId';
 import { requestLogger } from './middleware/requestLogger';
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
+import { csrfProtection, csrfTokenHandler, csrfErrorHandler } from './middleware/csrf';
 import { registerRoutes } from './routes';
+import { initSocketServer } from './services/socket.service';
 import { setupVite, serveStatic } from './vite';
 import { initScheduler } from './services/scheduler.service';
-import { initWebPush } from './services/push-notification.service';
+import { runMigrations, closePool, ensureCriticalSchema, pingDb, getPoolStats } from './db';
+import { installGracefulShutdown } from './shutdown';
 
 // ─── Validate environment on startup ─────────────────────────
 const env = validateEnv();
@@ -34,51 +38,47 @@ const app = express();
 // ─── Trust proxy (required behind reverse proxy / Railway / Render) ──
 app.set('trust proxy', 1);
 
+// ─── Correlation ID — must run before logging / security so every
+//     request log line and rate-limit warn carries the same trace ID.
+app.use(requestId);
+
 // ─── Security middleware (helmet, CORS, rate limiting) ──────
 applySecurityMiddleware(app);
 
-// ─── Stripe webhook needs raw body (BEFORE json parsing) ─────
-app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
+// ─── Response compression ────────────────────────────────────
+app.use(compression());
 
 // ─── Body parsing ────────────────────────────────────────────
-app.use(
-  express.json({
-    limit: '50mb', // For base64-encoded receipt images
-  })
-);
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+// Most endpoints accept small JSON. A handful of image-upload routes
+// (OCR + receipts) accept base64 data URLs and need a larger limit.
+const largeJsonRoutes = [
+  /^\/api\/ocr\//,
+  /^\/api\/firm\/bulk\/ocr/,
+  /^\/api\/companies\/[^/]+\/receipts$/,
+  /^\/api\/companies\/[^/]+\/bank-statements\/import$/,
+];
+
+const largeJson = express.json({ limit: '10mb' });
+const smallJson = express.json({ limit: '1mb' });
+
+app.use((req, res, next) => {
+  const useLarge = largeJsonRoutes.some((rx) => rx.test(req.path));
+  return (useLarge ? largeJson : smallJson)(req, res, next);
+});
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+
+// ─── Cookie parser (must run before CSRF + session) ─────────
+app.use(cookieParser(env.SESSION_SECRET));
 
 // ─── Session configuration ───────────────────────────────────
-// Pick a session store based on REDIS_URL: when it is set we persist
-// sessions to Redis so they survive restarts and can be shared across
-// replicas; when it is not set we fall back to an in-process
-// MemoryStore (fine for local dev; in production this means users are
-// logged out on every deploy/restart, which is why REDIS_URL should be
-// set on the Railway service).
-let sessionStore: session.Store;
-if (env.REDIS_URL) {
-  const { createClient } = await import('redis');
-  const { RedisStore } = await import('connect-redis');
-  const redisClient = createClient({ url: env.REDIS_URL });
-  redisClient.on('error', (err: unknown) => log.error({ err }, 'Redis client error'));
-  await redisClient.connect();
-  sessionStore = new RedisStore({ client: redisClient, prefix: 'muhasib:sess:' });
-  log.info('Session store: Redis');
-} else {
-  const MemoryStoreSession = MemoryStore(session);
-  sessionStore = new MemoryStoreSession({
-    checkPeriod: 86400000, // Prune expired entries every 24h
-  });
-  if (isProduction()) {
-    log.warn('REDIS_URL not set — using in-memory sessions. All users will be logged out on every restart.');
-  } else {
-    log.info('Session store: in-memory');
-  }
-}
-
+const PgSession = connectPgSimple(session);
 app.use(
   session({
-    store: sessionStore,
+    store: new PgSession({
+      conString: env.DATABASE_URL,
+      tableName: 'session',
+      createTableIfMissing: true,
+    }),
     secret: env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -86,7 +86,7 @@ app.use(
       secure: isProduction(),
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: authCookieSameSite(),
+      sameSite: 'lax',
     },
   })
 );
@@ -99,42 +99,43 @@ import './auth';
 // ─── Request logging ─────────────────────────────────────────
 app.use(requestLogger);
 
-// ─── CSRF support for cookie-authenticated browser mutations ──
+// ─── CSRF token endpoint (public, sets cookie + returns header token) ─
 app.get('/api/csrf-token', csrfTokenHandler);
+
+// ─── CSRF protection on state-changing requests ─────────────
+// Skips Bearer-auth requests and a small allowlist (login/register/portal).
 app.use(csrfProtection);
 
 // ─── Health check (before auth, always accessible) ───────────
-// Read /app/.build-info once at startup so /health and /api/version
-// can return which git SHA is actually live. This is the source of
-// truth when Fastly/CDN caching makes us doubt what's deployed.
-let buildSha = process.env.RAILWAY_GIT_COMMIT_SHA || 'unknown';
-try {
-  const info = fs.readFileSync('/app/.build-info', 'utf-8').trim();
-  const m = info.match(/git-sha:\s*([0-9a-f]+)/i);
-  if (m) buildSha = m[1];
-} catch {
-  // file only exists in the Docker image; ignore on local
-}
+// Liveness probe — process is up. Cheap; safe for orchestrators.
+app.get('/health/live', (_req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
 
-app.get('/health', (_req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json({
-    status: 'ok',
+// Readiness/full health — depends on DB. Reports pool + memory + version.
+app.get('/health', async (_req, res) => {
+  const ping = await pingDb();
+  const status = ping.ok ? 'ok' : 'degraded';
+  const mem = process.memoryUsage();
+  res.status(ping.ok ? 200 : 503).json({
+    status,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: env.NODE_ENV,
-    version: '1.0.0',
-    sha: buildSha.slice(0, 7),
-  });
-});
-
-app.get('/api/version', (_req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json({
-    sha: buildSha,
-    short: buildSha.slice(0, 7),
-    startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
-    uptime: process.uptime(),
+    version: process.env.APP_VERSION || '1.0.0',
+    node: process.version,
+    pid: process.pid,
+    memory: {
+      rssMB: Math.round(mem.rss / 1024 / 1024),
+      heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+    },
+    checks: {
+      database: ping.ok ? 'ok' : 'error',
+      databaseLatencyMs: ping.latencyMs,
+      databaseError: ping.error,
+      pool: getPoolStats(),
+    },
   });
 });
 
@@ -145,21 +146,50 @@ if (!fs.existsSync(uploadsDir)) {
   log.info(`Created uploads directory: ${uploadsDir}`);
 }
 
+// ─── Module-level refs for graceful shutdown ─────────────────
+let httpServer: any = null;
+let ioServer: any = null;
+
 // ─── Bootstrap application ───────────────────────────────────
 async function bootstrap() {
   log.info({ environment: env.NODE_ENV, port: env.PORT }, 'Starting server');
 
+  // Migrations are deploy-phase work, not boot-phase work. Default off in
+  // prod; opt-in via AUTO_MIGRATE_ON_BOOT=true (dev/test/single-instance).
+  // For prod, run `npm run db:migrate` in the Railway release command
+  // (railway.json -> deploy.preDeployCommand or equivalent).
+  if (env.AUTO_MIGRATE_ON_BOOT) {
+    const migrationsFolder = path.join(projectRoot, 'migrations');
+    log.info({ migrationsFolder }, 'Running database migrations...');
+    try {
+      await runMigrations(migrationsFolder);
+      log.info('Database migrations completed successfully');
+    } catch (migrationErr) {
+      log.error({ err: migrationErr }, 'Database migration failed — continuing startup with existing schema');
+    }
+    // Belt-and-suspenders: only run alongside boot-time migrations. In prod
+    // (AUTO_MIGRATE_ON_BOOT=false), this band-aid is also off — every
+    // replica running DDL on boot is a multi-instance race risk.
+    await ensureCriticalSchema();
+  } else {
+    log.info('Skipping boot-time migrations and schema guard (AUTO_MIGRATE_ON_BOOT=false). Run `npm run db:migrate` in deploy phase.');
+  }
+
   // Register all API routes
   const server = await registerRoutes(app);
+  httpServer = server;
+
+  // ─── WebSocket (Socket.io) ────────────────────────────
+  ioServer = initSocketServer(server);
 
   // ─── Background scheduler (engagement automation) ─────
   initScheduler();
 
-  // ─── Web push initialization ──────────────────────────
-  initWebPush();
-
   // ─── API 404 handler (before static/SPA fallback) ───────
   app.use('/api/*', notFoundHandler);
+
+  // ─── CSRF error handler runs before global handler ───────
+  app.use(csrfErrorHandler);
 
   // ─── Error handling (MUST be after routes) ───────────────
   app.use(globalErrorHandler);
@@ -179,8 +209,6 @@ async function bootstrap() {
     log.info(`✓ Server running at http://localhost:${port}`);
     log.info(`✓ Database: ${env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
     log.info(`✓ AI: ${env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}`);
-    log.info(`✓ Build SHA: ${buildSha} (short: ${buildSha.slice(0, 7)})`);
-    log.info(`✓ Healthcheck: /api/version`);
   });
 
   server.on('error', (error: NodeJS.ErrnoException) => {
@@ -191,6 +219,15 @@ async function bootstrap() {
     }
     process.exit(1);
   });
+
+  // ─── Graceful shutdown wired now that servers exist ──────
+  const shutdown = installGracefulShutdown({
+    httpServer,
+    ioServer,
+    closePool,
+  });
+  process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+  process.on('SIGINT', () => { void shutdown('SIGINT'); });
 }
 
 bootstrap().catch((error) => {
@@ -198,16 +235,10 @@ bootstrap().catch((error) => {
   process.exit(1);
 });
 
-// ─── Graceful shutdown ───────────────────────────────────────
-process.on('SIGTERM', () => {
-  log.info('SIGTERM received. Shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  log.info('SIGINT received. Shutting down...');
-  process.exit(0);
-});
+// Note: graceful shutdown handlers are wired up inside bootstrap() once
+// httpServer / ioServer references are populated. Until then, signals fall
+// through to the default handler (immediate exit) which is fine — there are
+// no in-flight requests to drain pre-bootstrap.
 
 process.on('unhandledRejection', (reason) => {
   log.error({ reason }, 'Unhandled promise rejection');

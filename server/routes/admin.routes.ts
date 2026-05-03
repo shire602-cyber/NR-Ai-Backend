@@ -11,6 +11,9 @@ import { authMiddleware, adminMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { createLogger } from '../config/logger';
 import { createDefaultAccountsForCompany } from '../defaultChartOfAccounts';
+import { db } from '../db';
+import { eq, and, desc, gte, lte, like } from 'drizzle-orm';
+import { activityLogs } from '../../shared/schema';
 
 const logger = createLogger('admin-routes');
 
@@ -26,7 +29,7 @@ async function seedChartOfAccounts(
 ): Promise<{ created: number; alreadyExisted: boolean }> {
   const hasAccounts = await storage.companyHasAccounts(companyId);
   if (hasAccounts) {
-    console.log(`[Seed COA] Company ${companyId} already has accounts, skipping seed`);
+    logger.info({ companyId }, 'Company already has accounts, skipping seed');
     return { created: 0, alreadyExisted: true };
   }
 
@@ -34,13 +37,11 @@ async function seedChartOfAccounts(
 
   try {
     const createdAccounts = await storage.createBulkAccounts(defaultAccounts as any);
-    console.log(`[Seed COA] Created ${createdAccounts.length} accounts for company ${companyId}`);
+    logger.info({ companyId, count: createdAccounts.length }, 'Created chart of accounts');
     return { created: createdAccounts.length, alreadyExisted: false };
   } catch (error: any) {
     if (error.message?.includes('PARTIAL_INSERT')) {
-      console.error(
-        `[Seed COA] Partial insert detected for company ${companyId}: ${error.message}`
-      );
+      logger.error({ companyId, err: error.message }, 'Partial insert detected during COA seed');
       throw new Error(
         'PARTIAL_CHART: Chart of Accounts partially created due to race condition. Please contact support.'
       );
@@ -56,9 +57,9 @@ async function seedChartOfAccounts(
 export function registerAdminRoutes(app: Express): void {
   const router = Router();
 
-  // Apply auth + admin middleware to all admin routes
-  router.use(authMiddleware as any);
-  router.use(adminMiddleware as any);
+  // Apply auth + admin middleware only to /admin/* paths (not all /api/*)
+  router.use('/admin', authMiddleware as any);
+  router.use('/admin', adminMiddleware as any);
 
   // =====================================
   // ADMIN SETTINGS
@@ -157,27 +158,7 @@ export function registerAdminRoutes(app: Express): void {
     '/admin/companies/:companyId',
     asyncHandler(async (req: Request, res: Response) => {
       const { companyId } = req.params;
-
-      // Whitelist fields an admin may update — never forward req.body wholesale.
-      // Blocks mass-assignment of internal/computed fields (id, createdAt,
-      // subscriptionStatus internals, stripe IDs, etc.).
-      const allowedFields = [
-        'name',
-        'trnNumber',
-        'baseCurrency',
-        'fiscalYearStart',
-        'address',
-        'phone',
-        'email',
-        'companyType',
-        'industry',
-        'size',
-        'logoUrl',
-      ] as const;
-      const updates: Record<string, unknown> = {};
-      for (const key of allowedFields) {
-        if (key in req.body) updates[key] = (req.body as any)[key];
-      }
+      const updates = req.body;
 
       const company = await storage.getCompany(companyId);
       if (!company) {
@@ -252,12 +233,15 @@ export function registerAdminRoutes(app: Express): void {
         companies = await storage.getAllCompanies();
       }
 
-      // Get user counts per company
+      // Per-company stats fan out in parallel within each row, instead of
+      // sequential awaits that triple round-trip count for big tenant lists.
       const clientsWithStats = await Promise.all(
         companies.map(async (company) => {
-          const companyUsers = await storage.getCompanyUsersByCompanyId(company.id);
-          const documents = await storage.getDocuments(company.id);
-          const invoices = await storage.getInvoicesByCompanyId(company.id);
+          const [companyUsers, documents, invoices] = await Promise.all([
+            storage.getCompanyUsersByCompanyId(company.id),
+            storage.getDocuments(company.id),
+            storage.getInvoicesByCompanyId(company.id),
+          ]);
 
           return {
             ...company,
@@ -283,14 +267,16 @@ export function registerAdminRoutes(app: Express): void {
         return res.status(404).json({ message: "Client not found" });
       }
 
-      const companyUsers = await storage.getCompanyUserWithUser(clientId);
-      const documents = await storage.getDocuments(clientId);
-      const invoices = await storage.getInvoicesByCompanyId(clientId);
-      const receipts = await storage.getReceiptsByCompanyId(clientId);
-      const journalEntries = await storage.getJournalEntriesByCompanyId(clientId);
-      const complianceTasks = await storage.getComplianceTasks(clientId);
-      const clientNotes = await storage.getClientNotes(clientId);
-      const activityLogs = await storage.getActivityLogsByCompany(clientId, 50);
+      const [companyUsers, documents, invoices, receipts, journalEntries, complianceTasks, clientNotes, activityLogs] = await Promise.all([
+        storage.getCompanyUserWithUser(clientId),
+        storage.getDocuments(clientId),
+        storage.getInvoicesByCompanyId(clientId),
+        storage.getReceiptsByCompanyId(clientId),
+        storage.getJournalEntriesByCompanyId(clientId),
+        storage.getComplianceTasks(clientId),
+        storage.getClientNotes(clientId),
+        storage.getActivityLogsByCompany(clientId, 50),
+      ]);
 
       res.json({
         company,
@@ -355,26 +341,7 @@ export function registerAdminRoutes(app: Express): void {
       const { clientId } = req.params;
       const userId = (req as any).user.id;
 
-      // Whitelist fields to prevent mass-assignment of internal fields.
-      const allowedFields = [
-        'name',
-        'trnNumber',
-        'baseCurrency',
-        'fiscalYearStart',
-        'address',
-        'phone',
-        'email',
-        'companyType',
-        'industry',
-        'size',
-        'logoUrl',
-      ] as const;
-      const updates: Record<string, unknown> = {};
-      for (const key of allowedFields) {
-        if (key in req.body) updates[key] = (req.body as any)[key];
-      }
-
-      const company = await storage.updateCompany(clientId, updates);
+      const company = await storage.updateCompany(clientId, req.body);
 
       // Log activity
       await storage.createActivityLog({
@@ -782,7 +749,7 @@ export function registerAdminRoutes(app: Express): void {
               });
             } catch (invErr: any) {
               // Don't fail the whole import if invitation fails
-              console.error(`Failed to create invitation for ${row.email}:`, invErr.message);
+              logger.error({ email: row.email, err: invErr.message }, 'Failed to create invitation');
             }
           }
 
@@ -985,6 +952,48 @@ export function registerAdminRoutes(app: Express): void {
       });
 
       res.status(201).json(document);
+    })
+  );
+
+  // =====================================
+  // ENHANCED AUDIT LOG (with filters + pagination)
+  // =====================================
+
+  router.get(
+    '/admin/audit-log',
+    asyncHandler(async (req: Request, res: Response) => {
+      const {
+        userId: filterUserId,
+        action,
+        entityType,
+        from,
+        to,
+        page,
+        limit: limitParam,
+      } = req.query as Record<string, string | undefined>;
+
+      const limit = Math.min(parseInt(limitParam ?? '50', 10), 500);
+      const offset = (Math.max(parseInt(page ?? '1', 10), 1) - 1) * limit;
+
+      const conditions: any[] = [];
+      if (filterUserId) conditions.push(eq(activityLogs.userId, filterUserId));
+      if (action) conditions.push(eq(activityLogs.action, action));
+      if (entityType) conditions.push(eq(activityLogs.entityType, entityType));
+      if (from) conditions.push(gte(activityLogs.createdAt, new Date(from)));
+      if (to) conditions.push(lte(activityLogs.createdAt, new Date(to)));
+
+      const query = db
+        .select()
+        .from(activityLogs)
+        .orderBy(desc(activityLogs.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      const logs = conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
+
+      res.json({ logs, page: parseInt(page ?? '1', 10), limit });
     })
   );
 
