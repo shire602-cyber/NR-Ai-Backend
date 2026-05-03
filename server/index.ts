@@ -112,6 +112,18 @@ app.get('/health/live', (_req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
 
+// Railway healthcheck endpoint. This must stay DB-free so deploy readiness is
+// about whether the HTTP server is alive, not whether downstream services are.
+app.get('/api/version', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    version: process.env.APP_VERSION || '1.0.0',
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.COMMIT_SHA || null,
+    environment: env.NODE_ENV,
+    uptime: process.uptime(),
+  });
+});
+
 // Readiness/full health — depends on DB. Reports pool + memory + version.
 app.get('/health', async (_req, res) => {
   const ping = await pingDb();
