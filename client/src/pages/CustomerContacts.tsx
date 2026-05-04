@@ -76,10 +76,9 @@ export default function CustomerContacts() {
 
   const importMutation = useMutation({
     mutationFn: async (data: any[]) => {
-      const response = await apiRequest('POST', `/api/companies/${companyId}/customer-contacts/import`, { 
+      return apiRequest('POST', `/api/companies/${companyId}/customer-contacts/import`, {
         contacts: data 
       });
-      return response.json();
     },
     onSuccess: (result: ImportResult) => {
       setImportResults(result);
@@ -96,8 +95,7 @@ export default function CustomerContacts() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', `/api/companies/${companyId}/customer-contacts`, data);
-      return response.json();
+      return apiRequest('POST', `/api/companies/${companyId}/customer-contacts`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'customer-contacts'] });
@@ -111,8 +109,7 @@ export default function CustomerContacts() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await apiRequest('PUT', `/api/companies/${companyId}/customer-contacts/${id}`, data);
-      return response.json();
+      return apiRequest('PUT', `/api/companies/${companyId}/customer-contacts/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'customer-contacts'] });
@@ -126,8 +123,7 @@ export default function CustomerContacts() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest('DELETE', `/api/companies/${companyId}/customer-contacts/${id}`);
-      return response.json();
+      return apiRequest('DELETE', `/api/companies/${companyId}/customer-contacts/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies', companyId, 'customer-contacts'] });

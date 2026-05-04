@@ -8,6 +8,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, HelpCircle, Sparkles, Check } from 'lucide-react';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
+import { apiUrl } from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getToken } from '@/lib/auth';
@@ -95,7 +96,7 @@ export function SmartInput({
       if (accountType) {
         params.set('type', accountType);
       }
-      const res = await fetch(`${endpointMap[type]}?${params}`, {
+      const res = await fetch(apiUrl(`${endpointMap[type]}?${params}`), {
         headers: {
           Authorization: `Bearer ${getToken()}`,
         },
@@ -343,7 +344,7 @@ export function SmartAccountSelect({
       if (accountType) {
         params.set('type', accountType);
       }
-      const res = await fetch(`/api/autocomplete/accounts?${params}`, {
+      const res = await fetch(apiUrl(`/api/autocomplete/accounts?${params}`), {
         headers: {
           Authorization: `Bearer ${getToken()}`,
         },

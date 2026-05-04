@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
+import { apiUrl } from '@/lib/api';
 import { format } from 'date-fns';
 import type { DocumentVersion } from '@shared/schema';
 
@@ -42,7 +43,7 @@ export default function DocumentVersions() {
     queryFn: async () => {
       if (!selectedCompanyId || !documentType || !documentId.trim()) return [];
       const res = await fetch(
-        `/api/companies/${selectedCompanyId}/document-versions/${documentType}/${documentId.trim()}`,
+        apiUrl(`/api/companies/${selectedCompanyId}/document-versions/${documentType}/${documentId.trim()}`),
         { credentials: 'include' }
       );
       if (!res.ok) throw new Error('Failed to fetch document versions');

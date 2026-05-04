@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { getToken, getAuthHeaders } from '@/lib/auth';
+import { API_BASE_URL, apiUrl } from '@/lib/api';
 
 export interface AppNotification {
   id: string;
@@ -35,7 +36,7 @@ export function useNotifications(): UseNotificationsReturn {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications', { headers: getAuthHeaders() });
+      const res = await fetch(apiUrl('/api/notifications'), { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       setNotifications(data.notifications ?? []);
@@ -51,7 +52,7 @@ export function useNotifications(): UseNotificationsReturn {
 
     fetchNotifications();
 
-    const socket = io(window.location.origin, {
+    const socket = io(API_BASE_URL || window.location.origin, {
       path: '/socket.io',
       auth: { token },
       transports: ['websocket', 'polling'],
@@ -75,7 +76,7 @@ export function useNotifications(): UseNotificationsReturn {
 
   const markAsRead = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/notifications/${id}/read`, {
+      const res = await fetch(apiUrl(`/api/notifications/${id}/read`), {
         method: 'PATCH',
         headers: getAuthHeaders(),
       });
@@ -91,7 +92,7 @@ export function useNotifications(): UseNotificationsReturn {
 
   const markAllAsRead = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications/read-all', {
+      const res = await fetch(apiUrl('/api/notifications/read-all'), {
         method: 'POST',
         headers: getAuthHeaders(),
       });
