@@ -23,6 +23,7 @@ import {
   sendGenericEmail,
 } from '../services/email.service';
 import { createAndEmitNotification } from '../services/socket.service';
+import { recordAudit } from '../services/audit.service';
 
 const logger = createLogger('firm-comms-routes');
 
@@ -277,8 +278,24 @@ export function registerFirmCommsRoutes(app: Express): void {
         actionUrl: '/firm/comms',
       }).catch(() => {});
 
+      await recordAudit({
+        userId,
+        companyId: validated.companyId,
+        action: 'firm_communication_email',
+        entityType: 'client_communication',
+        entityId: comm.id,
+        req,
+        extra: {
+          channel: 'email',
+          deliveryStatus: comm.status,
+          templateType: comm.templateType,
+          recipientEmail: validated.recipientEmail,
+        },
+      });
+
       res.json({
         success: result.sent,
+        deliveryStatus: comm.status,
         provider: result.provider,
         communication: comm,
         ...(result.error ? { note: result.error } : {}),
@@ -307,9 +324,13 @@ export function registerFirmCommsRoutes(app: Express): void {
           direction: 'outbound',
           recipientPhone: validated.recipientPhone,
           body: validated.body,
-          status: 'sent',
+          status: 'logged',
           templateType: validated.templateType ?? 'custom',
           sentAt: new Date(),
+          metadata: JSON.stringify({
+            deliveryMode: 'logged_only',
+            reason: 'WhatsApp Business API integration pending',
+          }),
         })
         .returning();
 
@@ -317,18 +338,34 @@ export function registerFirmCommsRoutes(app: Express): void {
         userId,
         companyId: validated.companyId,
         type: 'communication',
-        title: 'WhatsApp sent to client',
-        message: `WhatsApp message sent to ${validated.recipientPhone}`,
+        title: 'WhatsApp message logged',
+        message: `WhatsApp draft logged for ${validated.recipientPhone}; no provider delivery occurred.`,
         priority: 'normal',
         relatedEntityType: 'communication',
         relatedEntityId: comm.id,
         actionUrl: '/firm/comms',
       }).catch(() => {});
 
+      await recordAudit({
+        userId,
+        companyId: validated.companyId,
+        action: 'firm_communication_whatsapp_logged',
+        entityType: 'client_communication',
+        entityId: comm.id,
+        req,
+        extra: {
+          channel: 'whatsapp',
+          deliveryStatus: 'logged',
+          templateType: comm.templateType,
+          recipientPhone: validated.recipientPhone,
+        },
+      });
+
       res.json({
         success: true,
+        deliveryStatus: 'logged',
         communication: comm,
-        note: 'WhatsApp Business API integration pending — message has been logged.',
+        note: 'WhatsApp Business API integration pending — message was logged only and not delivered.',
       });
     })
   );
@@ -350,6 +387,7 @@ export function registerFirmCommsRoutes(app: Express): void {
   router.post(
     '/firm/comms/templates',
     asyncHandler(async (req: Request, res: Response) => {
+      const { id: userId } = (req as any).user;
       const validated = templateSchema.parse(req.body);
 
       if (validated.id) {
@@ -366,6 +404,20 @@ export function registerFirmCommsRoutes(app: Express): void {
           })
           .where(eq(communicationTemplates.id, validated.id))
           .returning();
+        if (!updated) return res.status(404).json({ message: 'Template not found' });
+        await recordAudit({
+          userId,
+          action: 'firm_communication_template_update',
+          entityType: 'communication_template',
+          entityId: updated.id,
+          req,
+          extra: {
+            channel: updated.channel,
+            templateType: updated.templateType,
+            language: updated.language,
+            isActive: updated.isActive,
+          },
+        });
         res.json(updated);
       } else {
         const [created] = await db
@@ -380,6 +432,19 @@ export function registerFirmCommsRoutes(app: Express): void {
             isActive: validated.isActive,
           })
           .returning();
+        await recordAudit({
+          userId,
+          action: 'firm_communication_template_create',
+          entityType: 'communication_template',
+          entityId: created.id,
+          req,
+          extra: {
+            channel: created.channel,
+            templateType: created.templateType,
+            language: created.language,
+            isActive: created.isActive,
+          },
+        });
         res.status(201).json(created);
       }
     })
@@ -494,6 +559,19 @@ export function registerFirmCommsRoutes(app: Express): void {
 
         results.push({ companyId: target.companyId, companyName: target.companyName, sent, ...(note ? { note } : {}) });
       }
+
+      await recordAudit({
+        userId,
+        action: 'firm_bulk_vat_reminder',
+        entityType: 'client_communication',
+        req,
+        extra: {
+          daysAhead,
+          sent: results.filter((r) => r.sent).length,
+          failed: results.filter((r) => !r.sent).length,
+          companyIds: results.map((r) => r.companyId),
+        },
+      });
 
       res.json({
         sent: results.filter((r) => r.sent).length,
