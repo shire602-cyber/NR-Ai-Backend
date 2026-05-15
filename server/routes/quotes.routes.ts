@@ -4,6 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 import { generateQuotePDF } from '../services/pdf-quote.service';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('quotes-routes');
 
 export function registerQuoteRoutes(app: Express) {
   // =====================================
@@ -171,7 +174,7 @@ export function registerQuoteRoutes(app: Express) {
       convertedInvoiceId: invoice.id,
     });
 
-    console.log('[Quotes] Quote converted to invoice:', id, '->', invoice.id);
+    logger.info({ quoteId: id, invoiceId: invoice.id }, 'Quote converted to invoice');
     res.json({ invoice, message: 'Quote converted to invoice' });
   }));
 

@@ -3,6 +3,9 @@ import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('employees-routes');
 
 export function registerEmployeeRoutes(app: Express) {
   // =====================================
@@ -56,7 +59,7 @@ export function registerEmployeeRoutes(app: Express) {
       companyId,
     });
 
-    console.log('[Employees] Employee created:', employee.id, employee.name);
+    logger.info({ employeeId: employee.id, companyId }, 'Employee created');
     res.json(employee);
   }));
 
@@ -76,7 +79,7 @@ export function registerEmployeeRoutes(app: Express) {
     }
 
     const updated = await storage.updateEmployee(id, req.body);
-    console.log('[Employees] Employee updated:', id);
+    logger.info({ employeeId: id }, 'Employee updated');
     res.json(updated);
   }));
 

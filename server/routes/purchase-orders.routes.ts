@@ -4,6 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 import { generatePurchaseOrderPDF } from '../services/pdf-purchase-order.service';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('purchase-orders-routes');
 
 export function registerPurchaseOrderRoutes(app: Express) {
   // =====================================
@@ -65,7 +68,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
       }
 
       const poLines = await storage.getPurchaseOrderLinesByPurchaseOrderId(po.id);
-      console.log('[PurchaseOrders] Purchase order created:', po.id);
+      logger.info({ purchaseOrderId: po.id, companyId }, 'Purchase order created');
       res.status(201).json({ ...po, lines: poLines });
     }));
 
@@ -148,7 +151,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
       status: 'sent',
     });
 
-    console.log('[PurchaseOrders] Purchase order sent:', id);
+    logger.info({ purchaseOrderId: id }, 'Purchase order sent');
     res.json({ ...updated, message: 'Purchase order sent' });
   }));
 
@@ -175,7 +178,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
       status: 'approved',
     });
 
-    console.log('[PurchaseOrders] Purchase order approved:', id);
+    logger.info({ purchaseOrderId: id }, 'Purchase order approved');
     res.json({ ...updated, message: 'Purchase order approved' });
   }));
 
@@ -202,7 +205,7 @@ export function registerPurchaseOrderRoutes(app: Express) {
       status: 'received',
     });
 
-    console.log('[PurchaseOrders] Purchase order received:', id);
+    logger.info({ purchaseOrderId: id }, 'Purchase order received');
     res.json({ ...updated, message: 'Purchase order received' });
   }));
 

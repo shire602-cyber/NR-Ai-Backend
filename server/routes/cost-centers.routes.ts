@@ -6,6 +6,9 @@ import { storage } from '../storage';
 import { db } from '../db';
 import { journalLines, journalEntries, accounts, costCenters } from '../../shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('cost-centers-routes');
 
 export function registerCostCenterRoutes(app: Express) {
   // =====================================
@@ -57,7 +60,7 @@ export function registerCostCenterRoutes(app: Express) {
       }
 
       const costCenter = await storage.createCostCenter({ ...req.body, companyId });
-      console.log('[CostCenters] Cost center created:', costCenter.id);
+      logger.info({ costCenterId: costCenter.id, companyId }, 'Cost center created');
       res.status(201).json(costCenter);
     }));
 

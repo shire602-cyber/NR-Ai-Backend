@@ -3,6 +3,9 @@ import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('reconciliation-rules-routes');
 
 export function registerReconciliationRuleRoutes(app: Express) {
   // =====================================
@@ -36,7 +39,7 @@ export function registerReconciliationRuleRoutes(app: Express) {
       }
 
       const rule = await storage.createReconciliationRule({ ...req.body, companyId });
-      console.log('[Reconciliation] Rule created:', rule.id);
+      logger.info({ ruleId: rule.id, companyId }, 'Reconciliation rule created');
       res.status(201).json(rule);
     }));
 
@@ -126,7 +129,7 @@ export function registerReconciliationRuleRoutes(app: Express) {
         }
       }
 
-      console.log('[Reconciliation] Auto-match completed:', matchCount, 'matches for company:', companyId);
+      logger.info({ companyId, matchCount }, 'Reconciliation auto-match completed');
       res.json({
         matched: matchCount,
         totalUnreconciled: unreconciledTransactions.length,

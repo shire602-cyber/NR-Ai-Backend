@@ -4,6 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 import { getBankProvider, getAvailableProviders, isOpenBankingConfigured, tokenNeedsRefresh } from '../services/open-banking.service';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('bank-routes');
 
 export function registerBankRoutes(app: Express) {
   // =====================================
@@ -38,7 +41,7 @@ export function registerBankRoutes(app: Express) {
 
       const connection = await storage.createBankConnection({ ...req.body, companyId });
 
-      console.log('[Bank] Bank connection created:', connection.id);
+      logger.info({ connectionId: connection.id, companyId }, 'Bank connection created');
       res.status(201).json(connection);
     }));
 
@@ -154,7 +157,7 @@ export function registerBankRoutes(app: Express) {
         }
       }
 
-      console.log('[Bank] Imported', transactions.length, 'transactions for connection:', id);
+      logger.info({ connectionId: id, imported: transactions.length }, 'Bank transactions imported');
       res.json({
         imported: transactions.length,
         errors: errors.length > 0 ? errors : undefined,
@@ -247,7 +250,7 @@ export function registerBankRoutes(app: Express) {
         connections.push(connection);
       }
 
-      console.log('[Bank] Connected', connections.length, 'accounts via', providerName);
+      logger.info({ connectionCount: connections.length, providerName }, 'Bank accounts connected');
       res.status(201).json({ connections, accounts: bankAccounts });
     }));
 
@@ -335,7 +338,7 @@ export function registerBankRoutes(app: Express) {
       // Update last sync time
       await storage.updateBankConnection(id, { lastSyncAt: new Date() });
 
-      console.log('[Bank] Synced', imported, 'transactions via', connection.provider);
+      logger.info({ connectionId: id, imported, provider: connection.provider }, 'Bank transactions synced');
       res.json({ synced: imported, total: bankTransactions.length });
     }));
 

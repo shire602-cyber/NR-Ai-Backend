@@ -3,6 +3,9 @@ import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('invoice-templates-routes');
 
 export function registerInvoiceTemplateRoutes(app: Express) {
   // =====================================
@@ -55,7 +58,7 @@ export function registerInvoiceTemplateRoutes(app: Express) {
 
       const template = await storage.createInvoiceTemplate({ ...req.body, companyId });
 
-      console.log('[InvoiceTemplates] Template created:', template.id);
+      logger.info({ templateId: template.id, companyId }, 'Invoice template created');
       res.status(201).json(template);
     }));
 
@@ -123,7 +126,7 @@ export function registerInvoiceTemplateRoutes(app: Express) {
     // Set this template as default
     const updated = await storage.updateInvoiceTemplate(id, { isDefault: true });
 
-    console.log('[InvoiceTemplates] Template set as default:', id);
+    logger.info({ templateId: id }, 'Invoice template set as default');
     res.json({ ...updated, message: 'Template set as default' });
   }));
 }

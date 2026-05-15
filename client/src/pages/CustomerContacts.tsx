@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import type { CustomerContact } from '@shared/schema';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { SiWhatsapp } from 'react-icons/si';
 import { WhatsAppComposer } from '@/components/WhatsAppComposer';
 import { pickWhatsAppNumber } from '@/lib/whatsapp-templates';
@@ -49,6 +49,113 @@ interface ImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+}
+
+function parseCsv(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let current = '';
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && next === '"') {
+      current += '"';
+      index++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      row.push(current.trim());
+      current = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') index++;
+      row.push(current.trim());
+      if (row.some((cell) => cell !== '')) rows.push(row);
+      row = [];
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  row.push(current.trim());
+  if (row.some((cell) => cell !== '')) rows.push(row);
+
+  const headers = rows.shift() ?? [];
+  return rows.map((values) =>
+    Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])),
+  );
+}
+
+async function parseContactImportFile(file: File): Promise<Record<string, any>[]> {
+  if (/\.csv$/i.test(file.name)) {
+    return parseCsv(await file.text());
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load((await file.arrayBuffer()) as unknown as ArrayBuffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return [];
+
+  const headerRow = worksheet.getRow(1);
+  const columnCount = Math.max(headerRow.cellCount, worksheet.actualColumnCount);
+  const headers = Array.from({ length: columnCount }, (_unused, index) => {
+    const value = headerRow.getCell(index + 1).value;
+    return String(value ?? `Column ${index + 1}`).trim();
+  });
+
+  const rows: Record<string, any>[] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const item = Object.fromEntries(
+      headers.map((header, index) => {
+        const value = row.getCell(index + 1).value;
+        return [header, typeof value === 'object' && value && 'text' in value ? value.text : value ?? ''];
+      }),
+    );
+    if (Object.values(item).some((value) => String(value).trim() !== '')) rows.push(item);
+  });
+
+  return rows;
+}
+
+async function downloadContactsTemplate(): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Contacts');
+  worksheet.columns = [
+    { header: 'Name', key: 'Name', width: 25 },
+    { header: 'Email', key: 'Email', width: 28 },
+    { header: 'Phone', key: 'Phone', width: 18 },
+    { header: 'TRN', key: 'TRN', width: 18 },
+    { header: 'Address', key: 'Address', width: 28 },
+    { header: 'City', key: 'City', width: 16 },
+    { header: 'Country', key: 'Country', width: 16 },
+  ];
+  worksheet.addRow({
+    Name: 'Example Company LLC',
+    Email: 'contact@example.com',
+    Phone: '+971-50-123-4567',
+    TRN: '100123456700003',
+    Address: '123 Business Bay',
+    City: 'Dubai',
+    Country: 'UAE',
+  });
+  worksheet.getRow(1).font = { bold: true };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'contact_import_template.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export default function CustomerContacts() {
@@ -188,14 +295,9 @@ export default function CustomerContacts() {
     setPreviewData(null);
     setImportResults(null);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    void (async () => {
       try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const jsonData = await parseContactImportFile(selectedFile);
         
         const mappedData = jsonData.map((row: any) => ({
           name: row['Name'] || row['name'] || row['Company Name'] || row['company_name'] || '',
@@ -212,8 +314,7 @@ export default function CustomerContacts() {
       } catch (err: any) {
         toast({ variant: 'destructive', title: 'Failed to parse file', description: err?.message });
       }
-    };
-    reader.readAsBinaryString(selectedFile);
+    })();
   }, [toast]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -248,24 +349,15 @@ export default function CustomerContacts() {
   };
 
   const downloadTemplate = () => {
-    const template = [
-      {
-        'Name': 'Example Company LLC',
-        'Email': 'contact@example.com',
-        'Phone': '+971-50-123-4567',
-        'TRN': '100123456700003',
-        'Address': '123 Business Bay',
-        'City': 'Dubai',
-        'Country': 'UAE'
-      }
-    ];
-    
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-    XLSX.writeFile(wb, 'contact_import_template.xlsx');
-    
-    toast({ title: 'Template downloaded' });
+    void downloadContactsTemplate()
+      .then(() => toast({ title: 'Template downloaded' }))
+      .catch((err: any) =>
+        toast({
+          variant: 'destructive',
+          title: 'Failed to create template',
+          description: err?.message,
+        }),
+      );
   };
 
   const filteredContacts = contacts.filter(contact => 

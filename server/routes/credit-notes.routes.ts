@@ -4,6 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { requireFeature } from '../middleware/featureGate';
 import { storage } from '../storage';
 import { generateCreditNotePDF } from '../services/pdf-credit-note.service';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('credit-notes-routes');
 
 export function registerCreditNoteRoutes(app: Express) {
   // =====================================
@@ -65,7 +68,7 @@ export function registerCreditNoteRoutes(app: Express) {
       }
 
       const creditNoteLines = await storage.getCreditNoteLinesByCreditNoteId(creditNote.id);
-      console.log('[CreditNotes] Credit note created:', creditNote.id);
+      logger.info({ creditNoteId: creditNote.id, companyId }, 'Credit note created');
       res.status(201).json({ ...creditNote, lines: creditNoteLines });
     }));
 
@@ -205,7 +208,7 @@ export function registerCreditNoteRoutes(app: Express) {
       journalEntryId: entry.id,
     });
 
-    console.log('[CreditNotes] Credit note issued:', id, 'journal entry:', entry.entryNumber);
+    logger.info({ creditNoteId: id, journalEntryNumber: entry.entryNumber }, 'Credit note issued');
     res.json({ ...updated, journalEntryId: entry.id, message: 'Credit note issued with reversing journal entry' });
   }));
 
@@ -232,7 +235,7 @@ export function registerCreditNoteRoutes(app: Express) {
       status: 'void',
     });
 
-    console.log('[CreditNotes] Credit note voided:', id);
+    logger.info({ creditNoteId: id }, 'Credit note voided');
     res.json({ ...updated, message: 'Credit note voided' });
   }));
 

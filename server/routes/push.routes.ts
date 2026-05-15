@@ -2,6 +2,9 @@ import type { Express, Request, Response } from 'express';
 import { authMiddleware, requireCustomer } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { storage } from '../storage';
+import { createLogger } from '../config/logger';
+
+const logger = createLogger('push-routes');
 
 export function registerPushRoutes(app: Express) {
   // =====================================
@@ -33,7 +36,7 @@ export function registerPushRoutes(app: Express) {
       authKey: keys.auth,
     });
 
-    console.log('[Push] User subscribed:', userId);
+    logger.info({ userId }, 'User subscribed to push notifications');
     res.status(201).json({ message: 'Subscribed to push notifications', id: subscription.id });
   }));
 
@@ -49,7 +52,7 @@ export function registerPushRoutes(app: Express) {
     // Deactivate by endpoint
     await storage.deactivatePushSubscription(endpoint);
 
-    console.log('[Push] User unsubscribed:', userId);
+    logger.info({ userId }, 'User unsubscribed from push notifications');
     res.json({ message: 'Unsubscribed from push notifications' });
   }));
 
@@ -80,7 +83,7 @@ export function registerPushRoutes(app: Express) {
 
     const preferences = await storage.upsertNotificationPreferences(userId, req.body);
 
-    console.log('[Push] Notification preferences updated for user:', userId);
+    logger.info({ userId }, 'Notification preferences updated');
     res.json(preferences);
   }));
 }
