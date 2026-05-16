@@ -27,7 +27,8 @@ function unique(items) {
 
 function normalizeApiPath(value) {
   return value
-    .replace(/\$\{[^}]+\}/g, ':param')
+    .replace(/\/\$\{[^}]+\}/g, '/:param')
+    .replace(/\$\{[^}]+\}/g, '')
     .replace(/\/:[A-Za-z0-9_]+\?/g, '/:optional')
     .replace(/\?.*$/, '')
     .replace(/:[A-Za-z0-9_]+/g, ':param')
@@ -76,6 +77,8 @@ for (const file of clientFiles) {
   const lines = read(file).split('\n');
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
+    if (line.includes('invalidateQueries')) continue;
+
     const queryKeyMatch = line.match(/queryKey:\s*\[([^\]]+)\]/);
     if (queryKeyMatch) {
       const lookahead = lines.slice(index, index + 8).join('\n');
@@ -99,8 +102,6 @@ for (const file of clientFiles) {
       }
       continue;
     }
-
-    if (line.includes('invalidateQueries')) continue;
 
     const matches = [...line.matchAll(/[`'"]((?:\/api|\/nra)\/[^`'"\s),>]*)/g)];
     for (const match of matches) apiReferences.push({ file, ref: normalizeApiPath(match[1]), raw: match[1] });

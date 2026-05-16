@@ -3,6 +3,7 @@ import { Router } from 'express';
 import type { Express } from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import { randomBytes, createHash } from 'crypto';
 import { z } from 'zod';
 
 import { storage } from '../storage';
@@ -22,7 +23,9 @@ import {
 } from '../services/auth-cookies.service';
 import { blacklistToken, isTokenBlacklisted } from '../services/auth-tokens.service';
 import { asyncHandler } from '../middleware/errorHandler';
+import { validate } from '../middleware/validate';
 import { insertUserSchema } from '../../shared/schema';
+import { forgotPasswordSchema, resetPasswordSchema } from '../../shared/validators';
 import { createDefaultAccountsForCompany } from '../defaultChartOfAccounts';
 import { createLogger } from '../config/logger';
 
@@ -299,6 +302,77 @@ export function registerAuthRoutes(app: Express): void {
 
   router.post('/auth/refresh-token', handleRefreshToken);
   router.post('/auth/refresh', handleRefreshToken);
+
+  // =====================================
+  // PASSWORD RESET
+  // =====================================
+
+  const hashResetToken = (token: string): string =>
+    createHash('sha256').update(token).digest('hex');
+
+  // Request a password reset link. Always returns 200 so callers cannot
+  // discover whether a specific email is registered.
+  router.post(
+    '/auth/forgot-password',
+    validate({ body: forgotPasswordSchema }),
+    asyncHandler(async (req: Request, res: Response) => {
+      const { email } = req.body as { email: string };
+      const user = await storage.getUserByEmail(email);
+      const genericResponse = {
+        message: 'If that email is registered, a reset link has been sent.',
+      };
+
+      if (!user) {
+        return res.json(genericResponse);
+      }
+
+      const rawToken = randomBytes(32).toString('hex');
+      const tokenHash = hashResetToken(rawToken);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await storage.deletePasswordResetTokensForUser(user.id);
+      await storage.createPasswordResetToken({ userId: user.id, tokenHash, expiresAt });
+
+      const env = getEnv();
+      const appUrl = (env as any).APP_URL || (env as any).PUBLIC_URL || '';
+      const resetUrl = `${appUrl}/reset-password?token=${rawToken}`;
+
+      log.info({ userId: user.id, email }, 'Password reset requested');
+
+      if ((env as any).NODE_ENV !== 'production') {
+        return res.json({ ...genericResponse, devResetUrl: resetUrl });
+      }
+
+      return res.json(genericResponse);
+    }),
+  );
+
+  router.post(
+    '/auth/reset-password',
+    validate({ body: resetPasswordSchema }),
+    asyncHandler(async (req: Request, res: Response) => {
+      const { token, password } = req.body as { token: string; password: string };
+      passwordSchema.parse(password);
+
+      const tokenHash = hashResetToken(token);
+      const record = await storage.findValidPasswordResetToken(tokenHash);
+
+      if (!record) {
+        return res.status(400).json({
+          message: 'This reset link is invalid or has expired. Please request a new one.',
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await storage.updateUserPassword(record.userId, passwordHash);
+      await storage.markPasswordResetTokenUsed(record.id);
+      await storage.deletePasswordResetTokensForUser(record.userId);
+
+      log.info({ userId: record.userId }, 'Password reset completed');
+
+      res.json({ message: 'Your password has been reset. You can now sign in with your new password.' });
+    }),
+  );
 
   router.get(
     '/auth/me',

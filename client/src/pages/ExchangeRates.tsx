@@ -15,7 +15,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { formatDate, formatNumber } from '@/lib/format';
-import { Plus, Trash2, ArrowRightLeft, RefreshCw } from 'lucide-react';
+import { Plus, ArrowRightLeft, RefreshCw } from 'lucide-react';
 
 const CURRENCIES = ['AED', 'USD', 'EUR', 'GBP', 'SAR', 'INR', 'PKR', 'EGP', 'BHD', 'QAR'];
 
@@ -84,20 +84,6 @@ export default function ExchangeRates() {
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to add rate', description: error?.message, variant: 'destructive' });
-    },
-  });
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest('DELETE', `/api/exchange-rates/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/companies/${companyId}/exchange-rates`] });
-      toast({ title: 'Exchange rate deleted' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to delete rate', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -285,7 +271,6 @@ export default function ExchangeRates() {
                   <TableHead className="text-right">Rate</TableHead>
                   <TableHead>Effective Date</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead className="w-[60px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -296,16 +281,6 @@ export default function ExchangeRates() {
                     <TableCell className="text-right font-mono">{rate.rate.toFixed(6)}</TableCell>
                     <TableCell>{formatDate(rate.effectiveDate, locale)}</TableCell>
                     <TableCell className="capitalize">{rate.source}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteMutation.mutate(rate.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
