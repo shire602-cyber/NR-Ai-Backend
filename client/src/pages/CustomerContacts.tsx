@@ -36,7 +36,6 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import type { CustomerContact } from '@shared/schema';
-import ExcelJS from 'exceljs';
 import { SiWhatsapp } from 'react-icons/si';
 import { WhatsAppComposer } from '@/components/WhatsAppComposer';
 import { pickWhatsAppNumber } from '@/lib/whatsapp-templates';
@@ -94,6 +93,7 @@ async function parseContactImportFile(file: File): Promise<Record<string, any>[]
     return parseCsv(await file.text());
   }
 
+  const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load((await file.arrayBuffer()) as unknown as ArrayBuffer);
   const worksheet = workbook.worksheets[0];
@@ -122,6 +122,7 @@ async function parseContactImportFile(file: File): Promise<Record<string, any>[]
 }
 
 async function downloadContactsTemplate(): Promise<void> {
+  const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Contacts');
   worksheet.columns = [
