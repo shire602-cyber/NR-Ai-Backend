@@ -7,7 +7,7 @@ import { Badge, StatusBadge } from '@/components/ui/badge';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { formatCurrency, formatDate } from '@/lib/format';
-import { getToken } from '@/lib/auth';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
   TrendingUp, TrendingDown, AlertCircle, FileText,
   Plus, Receipt, BookOpen, Sparkles, ArrowRight, Clock, CheckCircle2,
@@ -20,19 +20,6 @@ import {
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
 import ClientDashboard from './ClientDashboard';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getUserTypeFromToken(): string {
-  try {
-    const token = getToken();
-    if (!token) return 'customer';
-    const parts = token.split('.');
-    if (parts.length !== 3) return 'customer';
-    const payload = JSON.parse(atob(parts[1]));
-    return payload.userType || 'customer';
-  } catch { return 'customer'; }
-}
 
 const CHART_COLORS = {
   primary: 'hsl(var(--chart-1))',
@@ -53,8 +40,9 @@ const PIE_PALETTE = [
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const userType = getUserTypeFromToken();
-  if (userType === 'client') return <ClientDashboard />;
+  const { data: user, isLoading } = useCurrentUser();
+  if (isLoading) return null;
+  if (user?.userType === 'client') return <ClientDashboard />;
   return <CustomerDashboard />;
 }
 

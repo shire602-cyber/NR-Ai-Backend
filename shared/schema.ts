@@ -84,6 +84,91 @@ export const tokenBlacklist = pgTable("token_blacklist", {
 });
 export type TokenBlacklistEntry = typeof tokenBlacklist.$inferSelect;
 
+// Rotating refresh sessions. Raw refresh tokens only live in httpOnly cookies;
+// the database stores SHA-256 digests so a DB leak cannot mint sessions.
+export const refreshSessions = pgTable("refresh_sessions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  replacedByTokenHash: text("replaced_by_token_hash"),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  reuseDetectedAt: timestamp("reuse_detected_at"),
+  lastUsedAt: timestamp("last_used_at"),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenHashIdx: index("idx_refresh_sessions_token_hash").on(table.tokenHash),
+  userIdIdx: index("idx_refresh_sessions_user_id").on(table.userId),
+  expiresAtIdx: index("idx_refresh_sessions_expires_at").on(table.expiresAt),
+}));
+
+export const insertRefreshSessionSchema = createInsertSchema(refreshSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertRefreshSession = z.infer<typeof insertRefreshSessionSchema>;
+export type RefreshSession = typeof refreshSessions.$inferSelect;
+
+// External OpenID Connect identities linked to local users. Roles and access
+// always come from the users table; provider claims only prove identity.
+export const authIdentities = pgTable("auth_identities", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(), // google | microsoft
+  issuer: text("issuer").notNull(),
+  providerSubject: text("provider_subject").notNull(),
+  providerEmail: text("provider_email").notNull(),
+  providerEmailVerified: boolean("provider_email_verified").notNull().default(false),
+  profile: jsonb("profile"),
+  linkedAt: timestamp("linked_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+}, (table) => ({
+  providerSubjectUnique: unique("auth_identities_provider_subject_unique").on(
+    table.provider,
+    table.issuer,
+    table.providerSubject,
+  ),
+  userProviderIdx: index("idx_auth_identities_user_provider").on(table.userId, table.provider),
+  providerEmailIdx: index("idx_auth_identities_provider_email").on(table.providerEmail),
+}));
+
+export const insertAuthIdentitySchema = createInsertSchema(authIdentities).omit({
+  id: true,
+  linkedAt: true,
+});
+
+export type InsertAuthIdentity = z.infer<typeof insertAuthIdentitySchema>;
+export type AuthIdentity = typeof authIdentities.$inferSelect;
+
+// One-time authorization-code state. Secrets are encrypted at rest and the
+// state itself is stored only as a hash so DB rows cannot be used as callbacks.
+export const oauthLoginStates = pgTable("oauth_login_states", {
+  stateHash: text("state_hash").primaryKey(),
+  provider: text("provider").notNull(),
+  encryptedCodeVerifier: text("encrypted_code_verifier").notNull(),
+  encryptedNonce: text("encrypted_nonce").notNull(),
+  nonceHash: text("nonce_hash").notNull(),
+  nextPath: text("next_path").notNull().default("/dashboard"),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  providerIdx: index("idx_oauth_login_states_provider").on(table.provider),
+  expiresAtIdx: index("idx_oauth_login_states_expires_at").on(table.expiresAt),
+}));
+
+export const insertOAuthLoginStateSchema = createInsertSchema(oauthLoginStates).omit({
+  createdAt: true,
+});
+
+export type InsertOAuthLoginState = z.infer<typeof insertOAuthLoginStateSchema>;
+export type OAuthLoginState = typeof oauthLoginStates.$inferSelect;
+
 // One-time tokens issued by /auth/forgot-password and consumed by /auth/reset-password.
 // usedAt is set the moment the token is redeemed so a captured token cannot be replayed.
 export const passwordResetTokens = pgTable("password_reset_tokens", {

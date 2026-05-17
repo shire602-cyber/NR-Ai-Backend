@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/lib/i18n';
 import { apiUrl } from '@/lib/api';
 import { UserPlus } from 'lucide-react';
+import { OAuthButtons } from './OAuthButtons';
 
 // TRN is optional at sign-up — many users register before they have one — but
 // when supplied it must match the FTA's 15-digit format so the company record
@@ -32,7 +33,7 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 interface RegisterFormProps {
-  onSuccess: (token: string, user: any) => void;
+  onSuccess: (user: any) => void | Promise<void>;
 }
 
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
@@ -72,7 +73,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
       }
 
       const result = await response.json();
-      onSuccess(result.token, result.user);
+      await onSuccess(result.user);
       
       toast({
         title: 'Account created!',
@@ -195,6 +196,9 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
             </Button>
           </form>
         </Form>
+        <div className="mt-4">
+          <OAuthButtons />
+        </div>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
         <div className="text-sm text-muted-foreground text-center">

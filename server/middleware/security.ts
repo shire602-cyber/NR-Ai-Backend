@@ -81,8 +81,8 @@ export function applySecurityMiddleware(app: Express): void {
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-      exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-XSRF-Token'],
+      exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page', 'Retry-After', 'RateLimit-Reset'],
       maxAge: 86400, // Cache preflight for 24 hours
     })
   );
@@ -91,6 +91,7 @@ export function applySecurityMiddleware(app: Express): void {
   // Each limiter has its own in-memory sliding-window store, sized via
   // env vars (RL_*). Composite key (ip+userId) prevents NAT collisions.
   // Order matters: more specific paths must be registered before /api/.
+  app.use('/api/auth/oauth/', buildLimiter(limiterProfiles.authOAuth));
   app.use('/api/auth/', buildLimiter(limiterProfiles.auth));
   app.use('/api/ai/', buildLimiter(limiterProfiles.ai));
   app.use('/api/ocr/', buildLimiter(limiterProfiles.ai));

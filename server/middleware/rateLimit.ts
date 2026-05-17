@@ -83,6 +83,9 @@ interface RouteLimit {
   message: string;
   /** Routes where the limiter must NOT apply (e.g., GET-only views can be skipped). */
   skipMethods?: Array<'GET' | 'HEAD' | 'OPTIONS'>;
+  keyGenerator?: (req: Request) => string;
+  /** Decrement the hit after successful responses. Useful for failed-login throttles. */
+  skipSuccessfulRequests?: boolean;
 }
 
 /**
@@ -98,16 +101,26 @@ export function buildLimiter(cfg: RouteLimit) {
     max: cfg.max,
     standardHeaders: 'draft-7', // RFC RateLimit-* + X-RateLimit-* headers
     legacyHeaders: false,
-    keyGenerator: compositeKey,
+    keyGenerator: cfg.keyGenerator ?? compositeKey,
+    skipSuccessfulRequests: cfg.skipSuccessfulRequests ?? false,
     skip: (req) => {
       if (req.path === '/health' || req.path === '/health/live') return true;
       if (cfg.skipMethods?.includes(req.method as any)) return true;
       return false;
     },
     handler: (req, res, _next, options) => {
-      const retryAfter = Math.ceil((options.windowMs as number) / 1000);
+      const resetTime = (req as any).rateLimit?.resetTime as Date | undefined;
+      const retryAfter = resetTime
+        ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+        : Math.ceil((options.windowMs as number) / 1000);
       log.warn(
-        { ip: req.ip, userId: (req as any).user?.id, path: req.path, retryAfter },
+        {
+          ip: req.ip,
+          userId: (req as any).user?.id,
+          path: req.path,
+          retryAfter,
+          resetTime: resetTime?.toISOString(),
+        },
         'Rate limit exceeded',
       );
       res.setHeader('Retry-After', String(retryAfter));
@@ -141,6 +154,11 @@ export const limiterProfiles = {
     windowMs: envInt('RL_AUTH_WINDOW_MS', 60_000),
     max: envInt('RL_AUTH_MAX', 5),
     message: 'Too many authentication attempts. Please wait 1 minute.',
+  } as RouteLimit,
+  authOAuth: {
+    windowMs: envInt('RL_AUTH_OAUTH_WINDOW_MS', 5 * 60_000),
+    max: envInt('RL_AUTH_OAUTH_MAX', 30),
+    message: 'Too many social login attempts. Please try again shortly.',
   } as RouteLimit,
   ai: {
     windowMs: envInt('RL_AI_WINDOW_MS', 60_000),

@@ -11,7 +11,7 @@ import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { apiUrl } from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { getToken } from '@/lib/auth';
+import { getAuthHeaders } from '@/lib/auth';
 
 interface SmartInputProps {
   value: string;
@@ -97,9 +97,8 @@ export function SmartInput({
         params.set('type', accountType);
       }
       const res = await fetch(apiUrl(`${endpointMap[type]}?${params}`), {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-        },
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch suggestions');
       return res.json();
@@ -345,9 +344,8 @@ export function SmartAccountSelect({
         params.set('type', accountType);
       }
       const res = await fetch(apiUrl(`/api/autocomplete/accounts?${params}`), {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-        },
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch accounts');
       return res.json();

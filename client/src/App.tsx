@@ -10,7 +10,7 @@ import { PortalLayout } from '@/components/layout/PortalLayout';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { ErrorBoundary, SectionBoundary } from '@/components/ErrorBoundary';
 import { useI18n, useTranslation } from '@/lib/i18n';
-import { getToken } from '@/lib/auth';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
 import { User, Building2, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +22,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 const NotFound = lazy(() => import('@/pages/not-found'));
 const Login = lazy(() => import('@/pages/Login'));
 const Register = lazy(() => import('@/pages/Register'));
+const AuthCallback = lazy(() => import('@/pages/AuthCallback'));
 const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
@@ -325,16 +326,12 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 // Guard: client portal routes require userType 'client_portal' or 'client'
 function PortalRoute({ children }: { children: React.ReactNode }) {
   const [, navigate] = useLocation();
-  try {
-    const token = getToken();
-    if (!token) { navigate('/login'); return null; }
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.userType !== 'client_portal' && !payload.isAdmin) {
-      navigate('/dashboard'); return null;
-    }
-  } catch {
-    navigate('/login');
-    return null;
+  const { data: user, isLoading } = useCurrentUser();
+
+  if (isLoading) return null;
+  if (!user) { navigate('/login'); return null; }
+  if (user.userType !== 'client_portal' && !user.isAdmin) {
+    navigate('/dashboard'); return null;
   }
   return <>{children}</>;
 }
@@ -342,45 +339,39 @@ function PortalRoute({ children }: { children: React.ReactNode }) {
 // Guard: firm routes require firmRole (firm_owner or firm_admin) in JWT
 function FirmRoute({ children }: { children: React.ReactNode }) {
   const [, navigate] = useLocation();
-  try {
-    const token = getToken();
-    if (!token) { navigate('/login'); return null; }
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.firmRole !== 'firm_owner' && payload.firmRole !== 'firm_admin') {
-      navigate('/dashboard'); return null;
-    }
-  } catch {
-    navigate('/login');
-    return null;
+  const { data: user, isLoading } = useCurrentUser();
+
+  if (isLoading) return null;
+  if (!user) { navigate('/login'); return null; }
+  if (user.firmRole !== 'firm_owner' && user.firmRole !== 'firm_admin') {
+    navigate('/dashboard'); return null;
   }
   return <>{children}</>;
 }
 
 function Router() {
   const [location, setLocation] = useLocation();
-  const token = getToken();
+  const { data: user, isLoading: userLoading } = useCurrentUser();
   
   // Redirect authenticated users from landing to their home (portal or main dashboard)
   useEffect(() => {
-    if (location === '/' && token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setLocation(payload.userType === 'client_portal' ? '/client-portal/dashboard' : '/dashboard');
-      } catch {
-        setLocation('/dashboard');
-      }
+    if (location === '/' && user) {
+      setLocation(user.userType === 'client_portal' ? '/client-portal/dashboard' : '/dashboard');
     }
-  }, [location, token, setLocation]);
+  }, [location, user, setLocation]);
   
-  // Guard: authenticated users at root - wait for redirect
-  if (location === '/' && token) {
+  if (location === '/' && userLoading) {
+    return null;
+  }
+
+  if (location === '/' && user) {
     return null;
   }
   
   // Landing page (public only).
   // `initial={false}` skips the entry fade so the page is visible immediately;
   // a stalled or throttled animation must never leave the root at opacity:0.
-  if (location === '/' && !token) {
+  if (location === '/' && !user) {
     return (
       <AnimatePresence mode="wait">
         <motion.div
@@ -456,6 +447,7 @@ function Router() {
             <Switch>
               <Route path="/login" component={Login} />
               <Route path="/register" component={Register} />
+              <Route path="/auth/callback" component={AuthCallback} />
               <Route path="/forgot-password" component={ForgotPassword} />
               <Route path="/reset-password" component={ResetPassword} />
               <Route path="/services" component={Services} />

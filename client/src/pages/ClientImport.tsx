@@ -136,11 +136,8 @@ export default function ClientImport() {
 
   const downloadTemplate = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
       const response = await fetch(apiUrl('/api/admin/import/template'), {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
       
       if (!response.ok) throw new Error('Failed to download template');

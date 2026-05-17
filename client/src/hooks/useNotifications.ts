@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { getToken, getAuthHeaders } from '@/lib/auth';
+import { getAuthHeaders } from '@/lib/auth';
 import { API_BASE_URL, apiUrl } from '@/lib/api';
+import { useCurrentUser } from './useCurrentUser';
 
 export interface AppNotification {
   id: string;
@@ -29,6 +30,7 @@ export interface UseNotificationsReturn {
 }
 
 export function useNotifications(): UseNotificationsReturn {
+  const { data: user } = useCurrentUser();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
@@ -36,7 +38,10 @@ export function useNotifications(): UseNotificationsReturn {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl('/api/notifications'), { headers: getAuthHeaders() });
+      const res = await fetch(apiUrl('/api/notifications'), {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       if (!res.ok) return;
       const data = await res.json();
       setNotifications(data.notifications ?? []);
@@ -47,14 +52,13 @@ export function useNotifications(): UseNotificationsReturn {
   }, []);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
+    if (!user) return;
 
     fetchNotifications();
 
     const socket = io(API_BASE_URL || window.location.origin, {
       path: '/socket.io',
-      auth: { token },
+      withCredentials: true,
       transports: ['websocket', 'polling'],
     });
 
@@ -72,13 +76,14 @@ export function useNotifications(): UseNotificationsReturn {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [fetchNotifications]);
+  }, [fetchNotifications, user]);
 
   const markAsRead = useCallback(async (id: string) => {
     try {
       const res = await fetch(apiUrl(`/api/notifications/${id}/read`), {
         method: 'PATCH',
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (!res.ok) return;
       setNotifications((prev) =>
@@ -95,6 +100,7 @@ export function useNotifications(): UseNotificationsReturn {
       const res = await fetch(apiUrl('/api/notifications/read-all'), {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (!res.ok) return;
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));

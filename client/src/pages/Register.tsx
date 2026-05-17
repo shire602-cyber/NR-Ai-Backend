@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useLocation, Link } from 'wouter';
 import { RegisterForm } from '@/components/auth/RegisterForm';
-import { setToken, setStoredUser, isAuthenticated } from '@/lib/auth';
+import { fetchCurrentUser } from '@/lib/auth';
+import { establishAuthenticatedSession } from '@/lib/authSession';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Briefcase } from 'lucide-react';
 
@@ -9,15 +10,16 @@ export default function Register() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (isAuthenticated()) {
-      setLocation('/dashboard');
-    }
+    fetchCurrentUser()
+      .then((user) => {
+        if (user) setLocation(user.userType === 'client_portal' ? '/client-portal/dashboard' : '/dashboard');
+      })
+      .catch(() => {});
   }, [setLocation]);
 
-  const handleSuccess = (token: string, user: any) => {
-    setToken(token);
-    setStoredUser(user);
-    setLocation('/dashboard');
+  const handleSuccess = async (user: any) => {
+    const currentUser = await establishAuthenticatedSession(user);
+    setLocation(currentUser?.userType === 'client_portal' ? '/client-portal/dashboard' : '/dashboard');
   };
 
   return (

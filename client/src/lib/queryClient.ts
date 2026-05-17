@@ -1,5 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getAuthHeaders } from "./auth";
+import { getAuthHeaders, refreshSession } from "./auth";
 import { apiUrl } from "./api";
 import { withCsrfHeader, clearCsrfToken } from "./csrf";
 import { isOnline, queueForSync } from "./pwa";
@@ -108,6 +108,19 @@ export async function apiRequest(
     credentials: "include",
   });
 
+  if (res.status === 401) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      headers = await buildRequestHeaders(method, data);
+      res = await fetch(fullUrl, {
+        method,
+        headers,
+        body,
+        credentials: "include",
+      });
+    }
+  }
+
   // A CSRF token can expire or be dropped during a deploy/cookie rotation.
   // Refetch once and replay the mutation so onboarding and other form saves
   // recover without making the user refresh the whole app.
@@ -135,10 +148,21 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(apiUrl(queryKey.join("/") as string), {
+    const url = apiUrl(queryKey.join("/") as string);
+    let res = await fetch(url, {
       credentials: "include",
       headers: getAuthHeaders(),
     });
+
+    if (res.status === 401) {
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        res = await fetch(url, {
+          credentials: "include",
+          headers: getAuthHeaders(),
+        });
+      }
+    }
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
