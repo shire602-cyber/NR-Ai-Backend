@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,10 +24,19 @@ interface LoginFormProps {
   onSuccess: (user: any) => void | Promise<void>;
 }
 
+function currentEpochMs(): number {
+  if (typeof performance !== 'undefined' && Number.isFinite(performance.timeOrigin)) {
+    return Math.round(performance.timeOrigin + performance.now());
+  }
+  return new Date().getTime();
+}
+
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -37,7 +46,25 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     },
   });
 
+  useEffect(() => {
+    if (!cooldownUntil) return;
+
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((cooldownUntil - currentEpochMs()) / 1000));
+      setCooldownSeconds(remaining);
+      if (remaining === 0) setCooldownUntil(null);
+    };
+
+    update();
+    const interval = window.setInterval(update, 250);
+    return () => window.clearInterval(interval);
+  }, [cooldownUntil]);
+
+  const isCoolingDown = cooldownSeconds > 0;
+
   const onSubmit = async (data: LoginFormData) => {
+    if (isCoolingDown) return;
+
     setIsLoading(true);
     try {
       const response = await fetch(apiUrl('/api/auth/login'), {
@@ -49,6 +76,12 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       if (!response.ok) {
         const error = await response.json();
+        if (response.status === 429) {
+          const retryAfter = Number(error?.details?.retryAfterSeconds ?? response.headers.get('Retry-After') ?? 60);
+          const seconds = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 60;
+          setCooldownUntil(currentEpochMs() + seconds * 1000);
+          setCooldownSeconds(seconds);
+        }
         throw new Error(error?.message || 'Login failed');
       }
 
@@ -92,7 +125,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                       {...field}
                       type="email"
                       placeholder="you@example.com"
-                      disabled={isLoading}
+                      disabled={isLoading || isCoolingDown}
                       data-testid="input-email"
                     />
                   </FormControl>
@@ -120,7 +153,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                       {...field}
                       type="password"
                       placeholder="••••••••"
-                      disabled={isLoading}
+                      disabled={isLoading || isCoolingDown}
                       data-testid="input-password"
                     />
                   </FormControl>
@@ -131,12 +164,17 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             <Button
               type="submit"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || isCoolingDown}
               data-testid="button-login"
             >
               <LogIn className="w-4 h-4 mr-2" />
-              {isLoading ? t.loading : t.signIn}
+              {isLoading ? t.loading : isCoolingDown ? `Try again in ${cooldownSeconds}s` : t.signIn}
             </Button>
+            {isCoolingDown && (
+              <p className="text-center text-sm text-muted-foreground" role="status">
+                Too many failed attempts for this email. Try again in {cooldownSeconds} seconds.
+              </p>
+            )}
           </form>
         </Form>
         <div className="mt-4">
