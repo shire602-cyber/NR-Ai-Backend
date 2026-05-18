@@ -39,6 +39,8 @@ let pool: any;
 let db: any;
 let _driver: 'neon' | 'pg' = 'pg';
 
+type QueryRow = Record<string, unknown>;
+
 if (isNeon) {
   // Use Neon serverless driver (WebSocket-based) for Neon databases
   const { Pool: NeonPool, neonConfig } = await import('@neondatabase/serverless');
@@ -61,9 +63,93 @@ if (isNeon) {
   _driver = 'pg';
 }
 
+function rowsFromResult<T extends QueryRow = QueryRow>(result: unknown): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  const rows = (result as { rows?: unknown })?.rows;
+  return Array.isArray(rows) ? (rows as T[]) : [];
+}
+
+async function queryRows<T extends QueryRow = QueryRow>(query: ReturnType<typeof sql>): Promise<T[]> {
+  return rowsFromResult<T>(await db.execute(query));
+}
+
+async function tableExists(schemaName: string, tableName: string): Promise<boolean> {
+  const rows = await queryRows<{ exists: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = ${schemaName}
+        AND table_name = ${tableName}
+    ) AS "exists"
+  `);
+  return Boolean(rows[0]?.exists);
+}
+
+/**
+ * Production has gone through a few migration systems. Some Railway databases
+ * already contain the app schema but have an empty Drizzle migration ledger,
+ * which makes Drizzle replay 0000 and fail on CREATE TABLE accounts. When the
+ * core schema is present and the ledger is empty, mark the current migration
+ * set as the baseline so future migrations can proceed normally.
+ */
+async function baselineMigrationLedgerForExistingSchema(migrationsFolder: string): Promise<void> {
+  const hasExistingAppSchema = await Promise.all([
+    tableExists('public', 'accounts'),
+    tableExists('public', 'companies'),
+    tableExists('public', 'users'),
+    tableExists('public', 'journal_entries'),
+  ]).then((checks) => checks.every(Boolean));
+
+  if (!hasExistingAppSchema) {
+    log.info('Migration baseline check skipped: core app schema not present');
+    return;
+  }
+
+  const ledgerExists = await tableExists('drizzle', '__drizzle_migrations');
+  if (ledgerExists) {
+    const rows = await queryRows<{ count: string | number }>(
+      sql`SELECT COUNT(*) AS "count" FROM "drizzle"."__drizzle_migrations"`
+    );
+    if (Number(rows[0]?.count ?? 0) > 0) {
+      log.info({ count: Number(rows[0]?.count ?? 0) }, 'Migration baseline check passed: Drizzle ledger already populated');
+      return;
+    }
+  }
+
+  const { readMigrationFiles } = await import('drizzle-orm/migrator');
+  const migrations = readMigrationFiles({ migrationsFolder });
+
+  await db.execute(sql`CREATE SCHEMA IF NOT EXISTS "drizzle"`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )
+  `);
+
+  for (const migration of migrations) {
+    await db.execute(sql`
+      INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at")
+      VALUES (${migration.hash}, ${migration.folderMillis})
+    `);
+  }
+
+  log.warn(
+    { count: migrations.length },
+    'Baselined Drizzle migration ledger for existing app schema'
+  );
+}
+
 export async function runMigrations(migrationsFolder: string): Promise<void> {
   log.info({ migrationsFolder, driver: _driver }, 'Running migrations');
   try {
+    log.info('Checking migration ledger baseline');
+    await baselineMigrationLedgerForExistingSchema(migrationsFolder);
+    log.info({ driver: _driver }, 'Executing Drizzle migrations');
     if (_driver === 'neon') {
       const { migrate } = await import('drizzle-orm/neon-serverless/migrator');
       await migrate(db, { migrationsFolder });
@@ -72,8 +158,11 @@ export async function runMigrations(migrationsFolder: string): Promise<void> {
       await migrate(db, { migrationsFolder });
     }
     log.info('Migrations completed successfully');
-  } catch (err) {
-    log.error({ err }, 'Migration failed');
+  } catch (err: any) {
+    log.error(
+      { err, message: err?.message, code: err?.code, detail: err?.detail, query: err?.query },
+      'Migration failed',
+    );
     throw err;
   }
 }
@@ -687,6 +776,83 @@ export async function ensureCriticalSchema(): Promise<void> {
     {
       name: 'companies.classifier_config',
       sql: sql`ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "classifier_config" jsonb NOT NULL DEFAULT '{"mode":"hybrid","accuracyThreshold":0.8,"autopilotEnabled":false}'::jsonb`,
+    },
+    // ── 0056: WhatsApp Web bridge ────────────────────────────────────────
+    {
+      name: 'whatsapp_bridge_sessions table',
+      sql: sql`CREATE TABLE IF NOT EXISTS "whatsapp_bridge_sessions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "company_id" uuid NOT NULL REFERENCES "companies"("id") ON DELETE cascade,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+        "extension_id" text NOT NULL,
+        "extension_version" text,
+        "status" text DEFAULT 'active' NOT NULL,
+        "user_agent" text,
+        "last_seen_at" timestamp DEFAULT now() NOT NULL,
+        "expires_at" timestamp NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      )`,
+    },
+    {
+      name: 'whatsapp_bridge_sessions indexes',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_sessions_company_id" ON "whatsapp_bridge_sessions" ("company_id")`,
+    },
+    {
+      name: 'whatsapp_bridge_sessions user index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_sessions_user_id" ON "whatsapp_bridge_sessions" ("user_id")`,
+    },
+    {
+      name: 'whatsapp_bridge_sessions status index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_sessions_status" ON "whatsapp_bridge_sessions" ("status")`,
+    },
+    {
+      name: 'whatsapp_bridge_jobs table',
+      sql: sql`CREATE TABLE IF NOT EXISTS "whatsapp_bridge_jobs" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "company_id" uuid NOT NULL REFERENCES "companies"("id") ON DELETE cascade,
+        "created_by" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+        "session_id" uuid REFERENCES "whatsapp_bridge_sessions"("id") ON DELETE set null,
+        "whatsapp_message_id" uuid REFERENCES "whatsapp_messages"("id") ON DELETE set null,
+        "provider" text DEFAULT 'whatsapp_web_extension' NOT NULL,
+        "kind" text DEFAULT 'direct_message' NOT NULL,
+        "recipient_phone" text NOT NULL,
+        "normalized_recipient_phone" text NOT NULL,
+        "recipient_name" text,
+        "message_body" text NOT NULL,
+        "attachment_url" text,
+        "attachment_label" text,
+        "source_type" text,
+        "source_id" uuid,
+        "status" text DEFAULT 'queued' NOT NULL,
+        "delivery_status" text DEFAULT 'logged' NOT NULL,
+        "error_message" text,
+        "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "drafted_at" timestamp,
+        "completed_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      )`,
+    },
+    {
+      name: 'whatsapp_bridge_jobs company index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_jobs_company_id" ON "whatsapp_bridge_jobs" ("company_id")`,
+    },
+    {
+      name: 'whatsapp_bridge_jobs creator index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_jobs_created_by" ON "whatsapp_bridge_jobs" ("created_by")`,
+    },
+    {
+      name: 'whatsapp_bridge_jobs status index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_jobs_status" ON "whatsapp_bridge_jobs" ("status")`,
+    },
+    {
+      name: 'whatsapp_bridge_jobs recipient index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_jobs_recipient" ON "whatsapp_bridge_jobs" ("normalized_recipient_phone")`,
+    },
+    {
+      name: 'whatsapp_bridge_jobs source index',
+      sql: sql`CREATE INDEX IF NOT EXISTS "idx_whatsapp_bridge_jobs_source" ON "whatsapp_bridge_jobs" ("source_type", "source_id")`,
     },
   ];
 
