@@ -778,7 +778,12 @@ export function registerAdminRoutes(app: Express): void {
       // Convert base64 to buffer
       const buffer = Buffer.from(fileData, 'base64');
 
-      const parsed = await parseSpreadsheet(buffer, fileName);
+      let parsed;
+      try {
+        parsed = await parseSpreadsheet(buffer, fileName);
+      } catch (err: any) {
+        return res.status(400).json({ message: `Could not parse file: ${err.message}` });
+      }
       const jsonData = parsed.rows;
       const headers = parsed.headers;
 

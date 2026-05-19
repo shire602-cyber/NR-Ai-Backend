@@ -34,6 +34,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { apiUrl } from '@/lib/api';
+import { getAuthHeaders } from '@/lib/auth';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import type { CustomerContact } from '@shared/schema';
 import { SiWhatsapp } from 'react-icons/si';
@@ -50,105 +52,41 @@ interface ImportResult {
   errors: string[];
 }
 
-function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let current = '';
-  let row: string[] = [];
-  let inQuotes = false;
+interface ImportPreview {
+  rows: Array<Record<string, any>>;
+}
 
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    const next = text[index + 1];
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read file'));
+    reader.onload = () => {
+      const value = String(reader.result ?? '');
+      resolve(value.includes(',') ? value.split(',', 2)[1] : value);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
-    if (char === '"' && next === '"') {
-      current += '"';
-      index++;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      row.push(current.trim());
-      current = '';
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && next === '\n') index++;
-      row.push(current.trim());
-      if (row.some((cell) => cell !== '')) rows.push(row);
-      row = [];
-      current = '';
-    } else {
-      current += char;
+async function downloadContactTemplate(companyId: string): Promise<void> {
+  const res = await fetch(apiUrl(`/api/companies/${companyId}/customer-contacts/import-template`), {
+    method: 'GET',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const json = await res.json();
+      message = json.message || json.error || message;
+    } catch {
+      /* keep status */
     }
+    throw new Error(message);
   }
 
-  row.push(current.trim());
-  if (row.some((cell) => cell !== '')) rows.push(row);
-
-  const headers = rows.shift() ?? [];
-  return rows.map((values) =>
-    Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])),
-  );
-}
-
-async function parseContactImportFile(file: File): Promise<Record<string, any>[]> {
-  if (/\.csv$/i.test(file.name)) {
-    return parseCsv(await file.text());
-  }
-
-  const { default: ExcelJS } = await import('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load((await file.arrayBuffer()) as unknown as ArrayBuffer);
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) return [];
-
-  const headerRow = worksheet.getRow(1);
-  const columnCount = Math.max(headerRow.cellCount, worksheet.actualColumnCount);
-  const headers = Array.from({ length: columnCount }, (_unused, index) => {
-    const value = headerRow.getCell(index + 1).value;
-    return String(value ?? `Column ${index + 1}`).trim();
-  });
-
-  const rows: Record<string, any>[] = [];
-  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const item = Object.fromEntries(
-      headers.map((header, index) => {
-        const value = row.getCell(index + 1).value;
-        return [header, typeof value === 'object' && value && 'text' in value ? value.text : value ?? ''];
-      }),
-    );
-    if (Object.values(item).some((value) => String(value).trim() !== '')) rows.push(item);
-  });
-
-  return rows;
-}
-
-async function downloadContactsTemplate(): Promise<void> {
-  const { default: ExcelJS } = await import('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Contacts');
-  worksheet.columns = [
-    { header: 'Name', key: 'Name', width: 25 },
-    { header: 'Email', key: 'Email', width: 28 },
-    { header: 'Phone', key: 'Phone', width: 18 },
-    { header: 'TRN', key: 'TRN', width: 18 },
-    { header: 'Address', key: 'Address', width: 28 },
-    { header: 'City', key: 'City', width: 16 },
-    { header: 'Country', key: 'Country', width: 16 },
-  ];
-  worksheet.addRow({
-    Name: 'Example Company LLC',
-    Email: 'contact@example.com',
-    Phone: '+971-50-123-4567',
-    TRN: '100123456700003',
-    Address: '123 Business Bay',
-    City: 'Dubai',
-    Country: 'UAE',
-  });
-  worksheet.getRow(1).font = { bold: true };
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -283,11 +221,11 @@ export default function CustomerContacts() {
   });
 
   const handleFileSelect = useCallback((selectedFile: File) => {
-    if (!selectedFile.name.match(/\.(xlsx|xls|csv)$/i)) {
+    if (!selectedFile.name.match(/\.(xlsx|csv)$/i)) {
       toast({ 
         variant: 'destructive', 
         title: 'Invalid file type', 
-        description: 'Please upload an Excel file (.xlsx, .xls) or CSV file' 
+        description: 'Please upload an Excel file (.xlsx) or CSV file'
       });
       return;
     }
@@ -298,17 +236,12 @@ export default function CustomerContacts() {
 
     void (async () => {
       try {
-        const jsonData = await parseContactImportFile(selectedFile);
-        
-        const mappedData = jsonData.map((row: any) => ({
-          name: row['Name'] || row['name'] || row['Company Name'] || row['company_name'] || '',
-          email: row['Email'] || row['email'] || row['E-mail'] || '',
-          phone: row['Phone'] || row['phone'] || row['Phone Number'] || row['Mobile'] || '',
-          trnNumber: row['TRN'] || row['trn'] || row['TRN Number'] || row['Tax Registration Number'] || '',
-          address: row['Address'] || row['address'] || '',
-          city: row['City'] || row['city'] || '',
-          country: row['Country'] || row['country'] || 'UAE',
-        }));
+        if (!companyId) throw new Error('Select a company before importing contacts');
+        const preview = await apiRequest('POST', `/api/companies/${companyId}/customer-contacts/import-preview`, {
+          fileName: selectedFile.name,
+          contentBase64: await fileToBase64(selectedFile),
+        }) as ImportPreview;
+        const mappedData = preview.rows;
         
         setPreviewData(mappedData);
         toast({ title: `Found ${mappedData.length} contacts in ${selectedFile.name}` });
@@ -316,7 +249,7 @@ export default function CustomerContacts() {
         toast({ variant: 'destructive', title: 'Failed to parse file', description: err?.message });
       }
     })();
-  }, [toast]);
+  }, [companyId, toast]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -350,7 +283,12 @@ export default function CustomerContacts() {
   };
 
   const downloadTemplate = () => {
-    void downloadContactsTemplate()
+    if (!companyId) {
+      toast({ variant: 'destructive', title: 'Select a company first' });
+      return;
+    }
+
+    void downloadContactTemplate(companyId)
       .then(() => toast({ title: 'Template downloaded' }))
       .catch((err: any) =>
         toast({
@@ -711,7 +649,7 @@ export default function CustomerContacts() {
                     Upload Excel File
                   </CardTitle>
                   <CardDescription>
-                    Upload an Excel file (.xlsx, .xls) or CSV containing your customer contacts.
+                    Upload an Excel file (.xlsx) or CSV containing your customer contacts.
                     We'll automatically map common column names like "Name", "Email", "Phone", "TRN", etc.
                   </CardDescription>
                 </CardHeader>
@@ -744,7 +682,7 @@ export default function CustomerContacts() {
                         </div>
                         <input
                           type="file"
-                          accept=".xlsx,.xls,.csv"
+                          accept=".xlsx,.csv"
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                           data-testid="input-file-upload"

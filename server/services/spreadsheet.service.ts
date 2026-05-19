@@ -91,6 +91,10 @@ export async function parseSpreadsheet(
   buffer: Buffer,
   fileName = 'upload.xlsx',
 ): Promise<ParsedSpreadsheet> {
+  if (/\.xls$/i.test(fileName)) {
+    throw new Error('Legacy .xls files are not supported. Please save the file as .xlsx or .csv and try again.');
+  }
+
   if (/\.csv$/i.test(fileName)) {
     return parseCsvBuffer(buffer);
   }
