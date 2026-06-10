@@ -132,3 +132,7 @@ The loop is closed in all directions:
   `font-mono tabular-nums`.
 - Shared client/server code goes in `shared/` (`@shared/*` alias).
 - Railway deploys `main` only — work must be PR'd and merged to ship.
+
+## Deployment
+
+Production deploys from `main` via Railway (service source: this repo). Verify the running build at `/api/version`.
