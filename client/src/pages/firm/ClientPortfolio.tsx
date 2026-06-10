@@ -6,7 +6,7 @@ import {
   ChevronRight, Users, Calendar,
   BookOpen, Upload, AlertTriangle, Receipt, FolderOpen,
   Calculator, CheckCircle2, Clock, FileText, TrendingUp,
-  UserCheck, Target, RefreshCw, Copy, ScanLine, Check, XCircle,
+  UserCheck, Target, RefreshCw, Copy, ScanLine, Check, XCircle, Download,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -2124,6 +2124,55 @@ function VatWorkspaceDialog({
     }
   };
 
+  const downloadTemplate = async () => {
+    try {
+      const response = await fetch(apiUrl('/api/firm/vat-workpapers/template'), { credentials: 'include' });
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'muhasib-vat-workpaper-template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Could not download template', description: error?.message });
+    }
+  };
+
+  const [exportingWorkbook, setExportingWorkbook] = useState(false);
+  const downloadWorkbook = async () => {
+    if (!selectedWorkpaperId) return;
+    setExportingWorkbook(true);
+    try {
+      const response = await fetch(apiUrl(`/api/firm/vat-workpapers/${selectedWorkpaperId}/export`), {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'vat-workpaper.xlsx';
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast({
+        title: 'Workpaper exported',
+        description: 'Excel copy saved — grid plus copy-ready VAT 201 sheet.',
+      });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Could not export workpaper', description: error?.message });
+    } finally {
+      setExportingWorkbook(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[96vw] w-[96vw] max-h-[92vh] overflow-y-auto">
@@ -2172,6 +2221,15 @@ function VatWorkspaceDialog({
               </Button>
               <Button variant="outline" onClick={() => recalculateMutation.mutate()} disabled={!selectedWorkpaperId || recalculateMutation.isPending}>
                 <RefreshCw className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void downloadWorkbook()}
+                disabled={!selectedWorkpaperId || exportingWorkbook}
+                data-testid="button-export-workpaper"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {exportingWorkbook ? 'Exporting…' : 'Excel'}
               </Button>
             </div>
           </div>
@@ -2431,14 +2489,25 @@ function VatWorkspaceDialog({
                             {pastePreviewRows.length > 3 ? ` · +${pastePreviewRows.length - 3} more` : ''}
                           </div>
                         )}
-                        <Button
-                          size="sm"
-                          onClick={() => importRowsMutation.mutate()}
-                          disabled={!selectedWorkpaperId || pastePreviewRows.length === 0 || importRowsMutation.isPending}
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          Add pasted rows
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => importRowsMutation.mutate()}
+                            disabled={!selectedWorkpaperId || pastePreviewRows.length === 0 || importRowsMutation.isPending}
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            Add pasted rows
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void downloadTemplate()}
+                            data-testid="button-vat-template"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Excel template
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

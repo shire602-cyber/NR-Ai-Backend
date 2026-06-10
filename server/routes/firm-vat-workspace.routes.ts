@@ -25,6 +25,11 @@ import {
   VAT_WORKPAPER_CATEGORIES,
   type VatWorkpaperCategory,
 } from '../services/firm-vat-workspace.service';
+import {
+  buildVatWorkpaperTemplateWorkbook,
+  buildVatWorkpaperWorkbook,
+  vatWorkpaperExportFilename,
+} from '../services/vat-workpaper-export.service';
 
 const logger = createLogger('firm-vat-workspace-routes');
 
@@ -221,6 +226,17 @@ export function registerFirmVatWorkspaceRoutes(app: Express): void {
     }),
   );
 
+  // Registered before '/:id' so the literal path wins over the uuid matcher.
+  router.get(
+    '/template',
+    asyncHandler(async (_req: Request, res: Response) => {
+      const buffer = await buildVatWorkpaperTemplateWorkbook();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="muhasib-vat-workpaper-template.xlsx"');
+      res.send(buffer);
+    }),
+  );
+
   router.get(
     '/:id',
     asyncHandler(async (req: Request, res: Response) => {
@@ -333,6 +349,34 @@ export function registerFirmVatWorkspaceRoutes(app: Express): void {
       }
 
       res.download(absolutePath, attachment.fileName);
+    }),
+  );
+
+  // Downloadable Excel copy of the workpaper — the grid the accountant used
+  // to keep in a standalone spreadsheet, plus a copy-ready VAT 201 sheet.
+  router.get(
+    '/:id/export',
+    asyncHandler(async (req: Request, res: Response) => {
+      const parsed = uuidParamSchema.safeParse(req.params);
+      if (!parsed.success) return res.status(400).json({ message: 'Invalid VAT workpaper id' });
+      const detail = await requireWorkpaperAccess(req, res, parsed.data.id);
+      if (!detail) return;
+
+      const buffer = await buildVatWorkpaperWorkbook(detail);
+      const filename = vatWorkpaperExportFilename(detail);
+
+      await recordAudit({
+        userId: (req as any).user?.id,
+        companyId: detail.workpaper.companyId,
+        action: 'firm_vat_workpaper_export',
+        entityType: 'vat_workpaper',
+        entityId: detail.workpaper.id,
+        req,
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buffer);
     }),
   );
 

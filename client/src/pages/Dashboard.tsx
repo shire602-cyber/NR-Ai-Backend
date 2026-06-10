@@ -216,6 +216,39 @@ function FilingStatusBadge({ status }: { status?: 'up_to_date' | 'due_soon' | 'o
   return <Badge variant="success" dot>On track</Badge>;
 }
 
+/**
+ * Maps audit-readiness issue strings from /compliance/overview to the screen
+ * where the user can resolve them. Strings must match the server exactly
+ * (server/routes/compliance-dashboard.routes.ts).
+ */
+const ISSUE_ACTIONS: Record<string, { href: string; cta: string }> = {
+  'No VAT returns filed': { href: '/vat-filing', cta: 'File VAT 201' },
+  'No chart of accounts configured': { href: '/chart-of-accounts', cta: 'Set up accounts' },
+  'No journal entries in the last 90 days': { href: '/journal', cta: 'Post an entry' },
+  'No bank reconciliation rules configured': { href: '/bank-reconciliation', cta: 'Set up reconciliation' },
+  'Bank reconciliation not set up': { href: '/bank-reconciliation', cta: 'Set up reconciliation' },
+  'No completed data backups': { href: '/backup-restore', cta: 'Run a backup' },
+};
+
+function FixItRow({ issue }: { issue: string }) {
+  const action = ISSUE_ACTIONS[issue];
+  return (
+    <div className="flex items-center justify-between gap-3 px-5 py-2.5">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
+        <span className="text-[13px] text-foreground/80 truncate">{issue}</span>
+      </div>
+      {action && (
+        <Link href={action.href}>
+          <Button variant="ghost" size="sm" className="gap-1 text-accent hover:text-accent shrink-0 -me-2">
+            {action.cta} <ArrowRight className="w-3.5 h-3.5" />
+          </Button>
+        </Link>
+      )}
+    </div>
+  );
+}
+
 // ─── Quick action ────────────────────────────────────────────────────────────
 
 function QuickAction({ icon: Icon, title, description, href, delay = 0 }: any) {
@@ -517,6 +550,20 @@ function CustomerDashboard() {
                 </Link>
               </div>
             </div>
+
+            {/* Fix-it list — each open item links to the screen that resolves it */}
+            {(compliance.auditReadiness?.issues?.length ?? 0) > 0 && (
+              <div className="border-t border-border/60">
+                <div className="px-5 pt-3 pb-1 text-[10.5px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/80">
+                  Raise your score
+                </div>
+                <div className="divide-y divide-border/40 pb-1.5">
+                  {compliance.auditReadiness.issues.map((issue: string) => (
+                    <FixItRow key={issue} issue={issue} />
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         </motion.section>
       )}
