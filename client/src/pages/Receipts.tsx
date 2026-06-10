@@ -97,10 +97,7 @@ function useReceiptImageUrl(companyId: string | undefined, receiptId: string, ha
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!companyId || !receiptId || !hasImage) {
-      setUrl(null);
-      return;
-    }
+    if (!companyId || !receiptId || !hasImage) return;
     let cancelled = false;
     let createdUrl: string | null = null;
 
@@ -123,6 +120,9 @@ function useReceiptImageUrl(companyId: string | undefined, receiptId: string, ha
     return () => {
       cancelled = true;
       if (createdUrl) URL.revokeObjectURL(createdUrl);
+      // Reset in cleanup (not the effect body) so a dep change never leaves a
+      // revoked blob URL on screen and the effect stays render-safe.
+      setUrl(null);
     };
   }, [companyId, receiptId, hasImage]);
 
