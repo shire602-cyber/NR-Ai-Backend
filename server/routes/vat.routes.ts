@@ -89,12 +89,15 @@ export function registerVATRoutes(app: Express) {
       const lineVat = lineAmount * (line.vatRate ?? UAE_VAT_RATE);
       const supplyType = (line as any).vatSupplyType || 'standard_rated';
 
-      if (supplyType === 'zero_rated' || line.vatRate === 0) {
-        // Zero-rated supplies (exports, international services)
-        zeroRatedAmount += lineAmount;
-      } else if (supplyType === 'exempt') {
+      // Explicit supply type wins; the 0%-rate fallback only catches lines
+      // that weren't tagged. An exempt line also carries a 0% rate, so the
+      // exempt check must come first (Box 5, not Box 4).
+      if (supplyType === 'exempt') {
         // Exempt supplies (financial services, residential rent, etc.)
         exemptAmount += lineAmount;
+      } else if (supplyType === 'zero_rated' || line.vatRate === 0) {
+        // Zero-rated supplies (exports, international services)
+        zeroRatedAmount += lineAmount;
       } else {
         // Standard rated (5% VAT)
         standardRatedAmount += lineAmount;
