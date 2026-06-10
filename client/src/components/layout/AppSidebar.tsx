@@ -34,7 +34,6 @@ import {
   Kanban,
   Users,
   Activity,
-  Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLocation } from 'wouter';
@@ -58,6 +57,7 @@ import { removeToken } from '@/lib/auth';
 import { apiRequest } from '@/lib/queryClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { CompanySwitcher } from '@/components/CompanySwitcher';
+import { BrandMark } from '@/components/BrandMark';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -383,8 +383,8 @@ export function AppSidebar() {
       >
         <SidebarHeader className="px-3 pt-4 pb-3 border-b border-sidebar-border/60 space-y-3">
           <div className="flex items-center gap-2.5">
-            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 flex items-center justify-center shrink-0 shadow-sm ring-1 ring-sidebar-primary/30">
-              <Wallet className="w-4 h-4 text-sidebar-primary-foreground" strokeWidth={2.25} />
+            <div className="relative shrink-0">
+              <BrandMark size="md" />
               <span aria-hidden className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-sidebar-primary ring-2 ring-sidebar animate-pulse-dot" />
             </div>
             <div className="min-w-0">

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
+import { MeshGradient } from '@/components/ui/mesh-gradient';
 import ClientDashboard from './ClientDashboard';
 
 const CHART_COLORS = {
@@ -36,6 +37,37 @@ const PIE_PALETTE = [
   CHART_COLORS.info,
   CHART_COLORS.muted,
 ];
+
+// ─── Count-up hook ───────────────────────────────────────────────────────────
+
+/** Eases a numeric value toward its target — the landing-page counter feel. */
+function useCountUp(target: number, duration = 1400): number {
+  const [value, setValue] = useState(0);
+  const fromRef = useRef(0);
+
+  useEffect(() => {
+    const reduceMotion =
+      typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const effectiveDuration = reduceMotion ? 0 : duration;
+    const from = fromRef.current;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = effectiveDuration === 0 ? 1 : Math.min(1, (now - start) / effectiveDuration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(from + (target - from) * eased);
+      if (p < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = target;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+
+  return value;
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -252,6 +284,7 @@ function CustomerDashboard() {
   const monthLabel = new Date().toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const profit = (stats?.revenue || 0) - (stats?.expenses || 0);
   const margin = stats?.revenue > 0 ? (profit / stats.revenue) * 100 : 0;
+  const animatedProfit = useCountUp(statsLoading ? 0 : profit);
 
   return (
     <div className="space-y-12">
@@ -262,10 +295,11 @@ function CustomerDashboard() {
         transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
         className="relative"
       >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+        <MeshGradient className="rounded-3xl opacity-60" emerald={0.2} gold={0.16} />
+        <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
           <div className="lg:col-span-7 xl:col-span-8">
-            <div className="text-[11px] uppercase tracking-[0.18em] font-semibold text-muted-foreground/80 mb-3 flex items-center gap-2">
-              <span className="inline-block w-6 h-px bg-foreground/40" />
+            <div className="text-[11px] uppercase tracking-[0.18em] font-semibold text-accent mb-3 flex items-center gap-2">
+              <span className="inline-block w-6 h-px bg-accent/60" />
               <span className="font-mono">{monthLabel}</span>
             </div>
             <h1 className="font-display text-[40px] md:text-[56px] xl:text-[68px] leading-[1.02] tracking-tightest text-foreground">
@@ -280,7 +314,7 @@ function CustomerDashboard() {
           </div>
 
           <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-3">
-            <div className="rounded-xl border border-card-border bg-card/70 p-5 backdrop-blur">
+            <div className="rounded-2xl border border-card-border bg-card/70 p-5 backdrop-blur-xl shadow-lg">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-[11px] uppercase tracking-[0.14em] font-semibold text-muted-foreground">
                   Net Profit · This Month
@@ -294,8 +328,8 @@ function CustomerDashboard() {
                   <Skeleton className="h-10 w-40" />
                 ) : (
                   <>
-                    <span className="font-display text-[36px] md:text-[44px] leading-none tracking-tight text-foreground">
-                      {formatCurrency(profit, 'AED', locale)}
+                    <span className="font-display text-[36px] md:text-[44px] leading-none tracking-tight tabular-nums text-foreground">
+                      {formatCurrency(animatedProfit, 'AED', locale)}
                     </span>
                   </>
                 )}

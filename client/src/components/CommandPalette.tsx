@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import {
   CommandDialog,
@@ -118,8 +118,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
  * Provider that owns the command palette state and exposes Ctrl/Cmd+K to open
  * it. Place this once at the app root inside an authenticated layout.
  */
+const OPEN_EVENT = 'muhasib:command-palette';
+
+/** Open the command palette from anywhere (e.g. the header search button). */
+export function openCommandPalette() {
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT));
+}
+
 export function CommandPaletteProvider() {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = () => setOpen(true);
+    window.addEventListener(OPEN_EVENT, handleOpen);
+    return () => window.removeEventListener(OPEN_EVENT, handleOpen);
+  }, []);
 
   useKeyboardShortcuts([
     {

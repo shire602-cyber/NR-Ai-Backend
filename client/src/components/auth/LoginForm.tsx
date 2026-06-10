@@ -104,9 +104,11 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-semibold">{t.login}</CardTitle>
+    <Card className="w-full max-w-md border-border/60 shadow-xl">
+      <CardHeader className="space-y-1.5">
+        <CardTitle className="font-display text-[30px] font-normal leading-none tracking-tight">
+          Welcome back<span className="text-accent">.</span>
+        </CardTitle>
         <CardDescription>
           Enter your credentials to access your account
         </CardDescription>
