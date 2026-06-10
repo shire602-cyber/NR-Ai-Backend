@@ -4,6 +4,7 @@
  * Executive dashboard for firm owners with key metrics, client health table,
  * alerts feed, staff workload visualization, period comparison, and batch ops.
  */
+import { PageHeader } from '@/components/ui/page-header';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -405,29 +406,27 @@ export default function FirmCommandCenter() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="page-title">
-            Firm Command Center
-          </h1>
-          <p className="text-muted-foreground">
-            Bird's-eye view across all clients with actionable insights and batch operations.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => refreshAlerts.mutate()}
-          disabled={refreshAlerts.isPending}
-          data-testid="button-refresh-alerts"
-        >
-          {refreshAlerts.isPending ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-2" />
-          )}
-          Refresh alerts
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Firm"
+        title="Firm Command Center"
+        testId="page-title"
+        description="Bird's-eye view across all clients with actionable insights and batch operations."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => refreshAlerts.mutate()}
+            disabled={refreshAlerts.isPending}
+            data-testid="button-refresh-alerts"
+          >
+            {refreshAlerts.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Refresh alerts
+          </Button>
+        }
+      />
 
       {/* Metrics row */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

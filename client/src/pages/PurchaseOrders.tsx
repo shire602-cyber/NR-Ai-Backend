@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -255,10 +256,11 @@ export default function PurchaseOrders() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Purchase Orders</h1>
-        <p className="text-muted-foreground">Create and manage purchase orders for your vendors</p>
-      </div>
+      <PageHeader
+        eyebrow="Purchases"
+        title="Purchase Orders"
+        description="Create and manage purchase orders for your vendors"
+      />
 
       <div className="flex items-center justify-end flex-wrap gap-4">
         <Dialog open={dialogOpen} onOpenChange={(open) => {

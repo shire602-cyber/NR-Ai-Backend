@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -179,12 +180,11 @@ export default function CompanyProfile() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Company Profile</h1>
-        <p className="text-muted-foreground">
-          Manage your company information, tax settings, and compliance details
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Company Profile"
+        description="Manage your company information, tax settings, and compliance details"
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">

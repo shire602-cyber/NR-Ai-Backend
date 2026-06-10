@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -111,12 +112,11 @@ export default function InvoiceSettings() {
 
   return (
     <div className="space-y-8 max-w-3xl">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Invoice Settings</h1>
-        <p className="text-muted-foreground">
-          Customize how your invoices appear to customers
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Invoice Settings"
+        description="Customize how your invoices appear to customers"
+      />
 
       {isVATRegistered && (
         <Alert>

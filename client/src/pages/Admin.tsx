@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
@@ -287,22 +288,24 @@ export default function Admin() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-admin-title">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage platform settings, users, and subscriptions</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" data-testid="button-export-data">
-            <Download className="w-4 h-4 mr-2" />
-            Export Data
-          </Button>
-          <Button variant="outline" size="sm" data-testid="button-refresh">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Admin Dashboard"
+        testId="text-admin-title"
+        description="Manage platform settings, users, and subscriptions"
+        actions={
+          <>
+            <Button variant="outline" size="sm" data-testid="button-export-data">
+              <Download className="w-4 h-4 mr-2" />
+              Export Data
+            </Button>
+            <Button variant="outline" size="sm" data-testid="button-refresh">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid grid-cols-6 w-full max-w-4xl">

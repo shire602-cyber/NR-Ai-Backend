@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -359,26 +360,27 @@ export default function PaymentChasing() {
 
   return (
     <div className="container mx-auto py-6 space-y-6" data-testid="payment-chasing-page">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Payment Chasing Autopilot</h1>
-          <p className="text-muted-foreground">Automated reminders for overdue invoices with smart escalation</p>
-        </div>
-        <Button
-          onClick={() => {
-            if (queue.length > BULK_CONFIRM_THRESHOLD) {
-              setBulkConfirmOpen(true);
-            } else {
-              bulkSend.mutate();
-            }
-          }}
-          disabled={queue.length === 0 || bulkSend.isPending}
-          data-testid="button-chase-all"
-        >
-          <Send className="mr-2 h-4 w-4" />
-          {bulkSend.isPending ? `Sending ${queue.length}…` : `Chase all (${queue.length})`}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Sales"
+        title="Payment Chasing Autopilot"
+        description="Automated reminders for overdue invoices with smart escalation"
+        actions={
+          <Button
+            onClick={() => {
+              if (queue.length > BULK_CONFIRM_THRESHOLD) {
+                setBulkConfirmOpen(true);
+              } else {
+                bulkSend.mutate();
+              }
+            }}
+            disabled={queue.length === 0 || bulkSend.isPending}
+            data-testid="button-chase-all"
+          >
+            <Send className="mr-2 h-4 w-4" />
+            {bulkSend.isPending ? `Sending ${queue.length}…` : `Chase all (${queue.length})`}
+          </Button>
+        }
+      />
 
       {/* Aging buckets */}
       <div className="grid gap-4 md:grid-cols-4">

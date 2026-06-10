@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -224,13 +225,11 @@ export default function Subscription() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Subscription & Billing</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your plan, usage, and billing details
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Subscription & Billing"
+        description="Manage your plan, usage, and billing details"
+      />
 
       {/* Current Plan & Usage */}
       <div className="grid gap-6 md:grid-cols-2">

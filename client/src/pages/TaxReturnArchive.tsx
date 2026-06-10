@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -179,22 +180,19 @@ export default function TaxReturnArchive() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'أرشيف الإقرارات الضريبية' : 'Tax Return Archive'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'عرض جميع الإقرارات الضريبية المقدمة للهيئة الاتحادية للضرائب'
-              : 'View all tax returns filed with the Federal Tax Authority'}
-          </p>
-        </div>
-        <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-return">
-          <Plus className="w-4 h-4 mr-2" />
-          {locale === 'ar' ? 'إضافة إقرار' : 'Add Return'}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Compliance"
+        title={locale === 'ar' ? 'أرشيف الإقرارات الضريبية' : 'Tax Return Archive'}
+        description={locale === 'ar'
+          ? 'عرض جميع الإقرارات الضريبية المقدمة للهيئة الاتحادية للضرائب'
+          : 'View all tax returns filed with the Federal Tax Authority'}
+        actions={
+          <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-return">
+            <Plus className="w-4 h-4 mr-2" />
+            {locale === 'ar' ? 'إضافة إقرار' : 'Add Return'}
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

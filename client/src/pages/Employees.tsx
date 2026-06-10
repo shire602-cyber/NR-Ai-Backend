@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -285,17 +286,17 @@ export default function Employees() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Employees</h1>
-          <p className="text-muted-foreground">Manage your workforce and employee records</p>
-        </div>
-        <Button onClick={handleOpenCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Employee
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Operations"
+        title="Employees"
+        description="Manage your workforce and employee records"
+        actions={
+          <Button onClick={handleOpenCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Employee
+          </Button>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">

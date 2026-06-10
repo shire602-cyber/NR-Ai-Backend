@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, differenceInDays, parseISO } from 'date-fns';
@@ -225,22 +226,19 @@ export default function DocumentVault() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'خزنة المستندات' : 'Document Vault'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'قم بتخزين وإدارة مستنداتك المهمة مع تنبيهات انتهاء الصلاحية'
-              : 'Store and manage your important documents with expiry alerts'}
-          </p>
-        </div>
-        <Button onClick={() => setUploadDialogOpen(true)} data-testid="button-upload-document">
-          <Plus className="w-4 h-4 mr-2" />
-          {locale === 'ar' ? 'رفع مستند' : 'Upload Document'}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Operations"
+        title={locale === 'ar' ? 'خزنة المستندات' : 'Document Vault'}
+        description={locale === 'ar'
+          ? 'قم بتخزين وإدارة مستنداتك المهمة مع تنبيهات انتهاء الصلاحية'
+          : 'Store and manage your important documents with expiry alerts'}
+        actions={
+          <Button onClick={() => setUploadDialogOpen(true)} data-testid="button-upload-document">
+            <Plus className="w-4 h-4 mr-2" />
+            {locale === 'ar' ? 'رفع مستند' : 'Upload Document'}
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>

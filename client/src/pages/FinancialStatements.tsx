@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -572,12 +573,11 @@ export default function FinancialStatements() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Financial Statements</h1>
-        <p className="text-muted-foreground">
-          Generate profit & loss, balance sheet, and cash flow statements
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Accounting"
+        title="Financial Statements"
+        description="Generate profit & loss, balance sheet, and cash flow statements"
+      />
 
       <Tabs defaultValue="profit-loss" className="space-y-4">
         <TabsList className="grid w-full grid-cols-3">

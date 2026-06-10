@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -205,12 +206,11 @@ export default function CompanySettings() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Company Settings</h1>
-        <p className="text-muted-foreground">
-          Manage company-wide preferences: identity, currency, fiscal year, VAT, address, and locale.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Company Settings"
+        description="Manage company-wide preferences: identity, currency, fiscal year, VAT, address, and locale."
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">

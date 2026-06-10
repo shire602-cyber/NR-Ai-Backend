@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -193,10 +194,11 @@ export default function InvoiceTemplates() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Invoice Templates</h1>
-        <p className="text-muted-foreground">Customize the look and feel of your invoices</p>
-      </div>
+      <PageHeader
+        eyebrow="Sales"
+        title="Invoice Templates"
+        description="Customize the look and feel of your invoices"
+      />
 
       <div className="flex items-center justify-end flex-wrap gap-4">
         <Dialog open={dialogOpen} onOpenChange={(open) => {

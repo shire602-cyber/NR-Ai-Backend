@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, differenceInDays, parseISO } from 'date-fns';
@@ -235,24 +236,22 @@ export default function AdminDocuments() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-admin-documents-title">
-            Client Document Management
-          </h1>
-          <p className="text-muted-foreground">
-            Upload and manage invoices, bills, and documents for your clients
-          </p>
-        </div>
-        <Button 
-          onClick={() => setUploadDialogOpen(true)} 
-          disabled={!selectedCompanyId}
-          data-testid="button-upload-client-document"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Upload Document
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Client Document Management"
+        testId="text-admin-documents-title"
+        description="Upload and manage invoices, bills, and documents for your clients"
+        actions={
+          <Button
+            onClick={() => setUploadDialogOpen(true)}
+            disabled={!selectedCompanyId}
+            data-testid="button-upload-client-document"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Upload Document
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>

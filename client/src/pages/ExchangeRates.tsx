@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -156,16 +157,17 @@ export default function ExchangeRates() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Exchange Rates</h1>
-          <p className="text-muted-foreground">Manage currency exchange rates and convert amounts</p>
-        </div>
-        <Button onClick={() => setShowAddDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Rate
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Accounting"
+        title="Exchange Rates"
+        description="Manage currency exchange rates and convert amounts"
+        actions={
+          <Button onClick={() => setShowAddDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Rate
+          </Button>
+        }
+      />
 
       {/* Currency Converter Widget */}
       <Card>

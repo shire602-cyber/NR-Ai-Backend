@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -823,12 +824,11 @@ export default function BulkOperations() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Bulk Operations</h1>
-        <p className="text-muted-foreground mt-1">
-          Batch actions across all managed clients — OCR receipts, prepare VAT queues, generate invoices, and run period-close checklists.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Firm"
+        title="Bulk Operations"
+        description="Batch actions across all managed clients — OCR receipts, prepare VAT queues, generate invoices, and run period-close checklists."
+      />
 
       <Tabs defaultValue="ocr">
         <div className="overflow-x-auto">

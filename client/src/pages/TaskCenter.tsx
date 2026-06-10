@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, parseISO, differenceInDays, isBefore } from 'date-fns';
@@ -221,22 +222,19 @@ export default function TaskCenter() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'مركز المهام' : 'Task Center'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'إدارة مهام الامتثال والتذكيرات'
-              : 'Manage compliance tasks and reminders'}
-          </p>
-        </div>
-        <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-task">
-          <Plus className="w-4 h-4 mr-2" />
-          {locale === 'ar' ? 'مهمة جديدة' : 'New Task'}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Compliance"
+        title={locale === 'ar' ? 'مركز المهام' : 'Task Center'}
+        description={locale === 'ar'
+          ? 'إدارة مهام الامتثال والتذكيرات'
+          : 'Manage compliance tasks and reminders'}
+        actions={
+          <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-task">
+            <Plus className="w-4 h-4 mr-2" />
+            {locale === 'ar' ? 'مهمة جديدة' : 'New Task'}
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -345,16 +346,17 @@ export default function ValueOps() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Value Ops</h1>
-          <p className="text-muted-foreground">NRA-wide cash, compliance, close, review, and client reporting queue.</p>
-        </div>
-        <Button variant="outline" onClick={() => dashboardQuery.refetch()}>
-          <Gauge className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Firm"
+        title="Value Ops"
+        description="NRA-wide cash, compliance, close, review, and client reporting queue."
+        actions={
+          <Button variant="outline" onClick={() => dashboardQuery.refetch()}>
+            <Gauge className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="Cash at risk" value={formatAed(data.summary.cashAtRisk)} icon={Banknote} />

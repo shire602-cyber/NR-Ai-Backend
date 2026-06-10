@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -235,10 +236,11 @@ export default function Quotes() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Quotes</h1>
-        <p className="text-muted-foreground">Create and manage quotes for your customers</p>
-      </div>
+      <PageHeader
+        eyebrow="Sales"
+        title="Quotes"
+        description="Create and manage quotes for your customers"
+      />
 
       <div className="flex items-center justify-end flex-wrap gap-4">
         <Dialog open={dialogOpen} onOpenChange={(open) => {

@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -215,11 +216,13 @@ export default function Integrations() {
 
   return (
     <div className={`container max-w-6xl mx-auto py-8 px-4 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2" data-testid="integrations-title">{t.title}</h1>
-        <p className="text-muted-foreground" data-testid="integrations-subtitle">{t.subtitle}</p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title={t.title}
+        testId="integrations-title"
+        description={<span data-testid="integrations-subtitle">{t.subtitle}</span>}
+        className="mb-8"
+      />
 
       {/* Available Integrations */}
       <div className="mb-10">

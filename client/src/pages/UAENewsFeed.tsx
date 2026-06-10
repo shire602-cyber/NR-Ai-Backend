@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -135,22 +136,19 @@ export default function UAENewsFeed() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'أخبار الضرائب والاقتصاد الإماراتي' : 'UAE Tax & Finance News'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'آخر التحديثات من الهيئة الاتحادية للضرائب والمصادر الموثوقة'
-              : 'Latest updates from FTA and trusted sources'}
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => refetch()} data-testid="button-refresh-news">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          {locale === 'ar' ? 'تحديث' : 'Refresh'}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Insights"
+        title={locale === 'ar' ? 'أخبار الضرائب والاقتصاد الإماراتي' : 'UAE Tax & Finance News'}
+        description={locale === 'ar'
+          ? 'آخر التحديثات من الهيئة الاتحادية للضرائب والمصادر الموثوقة'
+          : 'Latest updates from FTA and trusted sources'}
+        actions={
+          <Button variant="outline" onClick={() => refetch()} data-testid="button-refresh-news">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {locale === 'ar' ? 'تحديث' : 'Refresh'}
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">

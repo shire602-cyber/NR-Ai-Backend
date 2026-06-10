@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO, subMonths, startOfMonth, endOfMonth, subQuarters, startOfQuarter, endOfQuarter, subYears, startOfYear, endOfYear, differenceInDays } from 'date-fns';
@@ -208,18 +209,13 @@ export default function AdvancedReports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'التقارير المتقدمة' : 'Advanced Financial Reports'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'تحليلات مالية متقدمة ومقارنات الفترات'
-              : 'Advanced analytics, cash flow analysis, and period comparisons'}
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
+      <PageHeader
+        eyebrow="Insights"
+        title={locale === 'ar' ? 'التقارير المتقدمة' : 'Advanced Financial Reports'}
+        description={locale === 'ar'
+          ? 'تحليلات مالية متقدمة ومقارنات الفترات'
+          : 'Advanced analytics, cash flow analysis, and period comparisons'}
+        actions={
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-32" data-testid="select-period">
               <SelectValue />
@@ -230,8 +226,8 @@ export default function AdvancedReports() {
               <SelectItem value="year">{locale === 'ar' ? 'سنوي' : 'Yearly'}</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-      </div>
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
