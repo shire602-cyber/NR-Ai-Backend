@@ -24,6 +24,7 @@ import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
+import { PageHeader } from '@/components/ui/page-header';
 import {
   Plus,
   FileText,
@@ -520,10 +521,11 @@ export default function BillPay() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Bill Pay</h1>
-        <p className="text-muted-foreground">Manage vendor bills, approvals, and payments</p>
-      </div>
+      <PageHeader
+        eyebrow="Purchases"
+        title="Bill Pay"
+        description="Manage vendor bills, approvals, and payments"
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>

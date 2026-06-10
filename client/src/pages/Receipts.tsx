@@ -30,7 +30,8 @@ import {
   ocrDataToExportRow,
 } from '@/lib/export';
 import Tesseract from 'tesseract.js';
-import { Upload, FileText, Sparkles, CheckCircle2, XCircle, Loader2, Camera, Image as ImageIcon, X, Trash2, Edit, Download, FileSpreadsheet, ZoomIn, Brain, Bot, Zap } from 'lucide-react';
+import { Upload, FileText, Sparkles, CheckCircle2, XCircle, Loader2, Camera, Image as ImageIcon, X, Trash2, Edit, Download, FileSpreadsheet, ZoomIn, Brain, Bot, Zap, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { SiGooglesheets } from 'react-icons/si';
 import { VirtualList } from '@/components/VirtualList';
 import { formatCurrency } from '@/lib/format';
@@ -1217,17 +1218,17 @@ export default function Receipts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Receipt Scanner</h1>
-          <p className="text-muted-foreground">
-            Upload receipts for AI extraction or enter manually
-          </p>
-        </div>
-        <Button onClick={() => setManualExpenseDialogOpen(true)} className="w-full sm:w-auto" data-testid="button-add-manual-expense">
-          + Add Expense Manually
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Purchases"
+        title="Receipt Scanner"
+        description="Upload receipts for AI extraction or enter manually"
+        actions={
+          <Button onClick={() => setManualExpenseDialogOpen(true)} className="w-full sm:w-auto" data-testid="button-add-manual-expense">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Expense Manually
+          </Button>
+        }
+      />
 
       {/* Upload Section */}
       <Card>

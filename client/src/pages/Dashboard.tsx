@@ -179,6 +179,43 @@ function KpiCard({ label, value, delta, trend, spark, accent, isLoading, delay =
   );
 }
 
+// ─── Compliance pulse ────────────────────────────────────────────────────────
+
+function ScoreRing({ score }: { score: number }) {
+  const animated = useCountUp(score, 1200);
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  const color =
+    score >= 80 ? 'hsl(var(--success))' : score >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))';
+  return (
+    <div className="relative w-16 h-16 shrink-0" role="img" aria-label={`Audit readiness score ${score} out of 100`}>
+      <svg viewBox="0 0 64 64" className="w-16 h-16 -rotate-90">
+        <circle cx={32} cy={32} r={r} fill="none" stroke="hsl(var(--border))" strokeWidth={5} />
+        <circle
+          cx={32}
+          cy={32}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={5}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c - (Math.min(100, Math.max(0, animated)) / 100) * c}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center font-mono font-semibold tabular-nums text-[15px] text-foreground">
+        {Math.round(animated)}
+      </div>
+    </div>
+  );
+}
+
+function FilingStatusBadge({ status }: { status?: 'up_to_date' | 'due_soon' | 'overdue' }) {
+  if (status === 'overdue') return <Badge variant="danger" dot>Overdue</Badge>;
+  if (status === 'due_soon') return <Badge variant="warning" dot>Due soon</Badge>;
+  return <Badge variant="success" dot>On track</Badge>;
+}
+
 // ─── Quick action ────────────────────────────────────────────────────────────
 
 function QuickAction({ icon: Icon, title, description, href, delay = 0 }: any) {
@@ -257,6 +294,12 @@ function CustomerDashboard() {
   const { data: monthlyTrends, isLoading: trendsLoading } = useQuery<any[]>({
     queryKey: ['/api/companies', selectedCompanyId, 'dashboard/monthly-trends'],
     enabled: !!selectedCompanyId,
+  });
+
+  const { data: compliance } = useQuery<any>({
+    queryKey: ['/api/companies', selectedCompanyId, 'compliance/overview'],
+    enabled: !!selectedCompanyId,
+    retry: 1,
   });
 
   // Derive deltas + sparklines from monthlyTrends, gracefully handling empty data
@@ -398,6 +441,85 @@ function CustomerDashboard() {
           delay={0.2}
         />
       </section>
+
+      {/* ── Compliance pulse ─────────────────────────────────────────────── */}
+      {compliance && (
+        <motion.section
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+        >
+          <SectionHeader
+            eyebrow="Compliance"
+            title="Filing pulse"
+            action={
+              <Link href="/compliance-calendar">
+                <Button variant="ghost" size="sm" className="gap-1 text-accent hover:text-accent -me-2">
+                  Calendar <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            }
+          />
+          <Card className="border-card-border overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border/60">
+              {/* Audit readiness */}
+              <div className="p-5 flex items-center gap-4">
+                <ScoreRing score={compliance.auditReadiness?.score ?? 0} />
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.14em] font-semibold text-muted-foreground">
+                    Audit readiness
+                  </div>
+                  <div className="mt-1 text-[12.5px] text-muted-foreground leading-snug">
+                    {(compliance.auditReadiness?.issues?.length ?? 0) === 0
+                      ? 'No open items — audit-ready books.'
+                      : `${compliance.auditReadiness.issues.length} open item${compliance.auditReadiness.issues.length === 1 ? '' : 's'} to resolve`}
+                  </div>
+                </div>
+              </div>
+
+              {/* VAT 201 */}
+              <div className="p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] uppercase tracking-[0.14em] font-semibold text-muted-foreground">
+                    VAT 201
+                  </div>
+                  <FilingStatusBadge status={compliance.vatStatus?.filingStatus} />
+                </div>
+                <div className="mt-2 font-mono tabular-nums text-[14px] text-foreground">
+                  {compliance.vatStatus?.nextDue
+                    ? <>Next due {formatDate(compliance.vatStatus.nextDue, locale)}</>
+                    : 'No return filed yet'}
+                </div>
+                <Link href="/vat-filing">
+                  <Button variant="ghost" size="sm" className="mt-2 -ms-3 gap-1 text-accent hover:text-accent">
+                    Open VAT workspace <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Corporate tax */}
+              <div className="p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] uppercase tracking-[0.14em] font-semibold text-muted-foreground">
+                    Corporate tax
+                  </div>
+                  <FilingStatusBadge status={compliance.corporateTaxStatus?.status} />
+                </div>
+                <div className="mt-2 font-mono tabular-nums text-[14px] text-foreground">
+                  {compliance.corporateTaxStatus?.nextDue
+                    ? <>Next due {formatDate(compliance.corporateTaxStatus.nextDue, locale)}</>
+                    : 'No return filed yet'}
+                </div>
+                <Link href="/corporate-tax">
+                  <Button variant="ghost" size="sm" className="mt-2 -ms-3 gap-1 text-accent hover:text-accent">
+                    Open tax workpaper <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </Card>
+        </motion.section>
+      )}
 
       {/* ── AI Insights — refined ────────────────────────────────────────── */}
       {!statsLoading && stats && (stats.revenue > 0 || stats.expenses > 0 || stats.outstanding > 0) && (

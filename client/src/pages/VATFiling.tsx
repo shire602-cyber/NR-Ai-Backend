@@ -16,6 +16,7 @@ import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { formatCurrency } from '@/lib/format';
 import VAT201Form from '@/components/VAT201Form';
+import { PageHeader } from '@/components/ui/page-header';
 import { 
   FileText, 
   Download, 
@@ -537,22 +538,21 @@ export default function VATFiling() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'إقرار ضريبة القيمة المضافة 201' : 'UAE VAT 201 Return'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'إنشاء وتقديم إقرارات ضريبة القيمة المضافة وفقاً لمتطلبات الهيئة الاتحادية للضرائب'
-              : 'Generate and submit VAT returns compliant with FTA requirements'}
-          </p>
-        </div>
-        <Button onClick={handleCreateReturn} data-testid="button-create-return">
-          <Calculator className="w-4 h-4 mr-2" />
-          {locale === 'ar' ? 'إنشاء إقرار' : 'Generate Return'}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow={locale === 'ar' ? 'الامتثال الضريبي' : 'Compliance'}
+        title={locale === 'ar' ? 'إقرار ضريبة القيمة المضافة 201' : 'UAE VAT 201 Return'}
+        description={
+          locale === 'ar'
+            ? 'إنشاء وتقديم إقرارات ضريبة القيمة المضافة وفقاً لمتطلبات الهيئة الاتحادية للضرائب'
+            : 'Generate and submit VAT returns compliant with FTA requirements'
+        }
+        actions={
+          <Button onClick={handleCreateReturn} data-testid="button-create-return">
+            <Calculator className="w-4 h-4 mr-2" />
+            {locale === 'ar' ? 'إنشاء إقرار' : 'Generate Return'}
+          </Button>
+        }
+      />
 
       {!company?.trnVatNumber && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">

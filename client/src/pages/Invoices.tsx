@@ -29,6 +29,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { TableSkeleton } from '@/components/ui/loading-skeletons';
 import { exportToExcel, exportToGoogleSheets, prepareInvoicesForExport } from '@/lib/export';
 import { Plus, FileText, FileCode, CalendarIcon, Trash2, Download, Edit, Palette, Save, Info, XCircle, AlertCircle, FileSpreadsheet, Send, DollarSign, RefreshCw, RotateCcw } from 'lucide-react';
@@ -589,10 +590,11 @@ export default function Invoices() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">{t.invoices}</h1>
-        <p className="text-muted-foreground">Manage invoices and customize their appearance</p>
-      </div>
+      <PageHeader
+        eyebrow="Sales"
+        title={t.invoices}
+        description="Manage invoices and customize their appearance"
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
