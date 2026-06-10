@@ -83,6 +83,8 @@ interface RouteLimit {
   message: string;
   /** Routes where the limiter must NOT apply (e.g., GET-only views can be skipped). */
   skipMethods?: Array<'GET' | 'HEAD' | 'OPTIONS'>;
+  /** Custom escape hatch — return true to exempt a request from this limiter. */
+  skipIf?: (req: Request) => boolean;
   keyGenerator?: (req: Request) => string;
   /** Decrement the hit after successful responses. Useful for failed-login throttles. */
   skipSuccessfulRequests?: boolean;
@@ -106,6 +108,7 @@ export function buildLimiter(cfg: RouteLimit) {
     skip: (req) => {
       if (req.path === '/health' || req.path === '/health/live') return true;
       if (cfg.skipMethods?.includes(req.method as any)) return true;
+      if (cfg.skipIf?.(req)) return true;
       return false;
     },
     handler: (req, res, _next, options) => {
