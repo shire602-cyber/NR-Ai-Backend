@@ -6,6 +6,17 @@ import { createLogger } from '../config/logger';
 import { buildLimiter, limiterProfiles } from './rateLimit';
 import { cspNonce, buildCspDirectives, cspReportHandler } from './csp';
 
+/**
+ * Paths under /api/auth/ that accept credentials or tokens an attacker could
+ * brute-force. Only these consume the strict auth rate-limit budget.
+ * `path` is relative to the /api/auth mount (e.g. '/login').
+ */
+const CREDENTIAL_AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+
+export function isCredentialAuthPath(path: string): boolean {
+  return CREDENTIAL_AUTH_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
 const log = createLogger('security');
 
 /**
@@ -92,7 +103,21 @@ export function applySecurityMiddleware(app: Express): void {
   // env vars (RL_*). Composite key (ip+userId) prevents NAT collisions.
   // Order matters: more specific paths must be registered before /api/.
   app.use('/api/auth/oauth/', buildLimiter(limiterProfiles.authOAuth));
-  app.use('/api/auth/', buildLimiter(limiterProfiles.auth));
+  // Brute-force guard for credential-bearing attempts ONLY. Session reads
+  // (/me, /refresh, /oauth/providers, /logout) fire on every page load, so
+  // counting them here used to exhaust the 5/min budget before the user even
+  // submitted the login form — locking the whole app behind 429s. Those
+  // routes fall through to the general /api limiter below instead.
+  // Successful attempts refund their hit, so legitimate sign-ins on a shared
+  // office IP never throttle each other; only failures accumulate.
+  app.use(
+    '/api/auth/',
+    buildLimiter({
+      ...limiterProfiles.auth,
+      skipSuccessfulRequests: true,
+      skipIf: (req) => !isCredentialAuthPath(req.path),
+    }),
+  );
   app.use('/api/ai/', buildLimiter(limiterProfiles.ai));
   app.use('/api/ocr/', buildLimiter(limiterProfiles.ai));
   app.use('/api/firm/bulk/ocr', buildLimiter(limiterProfiles.ai));
