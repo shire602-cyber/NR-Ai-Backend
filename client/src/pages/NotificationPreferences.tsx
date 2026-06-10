@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -110,10 +111,11 @@ export default function NotificationPreferences() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-semibold mb-2">Notification Preferences</h1>
-          <p className="text-muted-foreground">Manage how and when you receive notifications</p>
-        </div>
+        <PageHeader
+          eyebrow="Settings"
+          title="Notification Preferences"
+          description="Manage how and when you receive notifications"
+        />
         <Skeleton className="h-96" />
       </div>
     );
@@ -121,10 +123,11 @@ export default function NotificationPreferences() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Notification Preferences</h1>
-        <p className="text-muted-foreground">Manage how and when you receive notifications</p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Notification Preferences"
+        description="Manage how and when you receive notifications"
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">

@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO, isToday, isBefore, differenceInDays } from 'date-fns';
@@ -153,16 +154,13 @@ export default function ComplianceCalendar() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">
-          {locale === 'ar' ? 'تقويم الامتثال' : 'Compliance Calendar'}
-        </h1>
-        <p className="text-muted-foreground">
-          {locale === 'ar' 
-            ? 'عرض جميع المواعيد النهائية للضرائب والامتثال'
-            : 'View all tax and compliance deadlines'}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Compliance"
+        title={locale === 'ar' ? 'تقويم الامتثال' : 'Compliance Calendar'}
+        description={locale === 'ar'
+          ? 'عرض جميع المواعيد النهائية للضرائب والامتثال'
+          : 'View all tax and compliance deadlines'}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">

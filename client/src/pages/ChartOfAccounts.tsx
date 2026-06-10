@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -153,24 +154,21 @@ export default function ChartOfAccounts() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight" data-testid="text-page-title">
-            {t.chartOfAccounts}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {t.chartOfAccountsDescription}
-          </p>
-        </div>
-        <Button 
-          size="default"
-          data-testid="button-add-account"
-          onClick={() => navigate('/journal')}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          {t.addAccount}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Accounting"
+        title={t.chartOfAccounts}
+        description={t.chartOfAccountsDescription}
+        actions={
+          <Button
+            size="default"
+            data-testid="button-add-account"
+            onClick={() => navigate('/journal')}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {t.addAccount}
+          </Button>
+        }
+      />
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

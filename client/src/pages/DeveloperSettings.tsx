@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -113,7 +114,7 @@ export default function DeveloperSettings() {
   if (!canAccess('apiAccess')) {
     return (
       <div className="container mx-auto py-8 px-4 max-w-6xl">
-        <h1 className="text-2xl font-bold mb-6">Developer Settings</h1>
+        <PageHeader eyebrow="Settings" title="Developer Settings" className="mb-6" />
         <UpgradePrompt
           feature="apiAccess"
           requiredTier={getRequiredTier('apiAccess')}
@@ -126,10 +127,12 @@ export default function DeveloperSettings() {
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
-      <h1 className="text-2xl font-bold mb-2">Developer Settings</h1>
-      <p className="text-muted-foreground mb-6">
-        Manage API keys and webhook endpoints for integrating with external services.
-      </p>
+      <PageHeader
+        eyebrow="Settings"
+        title="Developer Settings"
+        description="Manage API keys and webhook endpoints for integrating with external services."
+        className="mb-6"
+      />
       <Tabs defaultValue="api-keys">
         <TabsList className="mb-6">
           <TabsTrigger value="api-keys" className="gap-2">

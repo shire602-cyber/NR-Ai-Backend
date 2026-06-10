@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -106,15 +107,12 @@ export default function Notifications() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Notifications & News</h1>
-          <p className="text-muted-foreground">
-            Stay updated with deadlines, reminders, and regulatory changes
-          </p>
-        </div>
-        {activeTab === 'notifications' && notificationsData?.unreadCount ? (
-          <Button 
+      <PageHeader
+        eyebrow="Workspace"
+        title="Notifications & News"
+        description="Stay updated with deadlines, reminders, and regulatory changes"
+        actions={activeTab === 'notifications' && notificationsData?.unreadCount ? (
+          <Button
             onClick={() => markAllAsReadMutation.mutate()}
             disabled={markAllAsReadMutation.isPending}
             data-testid="button-mark-all-read"
@@ -123,7 +121,7 @@ export default function Notifications() {
             Mark All as Read
           </Button>
         ) : null}
-      </div>
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

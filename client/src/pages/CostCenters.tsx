@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -253,17 +254,17 @@ export default function CostCenters() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Cost Centers</h1>
-          <p className="text-muted-foreground">Manage cost centers for departmental accounting and P&L tracking</p>
-        </div>
-        <Button onClick={handleOpenCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Cost Center
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Accounting"
+        title="Cost Centers"
+        description="Manage cost centers for departmental accounting and P&L tracking"
+        actions={
+          <Button onClick={handleOpenCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Cost Center
+          </Button>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">

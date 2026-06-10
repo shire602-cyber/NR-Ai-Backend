@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
@@ -209,18 +210,19 @@ export default function BackupRestore() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-backup-title">Backup & Restore</h1>
-          <p className="text-muted-foreground">Safeguard your financial records with automated backups</p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-backup">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Backup
-            </Button>
-          </DialogTrigger>
+      <PageHeader
+        eyebrow="Settings"
+        title="Backup & Restore"
+        testId="text-backup-title"
+        description="Safeguard your financial records with automated backups"
+        actions={
+          <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-backup">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Backup
+          </Button>
+        }
+      />
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Backup</DialogTitle>
@@ -277,7 +279,6 @@ export default function BackupRestore() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>

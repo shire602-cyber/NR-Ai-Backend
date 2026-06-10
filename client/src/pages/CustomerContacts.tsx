@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { VirtualTable, type VirtualTableColumn } from '@/components/VirtualTable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { PageHeader } from '@/components/ui/page-header';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -426,12 +427,13 @@ export default function CustomerContacts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-contacts-title">Customer Contacts</h1>
-          <p className="text-muted-foreground">Manage your customers and business contacts for invoicing</p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        eyebrow="Sales"
+        title="Customer Contacts"
+        description="Manage your customers and business contacts for invoicing"
+        testId="text-contacts-title"
+        actions={
+          <>
           <Button variant="outline" onClick={downloadTemplate} data-testid="button-download-template">
             <Download className="w-4 h-4 mr-2" />
             Download Template
@@ -466,8 +468,9 @@ export default function CustomerContacts() {
               />
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

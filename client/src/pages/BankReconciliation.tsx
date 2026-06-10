@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { TableSkeleton } from '@/components/ui/loading-skeletons';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -437,38 +438,37 @@ export default function BankReconciliation() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {t.bankReconciliation}
-          </h1>
-          <p className="text-muted-foreground text-sm">{t.bankReconciliationDescription}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Report
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => autoReconcileMutation.mutate()}
-            disabled={autoReconcileMutation.isPending}
-            data-testid="button-auto-reconcile"
-          >
-            {autoReconcileMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
-            )}
-            {t.autoMatch}
-          </Button>
-          <Button onClick={() => setImportDialogOpen(true)} size="sm" data-testid="button-import-transactions">
-            <Upload className="w-4 h-4 mr-2" />
-            {t.importCsv}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Accounting"
+        title={t.bankReconciliation}
+        description={t.bankReconciliationDescription}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Report
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => autoReconcileMutation.mutate()}
+              disabled={autoReconcileMutation.isPending}
+              data-testid="button-auto-reconcile"
+            >
+              {autoReconcileMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4 mr-2" />
+              )}
+              {t.autoMatch}
+            </Button>
+            <Button onClick={() => setImportDialogOpen(true)} size="sm" data-testid="button-import-transactions">
+              <Upload className="w-4 h-4 mr-2" />
+              {t.importCsv}
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

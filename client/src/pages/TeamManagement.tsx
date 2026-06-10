@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -237,28 +238,25 @@ export default function TeamManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
-            {locale === 'ar' ? 'إدارة الفريق' : 'Team Management'}
-          </h1>
-          <p className="text-muted-foreground">
-            {locale === 'ar' 
-              ? 'إدارة أعضاء الفريق والصلاحيات'
-              : 'Manage team members and their access permissions'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setPermissionsDialogOpen(true)} data-testid="button-view-permissions">
-            <Shield className="w-4 h-4 mr-2" />
-            {locale === 'ar' ? 'الصلاحيات' : 'Permissions'}
-          </Button>
-          <Button onClick={() => setInviteDialogOpen(true)} data-testid="button-invite-member">
-            <UserPlus className="w-4 h-4 mr-2" />
-            {locale === 'ar' ? 'دعوة عضو' : 'Invite Member'}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title={locale === 'ar' ? 'إدارة الفريق' : 'Team Management'}
+        description={locale === 'ar'
+          ? 'إدارة أعضاء الفريق والصلاحيات'
+          : 'Manage team members and their access permissions'}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setPermissionsDialogOpen(true)} data-testid="button-view-permissions">
+              <Shield className="w-4 h-4 mr-2" />
+              {locale === 'ar' ? 'الصلاحيات' : 'Permissions'}
+            </Button>
+            <Button onClick={() => setInviteDialogOpen(true)} data-testid="button-invite-member">
+              <UserPlus className="w-4 h-4 mr-2" />
+              {locale === 'ar' ? 'دعوة عضو' : 'Invite Member'}
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

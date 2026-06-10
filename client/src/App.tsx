@@ -12,7 +12,7 @@ import { ErrorBoundary, SectionBoundary } from '@/components/ErrorBoundary';
 import { useI18n, useTranslation } from '@/lib/i18n';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
-import { User, Building2, ArrowLeft } from 'lucide-react';
+import { User, Building2, ArrowLeft, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -171,7 +171,7 @@ import '@/styles/mobile.css';
 
 // Components
 import { OnboardingWizard } from '@/components/Onboarding';
-import { CommandPaletteProvider } from '@/components/CommandPalette';
+import { CommandPaletteProvider, openCommandPalette } from '@/components/CommandPalette';
 import { GlobalShortcutsProvider } from '@/components/ShortcutsHelp';
 import { SkipLink } from '@/components/SkipLink';
 
@@ -286,6 +286,19 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openCommandPalette}
+                data-testid="button-command-palette"
+                aria-label="Search and commands"
+                className="hidden md:flex items-center gap-2 h-8 ps-3 pe-2 rounded-full border border-border/70 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border transition-colors"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span className="text-[12.5px] font-medium pe-4">Search</span>
+                <kbd className="inline-flex items-center gap-0.5 rounded border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                  ⌘K
+                </kbd>
+              </button>
               <OfflineIndicator />
               <NotificationBell />
               <Link href="/company-profile">

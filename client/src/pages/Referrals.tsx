@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -93,12 +94,11 @@ export default function Referrals() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold" data-testid="text-page-title">Referral Program</h1>
-        <p className="text-muted-foreground">
-          Invite friends and earn rewards when they sign up
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Referral Program"
+        description="Invite friends and earn rewards when they sign up"
+      />
 
       {isLoading ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">

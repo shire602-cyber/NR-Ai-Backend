@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useQuery } from '@tanstack/react-query';
 import {
   TrendingUp,
@@ -143,12 +144,11 @@ export default function FirmAnalytics() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{(t as any).firmAnalytics || 'Firm Analytics'}</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {(t as any).firmAnalyticsDesc || 'Revenue, utilization, and client health overview'}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Firm"
+        title={(t as any).firmAnalytics || 'Firm Analytics'}
+        description={(t as any).firmAnalyticsDesc || 'Revenue, utilization, and client health overview'}
+      />
 
       {/* Revenue cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

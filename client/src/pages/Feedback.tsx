@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -112,12 +113,11 @@ export default function Feedback() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold" data-testid="text-page-title">Feedback</h1>
-        <p className="text-muted-foreground">
-          Help us improve by sharing your thoughts and suggestions
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Feedback"
+        description="Help us improve by sharing your thoughts and suggestions"
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

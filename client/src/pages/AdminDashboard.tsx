@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useQuery } from '@tanstack/react-query';
 import {
   Building2,
@@ -80,26 +81,28 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-admin-title">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage your accounting firm's clients and system</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/clients">
-            <Button variant="outline" data-testid="button-view-clients">
-              <Building2 className="w-4 h-4 mr-2" />
-              View All Clients
-            </Button>
-          </Link>
-          <Link href="/admin/invitations">
-            <Button data-testid="button-invite-client">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Invite Client
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Admin Dashboard"
+        testId="text-admin-title"
+        description="Manage your accounting firm's clients and system"
+        actions={
+          <>
+            <Link href="/admin/clients">
+              <Button variant="outline" data-testid="button-view-clients">
+                <Building2 className="w-4 h-4 mr-2" />
+                View All Clients
+              </Button>
+            </Link>
+            <Link href="/admin/invitations">
+              <Button data-testid="button-invite-client">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Invite Client
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>

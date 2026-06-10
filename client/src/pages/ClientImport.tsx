@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { 
@@ -166,16 +167,18 @@ export default function ClientImport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-import-title">Import Clients</h1>
-          <p className="text-muted-foreground">Bulk import client companies from Excel spreadsheets</p>
-        </div>
-        <Button variant="outline" onClick={downloadTemplate} data-testid="button-download-template">
-          <Download className="w-4 h-4 mr-2" />
-          Download Template
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Import Clients"
+        testId="text-import-title"
+        description="Bulk import client companies from Excel spreadsheets"
+        actions={
+          <Button variant="outline" onClick={downloadTemplate} data-testid="button-download-template">
+            <Download className="w-4 h-4 mr-2" />
+            Download Template
+          </Button>
+        }
+      />
 
       {!importResults ? (
         <>

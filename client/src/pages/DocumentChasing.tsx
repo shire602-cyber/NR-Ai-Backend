@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -238,14 +239,11 @@ export default function DocumentChasing() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6" data-testid="page-document-chasing">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Document Chasing Autopilot</h1>
-          <p className="text-muted-foreground mt-1">
-            Track missing UAE compliance documents, escalate chase reminders, and keep deadlines visible.
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        eyebrow="Compliance"
+        title="Document Chasing Autopilot"
+        description="Track missing UAE compliance documents, escalate chase reminders, and keep deadlines visible."
+        actions={
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
@@ -274,8 +272,8 @@ export default function DocumentChasing() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
-      </div>
+        }
+      />
 
       {/* Top stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

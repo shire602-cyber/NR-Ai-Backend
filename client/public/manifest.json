@@ -4,8 +4,8 @@
   "description": "AI-powered accounting software for UAE businesses",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1E40AF",
+  "background_color": "#FAFAF6",
+  "theme_color": "#0D5C3D",
   "orientation": "any",
   "icons": [
     {

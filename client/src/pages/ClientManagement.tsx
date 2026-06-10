@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
@@ -26,7 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -187,25 +188,27 @@ export default function ClientManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-clients-title">Client Management</h1>
-          <p className="text-muted-foreground">Manage all your accounting firm's clients</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/admin/import">
-            <Button variant="outline" data-testid="button-import-clients">
-              <Upload className="w-4 h-4 mr-2" />
-              Import from Excel
-            </Button>
-          </Link>
-          <Dialog open={addClientOpen} onOpenChange={(open) => { setAddClientOpen(open); if (!open) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-client">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Client
+      <PageHeader
+        eyebrow="Admin"
+        title="Client Management"
+        testId="text-clients-title"
+        description="Manage all your accounting firm's clients"
+        actions={
+          <>
+            <Link href="/admin/import">
+              <Button variant="outline" data-testid="button-import-clients">
+                <Upload className="w-4 h-4 mr-2" />
+                Import from Excel
               </Button>
-            </DialogTrigger>
+            </Link>
+            <Button onClick={() => setAddClientOpen(true)} data-testid="button-add-client">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Client
+            </Button>
+          </>
+        }
+      />
+      <Dialog open={addClientOpen} onOpenChange={(open) => { setAddClientOpen(open); if (!open) resetForm(); }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Client</DialogTitle>
@@ -351,8 +354,6 @@ export default function ClientManagement() {
             </form>
           </DialogContent>
           </Dialog>
-        </div>
-      </div>
 
       <Card>
         <CardHeader>

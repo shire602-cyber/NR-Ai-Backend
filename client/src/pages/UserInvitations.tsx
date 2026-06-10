@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
@@ -21,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -153,18 +154,19 @@ export default function UserInvitations() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-invitations-title">User Invitations</h1>
-          <p className="text-muted-foreground">Invite clients to access their portal</p>
-        </div>
-        <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-send-invite">
-              <Mail className="w-4 h-4 mr-2" />
-              Send Invitation
-            </Button>
-          </DialogTrigger>
+      <PageHeader
+        eyebrow="Admin"
+        title="User Invitations"
+        testId="text-invitations-title"
+        description="Invite clients to access their portal"
+        actions={
+          <Button onClick={() => setInviteDialogOpen(true)} data-testid="button-send-invite">
+            <Mail className="w-4 h-4 mr-2" />
+            Send Invitation
+          </Button>
+        }
+      />
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Send Client Invitation</DialogTitle>
@@ -240,7 +242,6 @@ export default function UserInvitations() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

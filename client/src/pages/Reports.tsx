@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTranslation } from '@/lib/i18n';
 import { useDefaultCompany } from '@/hooks/useDefaultCompany';
 import { useToast } from '@/hooks/use-toast';
@@ -148,30 +149,31 @@ export default function Reports() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-semibold mb-2">{t.reports}</h1>
-          <p className="text-muted-foreground">Financial reports and VAT summaries</p>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" disabled={isExporting} data-testid="button-export">
-              <Download className="w-4 h-4 mr-2" />
-              {isExporting ? 'Exporting...' : t.export}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel">
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Export to Excel
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportGoogleSheets} data-testid="menu-export-sheets">
-              <SiGooglesheets className="w-4 h-4 mr-2" />
-              Export to Google Sheets
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <PageHeader
+        eyebrow="Insights"
+        title={t.reports}
+        description="Financial reports and VAT summaries"
+        actions={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={isExporting} data-testid="button-export">
+                <Download className="w-4 h-4 mr-2" />
+                {isExporting ? 'Exporting...' : t.export}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel">
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Export to Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportGoogleSheets} data-testid="menu-export-sheets">
+                <SiGooglesheets className="w-4 h-4 mr-2" />
+                Export to Google Sheets
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
 
       <Card>
         <CardContent className="pt-6">

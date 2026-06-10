@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -229,32 +230,31 @@ export default function ReconciliationRules() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reconciliation Rules</h1>
-          <p className="text-muted-foreground">
-            Define rules to automatically match and categorize bank transactions.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => autoMatchMutation.mutate()}
-            disabled={autoMatchMutation.isPending}
-          >
-            {autoMatchMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Zap className="mr-2 h-4 w-4" />
-            )}
-            Run Auto-Match
-          </Button>
-          <Button onClick={openCreateDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Rule
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Accounting"
+        title="Reconciliation Rules"
+        description="Define rules to automatically match and categorize bank transactions."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => autoMatchMutation.mutate()}
+              disabled={autoMatchMutation.isPending}
+            >
+              {autoMatchMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Zap className="mr-2 h-4 w-4" />
+              )}
+              Run Auto-Match
+            </Button>
+            <Button onClick={openCreateDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Rule
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>

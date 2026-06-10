@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -110,12 +111,12 @@ export default function History() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-history-title">Activity History</h1>
-          <p className="text-muted-foreground">Track all changes made to your financial records</p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Activity History"
+        testId="text-history-title"
+        description="Track all changes made to your financial records"
+      />
 
       <Card>
         <CardHeader>

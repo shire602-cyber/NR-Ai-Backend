@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -265,10 +266,11 @@ export default function CreditNotes() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold mb-2">Credit Notes</h1>
-        <p className="text-muted-foreground">Manage credit notes for refunds and adjustments</p>
-      </div>
+      <PageHeader
+        eyebrow="Sales"
+        title="Credit Notes"
+        description="Manage credit notes for refunds and adjustments"
+      />
 
       <div className="flex items-center justify-end flex-wrap gap-4">
         <Dialog open={dialogOpen} onOpenChange={(open) => {
