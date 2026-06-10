@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 
+import { parseVatPasteRows, type ParsedVatPasteRow } from '../../shared/vat-workpaper-grid';
 import type { getVatWorkpaperDetail } from './firm-vat-workspace.service';
 
 type WorkpaperDetail = Awaited<ReturnType<typeof getVatWorkpaperDetail>>;
@@ -369,6 +370,45 @@ export async function buildVatWorkpaperTemplateWorkbook(): Promise<Buffer> {
 
   const arrayBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer as ArrayBuffer);
+}
+
+function workbookCellText(value: ExcelJS.CellValue): string {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === 'object') {
+    if ('result' in value) return workbookCellText((value as { result?: ExcelJS.CellValue }).result ?? null);
+    if ('richText' in value) {
+      return (value as { richText: Array<{ text: string }> }).richText.map((part) => part.text).join('');
+    }
+    if ('text' in value) return String((value as { text: string }).text);
+    return String(value);
+  }
+  return String(value);
+}
+
+/**
+ * Reads an uploaded .xlsx workbook and runs its first sheet through the same
+ * parser as the paste box — one set of header/category rules for both paths.
+ */
+export async function parseVatWorkbookRows(
+  buffer: Buffer,
+  defaultEmirate: string,
+): Promise<ParsedVatPasteRow[]> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return [];
+
+  const lines: string[] = [];
+  sheet.eachRow((row) => {
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cells.push(workbookCellText(cell.value).replace(/\t/g, ' '));
+    });
+    lines.push(cells.join('\t'));
+  });
+
+  return parseVatPasteRows(lines.join('\n'), defaultEmirate);
 }
 
 export function vatWorkpaperExportFilename(detail: WorkpaperDetail): string {
